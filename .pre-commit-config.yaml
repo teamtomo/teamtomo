@@ -1,3 +1,6 @@
+# TeamTomo monorepo pre-commit configuration
+# https://pre-commit.com/
+
 # enable pre-commit.ci at https://pre-commit.ci/
 # it adds:
 # 1. auto fixing pull requests
@@ -12,6 +15,8 @@ repos:
     rev: v0.16
     hooks:
       - id: validate-pyproject
+        # Run on all package pyproject.toml files
+        files: "^(pyproject\\.toml|packages/.*/pyproject\\.toml)$"
 
   - repo: https://github.com/crate-ci/typos
     rev: v1.20.9
@@ -30,8 +35,9 @@ repos:
     rev: v1.9.0
     hooks:
       - id: mypy
-        files: "^src/"
-        # # you have to add the things you want to type check against here
+        # Type check all packages
+        files: "^(src/|packages/.*/src/).*\\.py$"
+        # Add dependencies as needed for type checking
         # additional_dependencies:
+        #   - torch
         #   - numpy
-

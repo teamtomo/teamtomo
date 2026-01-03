@@ -28,8 +28,6 @@ wheels/
 .DS_Store
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -73,15 +71,6 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
 # dotenv
 .env
 
@@ -106,6 +95,5 @@ ENV/
 # ruff
 .ruff_cache/
 
-# IDE settings
+# IDEs - Keep .idea/ for now (remove if you prefer)
 .vscode/
-.idea/
