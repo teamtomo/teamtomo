@@ -12,7 +12,8 @@ dependencies = [
     "torch-affine-utils",
     "torch-image-interpolation",
     "torch-transform-image",
-    "torch-so3"
+    "torch-so3",
+    "torch-fourier-shift"
 ]
 
 [tool.uv.sources]
@@ -21,6 +22,7 @@ torch-affine-utils = { workspace = true }
 torch-image-interpolation = { workspace = true }
 torch-transform-image = { workspace = true }
 torch-so3 = { workspace = true }
+torch-fourier-shift = { workspace = true }
 
 [tool.uv.workspace]
 members = [
