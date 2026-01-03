@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0 # Critical for git diff logic in find_affected.py
+          fetch-depth: 0 # Critical for git diff logic in find_affected_packages.py
       - uses: astral-sh/setup-uv@v5
       - name: Find affected packages
         id: set-matrix
@@ -33,8 +33,9 @@ jobs:
     needs: detect-changes
     # Don't run if no packages were affected (e.g., only a README change)
     if: needs.detect-changes.outputs.packages != '[]'
-    name: ${{ matrix.package }} | ${{ matrix.python-version }}
-    runs-on: ubuntu-latest # Simplified to ubuntu for brevity; add macos/windows if needed
+    # Use the 'name' property for the job display label
+    name: ${{ matrix.package.name }} | ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -49,12 +50,14 @@ jobs:
           enable-cache: true
 
       - name: Install Package Dependencies
-        # Only install the specific package and its test group
-        run: uv sync --no-dev --group test --package ${{ matrix.package }}
+        run: uv sync --no-dev --group test --package ${{ matrix.package.name }}
 
       - name: 🧪 Run Tests
-        # Run pytest only for the specific package directory
-        run: uv run --package ${{ matrix.package }} pytest
+        run: |
+          uv run --package ${{ matrix.package.name }} \
+            pytest ${{ matrix.package.path }} \
+            --cov=${{ matrix.package.path }} \
+            --cov-report=xml
 
   # --- PHASE 3: DEPLOYMENT ---
   deploy:
