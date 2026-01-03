@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "^torch-transform-image@v(?P<version>.+)$"
+tag-pattern = "^torch-affine-utils@v(?P<version>.+)$"
 fallback-version = "0.0.1"
 
 [tool.hatch.version.raw-options]
@@ -20,9 +20,9 @@ sources = ["src"]
 
 # https://peps.python.org/pep-0621/
 [project]
-name = "torch-transform-image"
+name = "torch-affine-utils"
 dynamic = ["version"]
-description = "Real space transformations of 2D/3D images in PyTorch"
+description = "Utilities for affine transforms of 2d/3d coordinates in PyTorch"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "BSD-3-Clause" }
@@ -32,7 +32,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",    
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -42,9 +41,8 @@ classifiers = [
 # add your package dependencies here
 dependencies = [
     "torch",
-    "torch-image-interpolation",
-    "torch-grid-utils",
-    "torch-affine-utils",
+    "numpy",
+    "einops",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
@@ -63,19 +61,14 @@ dev = [
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
 
-[tool.uv.sources]
-torch-affine-utils = { workspace = true }
-torch-grid-utils = { workspace = true }
-torch-image-interpolation = { workspace = true }
-
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
 # same as console_scripts entry point
 # [project.scripts]
-# torch-transform-image-cli = "torch_transform_image:main_cli"
+# torch-affine-utils-cli = "torch_affine_utils:main_cli"
 
 # [project.entry-points."some.group"]
-# tomatoes = "torch_transform_image:main_tomatoes"
+# tomatoes = "torch_affine_utils:main_tomatoes"
 
 
 
@@ -99,7 +92,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["torch_transform_image"]
+source = ["torch_affine_utils"]
 
 # https://github.com/mgedmin/check-manifest#configuration
 # add files that you want check-manifest to explicitly ignore here
