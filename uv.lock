@@ -7,6 +7,7 @@ members = [
     "teamtomo",
     "torch-grid-utils",
     "torch-image-interpolation",
+    "torch-transform-image",
 ]
 
 [[package]]
@@ -1024,6 +1025,7 @@ source = { editable = "." }
 dependencies = [
     { name = "torch-grid-utils" },
     { name = "torch-image-interpolation" },
+    { name = "torch-transform-image" },
 ]
 
 [package.dev-dependencies]
@@ -1046,6 +1048,7 @@ test = [
 requires-dist = [
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+    { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
 [package.metadata.requires-dev]
@@ -1114,6 +1117,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/86/5c/5b2e5d84f5b9850cd1e71af07524d8cbb74cba19379800f1f9f7c997fc70/torch-2.9.1-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:0a2bd769944991c74acf0c4ef23603b9c777fdf7637f115605a4b2d8023110c7", size = 104145788, upload-time = "2025-11-12T15:23:52.109Z" },
     { url = "https://files.pythonhosted.org/packages/a9/8c/3da60787bcf70add986c4ad485993026ac0ca74f2fc21410bc4eb1bb7695/torch-2.9.1-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:07c8a9660bc9414c39cac530ac83b1fb1b679d7155824144a40a54f4a47bfa73", size = 899735500, upload-time = "2025-11-12T15:24:08.788Z" },
     { url = "https://files.pythonhosted.org/packages/db/2b/f7818f6ec88758dfd21da46b6cd46af9d1b3433e53ddbb19ad1e0da17f9b/torch-2.9.1-cp314-cp314t-win_amd64.whl", hash = "sha256:c88d3299ddeb2b35dcc31753305612db485ab6f1823e37fb29451c8b2732b87e", size = 111163659, upload-time = "2025-11-12T15:23:20.009Z" },
+]
+
+[[package]]
+name = "torch-affine-utils"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6d/e9/407e496810681a772d6c2c23086039501ccd3d50d0a480c93080890dd8a2/torch_affine_utils-0.1.1.tar.gz", hash = "sha256:82dbceb286ef6b0320ba46ca0543d592f0fead817f3f71c4f7f7f3536e4e6bae", size = 48055, upload-time = "2025-12-09T13:22:44.625Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/ab/d2b12aa907d72e5f235d1115993e8a56a42a1b5abe7f3c7dbab4d1b8671f/torch_affine_utils-0.1.1-py3-none-any.whl", hash = "sha256:57a7958639bcd31f16cb377108b888444eb182f0d2dec111128d071359f37529", size = 8014, upload-time = "2025-12-09T13:22:43.274Z" },
 ]
 
 [[package]]
@@ -1193,6 +1210,41 @@ requires-dist = [
     { name = "rich", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
+]
+provides-extras = ["dev", "test"]
+
+[[package]]
+name = "torch-transform-image"
+source = { editable = "packages/primitives/torch-transform-image" }
+dependencies = [
+    { name = "torch" },
+    { name = "torch-affine-utils" },
+    { name = "torch-grid-utils" },
+    { name = "torch-image-interpolation" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "torch" },
+    { name = "torch-affine-utils" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
 ]
 provides-extras = ["dev", "test"]
 
