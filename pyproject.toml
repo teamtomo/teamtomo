@@ -10,11 +10,13 @@ requires-python = ">=3.12"
 dependencies = [
     "torch-grid-utils",
     "torch-image-interpolation",
+    "torch-transform-image",
 ]
 
 [tool.uv.sources]
 torch-grid-utils = { workspace = true }
 torch-image-interpolation = { workspace = true }
+torch-transform-image = { workspace = true }
 
 [tool.uv.workspace]
 members = [
