@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 members = [
     "teamtomo",
     "torch-affine-utils",
+    "torch-fourier-rescale",
     "torch-fourier-shift",
     "torch-grid-utils",
     "torch-image-interpolation",
@@ -1446,6 +1447,7 @@ name = "teamtomo"
 source = { editable = "." }
 dependencies = [
     { name = "torch-affine-utils" },
+    { name = "torch-fourier-rescale" },
     { name = "torch-fourier-shift" },
     { name = "torch-grid-utils" },
     { name = "torch-image-interpolation" },
@@ -1472,6 +1474,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-fourier-rescale", editable = "packages/algorithms/torch-fourier-rescale" },
     { name = "torch-fourier-shift", editable = "packages/algorithms/torch-fourier-shift" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
@@ -1576,6 +1579,45 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-cov", marker = "extra == 'test'" },
     { name = "rich", marker = "extra == 'dev'" },
+    { name = "torch" },
+]
+provides-extras = ["dev", "test"]
+
+[[package]]
+name = "torch-fourier-rescale"
+source = { editable = "packages/algorithms/torch-fourier-rescale" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pre-commit", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
 provides-extras = ["dev", "test"]

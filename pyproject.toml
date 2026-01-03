@@ -13,7 +13,8 @@ dependencies = [
     "torch-image-interpolation",
     "torch-transform-image",
     "torch-so3",
-    "torch-fourier-shift"
+    "torch-fourier-shift",
+    "torch-fourier-rescale"
 ]
 
 [tool.uv.sources]
@@ -23,6 +24,7 @@ torch-image-interpolation = { workspace = true }
 torch-transform-image = { workspace = true }
 torch-so3 = { workspace = true }
 torch-fourier-shift = { workspace = true }
+torch-fourier-rescale = { workspace = true }
 
 [tool.uv.workspace]
 members = [
