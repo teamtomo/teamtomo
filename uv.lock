@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 members = [
     "teamtomo",
     "torch-grid-utils",
+    "torch-image-interpolation",
 ]
 
 [[package]]
@@ -1022,6 +1023,7 @@ name = "teamtomo"
 source = { editable = "." }
 dependencies = [
     { name = "torch-grid-utils" },
+    { name = "torch-image-interpolation" },
 ]
 
 [package.dev-dependencies]
@@ -1041,7 +1043,10 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" }]
+requires-dist = [
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1148,6 +1153,45 @@ requires-dist = [
     { name = "rich", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "scipy" },
+    { name = "torch" },
+]
+provides-extras = ["dev", "test"]
+
+[[package]]
+name = "torch-image-interpolation"
+source = { editable = "packages/primitives/torch-image-interpolation" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pre-commit", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
 provides-extras = ["dev", "test"]
