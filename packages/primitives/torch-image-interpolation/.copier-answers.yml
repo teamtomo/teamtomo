@@ -1,0 +1,11 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+author_email: alisterburt@gmail.com
+author_name: Alister Burt
+github_username: teamtomo
+mode: tooling
+module_name: torch_image_interpolation
+project_name: torch-image-interpolation
+project_short_description: Linear 2D/3D image interpolation and gridding in PyTorch
+
