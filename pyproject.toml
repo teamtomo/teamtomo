@@ -9,10 +9,12 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "torch-grid-utils",
+    "torch-image-interpolation",
 ]
 
 [tool.uv.sources]
 torch-grid-utils = { workspace = true }
+torch-image-interpolation = { workspace = true }
 
 [tool.uv.workspace]
 members = [
