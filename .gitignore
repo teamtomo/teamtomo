@@ -95,5 +95,6 @@ ENV/
 # ruff
 .ruff_cache/
 
-# IDEs - Keep .idea/ for now (remove if you prefer)
+# IDEs
+.idea/
 .vscode/
