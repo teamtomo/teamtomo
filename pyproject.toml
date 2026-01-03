@@ -1,0 +1,41 @@
+[project]
+name = "teamtomo"
+description = "Modular Python packages for cryo-EM and cryo-ET"
+dynamic = ["version"]
+readme = "README.md"
+authors = [
+    { name = "Alister Burt", email = "alisterburt@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "packages/io/*",
+    "packages/primitives/*",
+    "packages/algorithms/*"
+]
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^teamtomo@v(?P<version>.+)$"
+fallback-version = "0.0.1"
+
+
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "pre-commit",
+    "rich",
+    "ruff",
+]

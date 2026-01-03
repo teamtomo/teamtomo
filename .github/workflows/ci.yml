@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["*@v*"] # scoped tags e.g. 'torch-grid-utils@v1.0.0'
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --- phase 1: discover packages to test ---
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.set-matrix.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Critical for git diff logic in find_affected.py
+      - uses: astral-sh/setup-uv@v5
+      - name: Find affected packages
+        id: set-matrix
+        run: python .github/scripts/find_affected.py >> $GITHUB_OUTPUT
+
+  # --- phase 2: test affected packages ---
+  test:
+    needs: detect-changes
+    # Don't run if no packages were affected (e.g., only a README change)
+    if: needs.detect-changes.outputs.packages != '[]'
+    name: ${{ matrix.package }} | ${{ matrix.python-version }}
+    runs-on: ubuntu-latest # Simplified to ubuntu for brevity; add macos/windows if needed
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        package: ${{ fromJson(needs.detect-changes.outputs.packages) }}
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install Package Dependencies
+        # Only install the specific package and its test group
+        run: uv sync --no-dev --group test --package ${{ matrix.package }}
+
+      - name: 🧪 Run Tests
+        # Run pytest only for the specific package directory
+        run: uv run --package ${{ matrix.package }} pytest
+
+  # --- PHASE 3: DEPLOYMENT ---
+  deploy:
+    needs: test
+    # Only run if a scoped tag was pushed (e.g. pkg@v1.2.3)
+    if: success() && contains(github.ref, '@v') && github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Needed for hatch-vcs to see tags
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Parse Package Name
+        id: info
+        run: |
+          # Extracts 'torch-grid-utils' from 'refs/tags/torch-grid-utils@v1.0.0'
+          TAG_NAME=${{ github.ref_name }}
+          echo "pkg_name=${TAG_NAME%@*}" >> $GITHUB_OUTPUT
+
+      - name: 👷 Build Package
+        run: uv build --package ${{ steps.info.outputs.pkg_name }}
+
+      - name: 🚢 Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: 📝 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: './dist/*'
