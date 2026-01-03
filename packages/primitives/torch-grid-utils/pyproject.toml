@@ -6,6 +6,12 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+tag-pattern = "^torch-grid-utils@v(?P<version>.+)$"
+fallback-version = "0.0.1"
+
+# https://github.com/ofek/hatch-vcs#readme
+[tool.hatch.version.raw-options]
+search_parent_directories = true  # .git is in parent dir
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -56,8 +62,8 @@ dev = [
 ]
 
 [project.urls]
-homepage = "https://github.com/alisterburt/torch-grids"
-repository = "https://github.com/alisterburt/torch-grids"
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
@@ -138,7 +144,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["torch_grids"]
+source = ["torch_grid_utils"]
 
 # https://github.com/mgedmin/check-manifest#configuration
 # add files that you want check-manifest to explicitly ignore here

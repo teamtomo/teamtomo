@@ -7,13 +7,19 @@ authors = [
     { name = "Alister Burt", email = "alisterburt@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "torch-grid-utils",
+]
+
+[tool.uv.sources]
+torch-grid-utils = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "packages/io/*",
     "packages/primitives/*",
-    "packages/algorithms/*"
+    "packages/algorithms/*",
+    "packages/experimental/*"
 ]
 
 [build-system]
