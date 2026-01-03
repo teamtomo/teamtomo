@@ -63,6 +63,8 @@ git clone https://github.com/teamtomo/<repo-name>.git
 cd <repo-name>
 ```
 
+**IMPORTANT**: We'll use `git subtree add --squash` which preserves history while keeping it clean.
+
 **2. Review current structure**
 
 ```bash
@@ -116,9 +118,37 @@ cp /tmp/<repo-name>/LICENSE packages/<category>/<package-name>/
 cp /tmp/<repo-name>/pyproject.toml packages/<category>/<package-name>/
 ```
 
-### Phase 3: Configuration Updates
+### Phase 3: Clean Up and Configure Package
 
-**1. Modify `pyproject.toml`**
+**1. Remove monorepo-level config files from package**
+
+These are now handled at the root level:
+
+```bash
+cd packages/<category>/<package-name>
+
+# Remove package-level configs (use monorepo's instead)
+rm -rf .github/              # CI/CD workflows
+rm .gitignore                # Use root .gitignore
+rm .pre-commit-config.yaml   # Use root pre-commit
+rm .copier-answers.yml       # Template metadata (if exists)
+
+# Keep these files:
+# - LICENSE (package-specific)
+# - README.md (package docs)
+# - pyproject.toml (will modify)
+# - src/ (source code)
+# - tests/ (tests)
+```
+
+**2. Update LICENSE to TeamTomo copyright**
+
+```bash
+# Copy root LICENSE to standardize copyright
+cp ../../../LICENSE ./LICENSE
+```
+
+**3. Modify `pyproject.toml`**
 
 Edit `packages/<category>/<package-name>/pyproject.toml`:
 
@@ -155,15 +185,17 @@ Make sure `[tool.coverage.run]` has the correct source:
 source = ["<actual_package_name>"]  # e.g., "torch_grid_utils"
 ```
 
-**2. Review and verify configuration**
+**4. Review and verify configuration**
 
 Check that:
 - Package name matches directory structure
 - Dependencies are correct
 - Python version requirement is compatible (>=3.12 for monorepo)
 - Build system uses hatchling
+- All monorepo-level configs removed (.github/, .gitignore, .pre-commit-config.yaml)
+- LICENSE updated to TeamTomo copyright
 
-### Phase 4: Workspace Integration (optional)
+### Phase 4: Workspace Integration
 
 **1. Register package with workspace**
 
@@ -275,6 +307,7 @@ teamtomo/                            # Monorepo root
 ├── .github/                         # Monorepo-level CI (shared)
 ├── .gitignore                       # Monorepo-level ignores (shared)
 ├── .pre-commit-config.yaml          # Monorepo-level hooks (shared)
+├── LICENSE                          # Root license (source of truth)
 ├── packages/
 │   └── primitives/
 │       └── torch-grid-utils/        # Migrated package
@@ -286,13 +319,14 @@ teamtomo/                            # Monorepo root
 │           │   └── test_*.py
 │           ├── pyproject.toml       # Modified for monorepo
 │           ├── README.md
-│           └── LICENSE
+│           └── LICENSE              # Copy of root LICENSE
 ├── pyproject.toml                   # Workspace configuration
 └── uv.lock                          # Unified lockfile
 ```
 
 **Key differences:**
 - No `.github/`, `.gitignore`, or `.pre-commit-config.yaml` in package (uses monorepo's)
+- Package LICENSE is copy of root LICENSE (TeamTomo copyright)
 - Package lives in `packages/<category>/<name>/`
 - Modified `pyproject.toml` with monorepo-specific configuration
 - Shared tooling and CI/CD at monorepo level
@@ -625,18 +659,19 @@ Here are the exact changes made to migrate `torch-grid-utils`:
 
 ### Migration Summary
 
-**Files migrated:**
+**Files kept in package:**
 - `src/torch_grid_utils/` (12 Python modules, 2,228 lines)
 - `tests/` (8 test files, 1,718 lines, 67 tests)
-- `README.md`
-- `LICENSE`
+- `README.md` (package documentation)
+- `LICENSE` (updated to TeamTomo copyright)
+- `pyproject.toml` (modified for monorepo)
 
-**Files not migrated:**
-- `.github/workflows/ci.yml` (CI handled by monorepo)
-- `.gitignore` (uses monorepo's)
-- `.pre-commit-config.yaml` (uses monorepo's)
-- `.copier-answers.yml` (not needed)
-- `dependabot.yml` (monorepo-level)
+**Files removed (now at monorepo level):**
+- `.github/workflows/ci.yml` → Root `.github/workflows/`
+- `.gitignore` → Root `.gitignore`
+- `.pre-commit-config.yaml` → Root `.pre-commit-config.yaml`
+- `.copier-answers.yml` (template metadata, not needed)
+- `.github/dependabot.yml` → Root `.github/dependabot.yml`
 
 **Configuration changes:**
 - 3 additions (tag-pattern, fallback-version, search_parent_directories)
