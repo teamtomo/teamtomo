@@ -22,11 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Critical for git diff logic in find_affected_packages.py
+          fetch-depth: 0 # Critical for git diff logic in discovery script
       - uses: astral-sh/setup-uv@v7
       - name: Find affected packages
         id: set-matrix
-        run: python .github/scripts/find_affected.py >> $GITHUB_OUTPUT
+        run: python .github/scripts/find_affected_packages.py >> $GITHUB_OUTPUT
 
   # --- phase 2: test affected packages ---
   test:
