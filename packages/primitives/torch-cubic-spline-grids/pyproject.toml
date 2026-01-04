@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 name = "torch-cubic-spline-grids"
 description = "Cubic spline interpolation on multidimensional grids in PyTorch"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = {text = "BSD 3-Clause License"}
 authors = [
   {email = "alisterburt@gmail.com"},
@@ -48,8 +48,8 @@ dev = [
 ]
 
 [project.urls]
-homepage = "https://github.com/alisterburt/torch-cubic-spline-grids"
-repository = "https://github.com/alisterburt/torch-cubic-spline-grids"
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
 
 # same as console_scripts entry point
 # [project.scripts]
@@ -63,6 +63,11 @@ repository = "https://github.com/alisterburt/torch-cubic-spline-grids"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+tag-pattern = "^torch-cubic-spline-grids@v(?P<version>.+)$"
+fallback-version = "0.0.1"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
 
 # https://hatch.pypa.io/latest/config/build/#file-selection
 # [tool.hatch.build.targets.sdist]

@@ -7,6 +7,7 @@ members = [
     "teamtomo",
     "torch-affine-utils",
     "torch-ctf",
+    "torch-cubic-spline-grids",
     "torch-fourier-filter",
     "torch-fourier-rescale",
     "torch-fourier-shell-correlation",
@@ -2084,6 +2085,7 @@ source = { editable = "." }
 dependencies = [
     { name = "torch-affine-utils" },
     { name = "torch-ctf" },
+    { name = "torch-cubic-spline-grids" },
     { name = "torch-fourier-filter" },
     { name = "torch-fourier-rescale" },
     { name = "torch-fourier-shell-correlation" },
@@ -2116,6 +2118,7 @@ test = [
 requires-dist = [
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
     { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
     { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
@@ -2278,6 +2281,51 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+
+[[package]]
+name = "torch-cubic-spline-grids"
+source = { editable = "packages/primitives/torch-cubic-spline-grids" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "torch" },
+    { name = "typing-extensions" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pre-commit", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=6.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "torch" },
+    { name = "typing-extensions" },
+]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-fourier-filter"

@@ -9,7 +9,7 @@
   - [x] `torch-fourier-shell-correlation` - correlation as a function of spatial frequency
   - [x] `torch-image-interpolation` - sample values from or insert values into images
   - [x] `torch-transform-image` - affine transforms of images
-  - [ ] `torch-cubic-spline-grids` - continuous parametrisations of 1-4D spaces
+  - [x] `torch-cubic-spline-grids` - continuous parametrisations of 1-4D spaces
   - [x] `torch-subpixel-crop` - crop from images with subpixel precision
   - [ ] `torch-find-peaks` - find and refine peaks in images
   - [x] `torch-grid-utils` - coordinate grids, frequency grids and shape generation
