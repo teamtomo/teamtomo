@@ -21,6 +21,7 @@ dependencies = [
     "torch-fourier-slice",
     "torch-ctf",
     "torch-fourier-filter",
+    "torch-fourier-shell-correlation",
 ]
 
 [tool.uv.sources]
@@ -35,6 +36,7 @@ torch-subpixel-crop = { workspace = true }
 torch-fourier-slice = { workspace = true }
 torch-ctf = { workspace = true }
 torch-fourier-filter = { workspace = true }
+torch-fourier-shell-correlation = { workspace = true }
 
 [tool.uv.workspace]
 members = [
