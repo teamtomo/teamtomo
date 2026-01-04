@@ -1,0 +1,11 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+author_email: jojotux123@hotmail.com
+author_name: Johannes Elferich
+github_username: jojoelfe
+mode: tooling
+module_name: torch_peaks
+project_name: torch-find-peaks
+project_short_description: Peak finding and fitting using torch
+
