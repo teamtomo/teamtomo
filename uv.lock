@@ -7,6 +7,7 @@ members = [
     "teamtomo",
     "torch-affine-utils",
     "torch-ctf",
+    "torch-fourier-filter",
     "torch-fourier-rescale",
     "torch-fourier-shift",
     "torch-fourier-slice",
@@ -2082,6 +2083,7 @@ source = { editable = "." }
 dependencies = [
     { name = "torch-affine-utils" },
     { name = "torch-ctf" },
+    { name = "torch-fourier-filter" },
     { name = "torch-fourier-rescale" },
     { name = "torch-fourier-shift" },
     { name = "torch-fourier-slice" },
@@ -2112,6 +2114,7 @@ test = [
 requires-dist = [
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
     { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
@@ -2275,19 +2278,48 @@ test = [
 
 [[package]]
 name = "torch-fourier-filter"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "packages/primitives/torch-fourier-filter" }
 dependencies = [
     { name = "einops" },
     { name = "scipy" },
     { name = "starfile" },
     { name = "torch" },
+    { name = "torch-ctf" },
     { name = "torch-grid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/5b/011ffc19e92314b17ca5316adeea938a5209e7654738641aa7e169c9c46a/torch_fourier_filter-0.3.0.tar.gz", hash = "sha256:8d5354331715fabbbfb326a37b6896d656f93012510d6a7f22f584f62251b2f2", size = 28093, upload-time = "2025-09-25T23:05:57.473Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/86/f1b9b134beacd4db482b1ccc5b472cd4ebcdffad3838345bde7a4b54cae7/torch_fourier_filter-0.3.0-py3-none-any.whl", hash = "sha256:d184fe5e84f1f38c8b34664896b35142ab08d1abfb52fb48295445db5d5c5e86", size = 23025, upload-time = "2025-09-25T23:05:56.298Z" },
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "rich" },
+    { name = "ruff" },
 ]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pre-commit", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "scipy" },
+    { name = "starfile" },
+    { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-fourier-rescale"
@@ -2658,7 +2690,7 @@ wheels = [
 
 [[package]]
 name = "ttsim3d"
-version = "0.4.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2674,9 +2706,9 @@ dependencies = [
     { name = "torch-fourier-filter" },
     { name = "torch-grid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/05/1c/4dbae54b062d66067075eb7aec0facfbb3181101b5197350df4f3cf5d6c3/ttsim3d-0.4.0.tar.gz", hash = "sha256:482f53f0e35be164f5f7684411672c73e7c5d3b5c0033afd67ed51fb3c381b48", size = 52686, upload-time = "2025-06-17T23:11:08.327Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/c4/5b06289683f1da7be53564d7703460bfb8ccea614fa3632ebd4d5392d498/ttsim3d-0.3.0.tar.gz", hash = "sha256:a3d6fa014a39f0a4232ae2529bb7f5985cc41fc19ce190d4df8463ec2282d312", size = 51534, upload-time = "2025-03-23T04:12:50.776Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2d/0c/5033a4e70abcc1633a808f68f52e412c232a96bed0420458eee89dd61c26/ttsim3d-0.4.0-py3-none-any.whl", hash = "sha256:f33b097280c704c6f533037e94d55603f792c2812ef58c96489ad02d2c9afa61", size = 48790, upload-time = "2025-06-17T23:11:06.57Z" },
+    { url = "https://files.pythonhosted.org/packages/15/53/93754fd36b19902ad99dd34ce29af6ba559e03c00eec689aabc301cd80d5/ttsim3d-0.3.0-py3-none-any.whl", hash = "sha256:16d34cdd4fbfaaf154feb4c76c86a814e5601554ac482fa371ce0634a0f77954", size = 48393, upload-time = "2025-03-23T04:12:49.563Z" },
 ]
 
 [[package]]

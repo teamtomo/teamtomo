@@ -5,7 +5,7 @@
   - [x] `torch-fourier-rescale` - rescale by padding/cropping Fourier transforms
   - [x] `torch-fourier-shift` - subpixel shift by phase shifting Fourier transforms
   - [x] `torch-ctf` - Contrast Transfer Function utilities
-  - [ ] `torch-fourier-filter` - Fourier space filters
+  - [x] `torch-fourier-filter` - Fourier space filters
   - [ ] `torch-fourier-shell-correlation` - correlation as a function of spatial frequency
   - [x] `torch-image-interpolation` - sample values from or insert values into images
   - [x] `torch-transform-image` - affine transforms of images
