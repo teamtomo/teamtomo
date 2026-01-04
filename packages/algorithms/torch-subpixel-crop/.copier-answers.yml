@@ -1,0 +1,11 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+author_email: alisterburt@gmail.com
+author_name: Alister Burt
+github_username: alisterburt
+mode: tooling
+module_name: torch_subpixel_crop
+project_name: torch-subpixel-crop
+project_short_description: Extract 2D/3D subimages with subpixel precision in PyTorch
+
