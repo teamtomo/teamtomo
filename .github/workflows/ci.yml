@@ -24,9 +24,9 @@ jobs:
         with:
           fetch-depth: 0 # Critical for git diff logic in discovery script
       - uses: astral-sh/setup-uv@v7
-      - name: Find affected packages
+      - name: find packages to test
         id: set-matrix
-        run: python .github/scripts/find_affected_packages.py >> $GITHUB_OUTPUT
+        run: python .github/scripts/find_packages_to_test.py >> $GITHUB_OUTPUT
 
   # --- phase 2: test affected packages ---
   test:
@@ -52,7 +52,7 @@ jobs:
       - name: Install Package Dependencies
         run: uv sync --no-dev --group test --package ${{ matrix.package.name }}
 
-      - name: 🧪 Run Tests
+      - name: run tests
         run: |
           uv run --package ${{ matrix.package.name }} \
             pytest ${{ matrix.package.path }} \
@@ -76,7 +76,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
 
-      - name: Parse Package Name
+      - name: get package name
         id: info
         run: |
           # Extracts 'torch-grid-utils' from 'refs/tags/torch-grid-utils@v1.0.0'
