@@ -90,6 +90,7 @@ Files to **COPY**:
 - `tests/` - All test files
 - `README.md` - Package documentation
 - `LICENSE` - License file
+- `pyproject.toml` - Package dependencies and setup
 
 Files to **SKIP** (not needed in monorepo):
 
