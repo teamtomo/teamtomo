@@ -11,7 +11,7 @@
   - [x] `torch-transform-image` - affine transforms of images
   - [x] `torch-cubic-spline-grids` - continuous parametrisations of 1-4D spaces
   - [x] `torch-subpixel-crop` - crop from images with subpixel precision
-  - [ ] `torch-find-peaks` - find and refine peaks in images
+  - [x] `torch-find-peaks` - find and refine peaks in images
   - [x] `torch-grid-utils` - coordinate grids, frequency grids and shape generation
   - [x] `torch-so3` - 3D rotation operations and utilities
   - [x] `torch-affine-utils` - affine matrix generation for 2D/3D coordinates

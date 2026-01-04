@@ -23,6 +23,7 @@ dependencies = [
     "torch-fourier-filter",
     "torch-fourier-shell-correlation",
     "torch-cubic-spline-grids",
+    "torch-find-peaks",
 ]
 
 [tool.uv.sources]
@@ -39,6 +40,7 @@ torch-ctf = { workspace = true }
 torch-fourier-filter = { workspace = true }
 torch-fourier-shell-correlation = { workspace = true }
 torch-cubic-spline-grids = { workspace = true }
+torch-find-peaks = { workspace = true }
 
 [tool.uv.workspace]
 members = [
