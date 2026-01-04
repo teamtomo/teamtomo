@@ -1,0 +1,12 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+author_email: alisterburt@gmail.com
+author_name: Alister Burt
+github_username: alisterburt
+mode: tooling
+module_name: torch_fourier_slice
+project_name: torch-fourier-slice
+project_short_description: Fourier slice slice_extraction/slice_insertion from 2D images and 3D
+    volumes in PyTorch.
+
