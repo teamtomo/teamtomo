@@ -22,6 +22,7 @@ dependencies = [
     "torch-ctf",
     "torch-fourier-filter",
     "torch-fourier-shell-correlation",
+    "torch-cubic-spline-grids",
 ]
 
 [tool.uv.sources]
@@ -37,6 +38,7 @@ torch-fourier-slice = { workspace = true }
 torch-ctf = { workspace = true }
 torch-fourier-filter = { workspace = true }
 torch-fourier-shell-correlation = { workspace = true }
+torch-cubic-spline-grids = { workspace = true }
 
 [tool.uv.workspace]
 members = [
