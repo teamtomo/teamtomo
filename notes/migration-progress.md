@@ -4,7 +4,7 @@
   - [x] `torch-fourier-slice` - extracting/inserting central slices of Fourier transforms
   - [x] `torch-fourier-rescale` - rescale by padding/cropping Fourier transforms
   - [x] `torch-fourier-shift` - subpixel shift by phase shifting Fourier transforms
-  - [ ] `torch-ctf` - Contrast Transfer Function utilities
+  - [x] `torch-ctf` - Contrast Transfer Function utilities
   - [ ] `torch-fourier-filter` - Fourier space filters
   - [ ] `torch-fourier-shell-correlation` - correlation as a function of spatial frequency
   - [x] `torch-image-interpolation` - sample values from or insert values into images
