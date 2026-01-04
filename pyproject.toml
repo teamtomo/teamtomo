@@ -24,6 +24,7 @@ dependencies = [
     "torch-fourier-shell-correlation",
     "torch-cubic-spline-grids",
     "torch-find-peaks",
+    "torch-tilt-series",
 ]
 
 [tool.uv.sources]
@@ -41,6 +42,7 @@ torch-fourier-filter = { workspace = true }
 torch-fourier-shell-correlation = { workspace = true }
 torch-cubic-spline-grids = { workspace = true }
 torch-find-peaks = { workspace = true }
+torch-tilt-series = { workspace = true }
 
 [tool.uv.workspace]
 members = [

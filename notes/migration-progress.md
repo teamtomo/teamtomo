@@ -15,7 +15,7 @@
   - [x] `torch-grid-utils` - coordinate grids, frequency grids and shape generation
   - [x] `torch-so3` - 3D rotation operations and utilities
   - [x] `torch-affine-utils` - affine matrix generation for 2D/3D coordinates
-  - [ ] `torch-tomogram` - tomogram data interface (rename to torch-tilt-series during migration
+  - [x] `torch-tomogram` - tomogram data interface (renamed to torch-tilt-series during migration)
 
   ## Algorithms Packages
   - [ ] `torch-2dtm` - 2D template matching in cryo-EM images
