@@ -14,7 +14,8 @@ dependencies = [
     "torch-transform-image",
     "torch-so3",
     "torch-fourier-shift",
-    "torch-fourier-rescale"
+    "torch-fourier-rescale",
+    "torch-subpixel-crop"
 ]
 
 [tool.uv.sources]
@@ -25,6 +26,7 @@ torch-transform-image = { workspace = true }
 torch-so3 = { workspace = true }
 torch-fourier-shift = { workspace = true }
 torch-fourier-rescale = { workspace = true }
+torch-subpixel-crop = { workspace = true }
 
 [tool.uv.workspace]
 members = [
