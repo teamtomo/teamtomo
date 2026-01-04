@@ -1476,8 +1476,8 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
-    { name = "torch-fourier-rescale", editable = "packages/algorithms/torch-fourier-rescale" },
-    { name = "torch-fourier-shift", editable = "packages/algorithms/torch-fourier-shift" },
+    { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
@@ -1588,7 +1588,7 @@ provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-fourier-rescale"
-source = { editable = "packages/algorithms/torch-fourier-rescale" }
+source = { editable = "packages/primitives/torch-fourier-rescale" }
 dependencies = [
     { name = "einops" },
     { name = "numpy" },
@@ -1627,7 +1627,7 @@ provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-fourier-shift"
-source = { editable = "packages/algorithms/torch-fourier-shift" }
+source = { editable = "packages/primitives/torch-fourier-shift" }
 dependencies = [
     { name = "einops" },
     { name = "numpy" },
@@ -1827,7 +1827,7 @@ requires-dist = [
     { name = "rich", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
-    { name = "torch-fourier-shift", editable = "packages/algorithms/torch-fourier-shift" },
+    { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
 provides-extras = ["dev", "test"]
