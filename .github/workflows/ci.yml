@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: [v*]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # run every week (for --pre release tests)
+    - cron: "0 0 * * 0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-manifest:
+    # check-manifest is a tool that checks that all files in version control are
+    # included in the sdist (unless explicitly excluded)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: pipx run check-manifest
+
+  test:
+    name: ubuntu gpu python-${{ matrix.python-version }}
+    runs-on: [self-hosted, linux, x64, gpu]
+    container:
+      image: continuumio/miniconda3
+      options: --runtime=nvidia --gpus all
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]  # test min max version
+
+    steps:
+
+      - name: Pull code
+        uses: actions/checkout@v6
+
+      - name: Set up conda with python-${{ matrix.python-version }}
+        run: |
+          conda install -y python=${{ matrix.python-version }}
+
+      - name: Install base test code
+        run: |
+          python -m pip install .[test]
+          conda list
+
+      - name: Run Tests
+        run: |
+          CUDA_VISIBLE_DEVICES=0,1 COVERAGE_FILE=.coverage.${{ matrix.python-version }} pytest --color=yes --cov --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage
+        # upload the coverage artifact from the runner
+        uses: actions/upload-artifact@v6
+        with:
+          name: covreport-${{ matrix.python-version }}
+          path: ./.coverage*
+          include-hidden-files: true
+
+  upload_coverage:
+    # This combines the uploaded artifacts from the runners into a single
+    # coverage report that is uploaded to codecov and added to the PR
+    if: always()
+    needs: [test]
+    uses: pyapp-kit/workflows/.github/workflows/upload-coverage.yml@v2
+
+  deploy:
+    name: Deploy
+    needs: test
+    if: success() && startsWith(github.ref, 'refs/tags/') && github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing on PyPi
+      # see https://docs.pypi.org/trusted-publishers/
+      id-token: write
+      # This permission allows writing releases
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Build
+        run: |
+          python -m pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: './dist/*'
