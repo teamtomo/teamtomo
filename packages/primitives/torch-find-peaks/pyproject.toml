@@ -6,6 +6,11 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+tag-pattern = "^torch-find-peaks@v(?P<version>.+)$"
+fallback-version = "0.0.1"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -19,7 +24,7 @@ name = "torch-find-peaks"
 dynamic = ["version"]
 description = "Peak finding and fitting using torch"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "Johannes Elferich", email = "jojotux123@hotmail.com" }]
 # https://pypi.org/classifiers/
@@ -61,8 +66,8 @@ dev = [
 ]
 
 [project.urls]
-homepage = "https://github.com/jojoelfe/torch-find-peaks"
-repository = "https://github.com/jojoelfe/torch-find-peaks"
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
 
 [dependency-groups]
 dev = [
