@@ -2,7 +2,7 @@ import alnfile
 import mrcfile
 import numpy as np
 from pathlib import Path
-from torch_tomogram import Tomogram
+from torch_tilt_series import Tomogram
 
 # Paths
 ALN_PATH = Path('/Path/to/your/alnfile.aln')

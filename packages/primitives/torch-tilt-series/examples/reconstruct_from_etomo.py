@@ -2,7 +2,7 @@ import etomofiles
 import mrcfile
 import numpy as np
 from pathlib import Path
-from torch_tomogram import Tomogram
+from torch_tilt_series import Tomogram
 
 
 # Read etomo alignment data

@@ -8,7 +8,7 @@ import mrcfile
 import torch
 from torch_fourier_rescale import fourier_rescale_2d
 
-from torch_tomogram import Tomogram
+from torch_tilt_series import Tomogram
 
 
 def _read_shrec_alignment(file: Path) -> tuple[list]:

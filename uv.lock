@@ -18,6 +18,7 @@ members = [
     "torch-image-interpolation",
     "torch-so3",
     "torch-subpixel-crop",
+    "torch-tilt-series",
     "torch-transform-image",
 ]
 
@@ -2636,6 +2637,7 @@ dependencies = [
     { name = "torch-image-interpolation" },
     { name = "torch-so3" },
     { name = "torch-subpixel-crop" },
+    { name = "torch-tilt-series" },
     { name = "torch-transform-image" },
 ]
 
@@ -2670,6 +2672,7 @@ requires-dist = [
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
@@ -3337,6 +3340,53 @@ requires-dist = [
     { name = "torch" },
     { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+]
+provides-extras = ["dev", "test"]
+
+[[package]]
+name = "torch-tilt-series"
+source = { editable = "packages/primitives/torch-tilt-series" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "torch" },
+    { name = "torch-affine-utils" },
+    { name = "torch-fourier-slice" },
+    { name = "torch-grid-utils" },
+    { name = "torch-subpixel-crop" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "numpy" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pre-commit", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "torch" },
+    { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
 ]
 provides-extras = ["dev", "test"]
 

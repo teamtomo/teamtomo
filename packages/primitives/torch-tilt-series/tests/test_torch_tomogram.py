@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from torch_tomogram import Tomogram
+from torch_tilt_series import Tomogram
 
 DEVICES = ["cpu"]
 if torch.cuda.is_available():

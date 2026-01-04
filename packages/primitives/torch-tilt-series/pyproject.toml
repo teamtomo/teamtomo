@@ -6,6 +6,11 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+tag-pattern = "^torch-tilt-series@v(?P<version>.+)$"
+fallback-version = "0.0.1"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -15,11 +20,11 @@ sources = ["src"]
 
 # https://peps.python.org/pep-0621/
 [project]
-name = "torch-tomogram"
+name = "torch-tilt-series"
 dynamic = ["version"]
 description = "Tomogram reconstruction, subtomogram reconstruction, and subtilt extraction for cryo-ET."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "BSD-3-Clause" }
 authors = [
     { name = "Marten Chaillet", email = "martenchaillet@gmail.com" },
@@ -59,8 +64,8 @@ dev = [
 ]
 
 [project.urls]
-homepage = "https://github.com/teamtomo/torch-tomogram"
-repository = "https://github.com/teamtomo/torch-tomogram"
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
@@ -75,8 +80,6 @@ repository = "https://github.com/teamtomo/torch-tomogram"
 # setup with `uv sync` or `pip install -e . --group dev`
 # [dependency-groups]
 
-[tool.uv.sources]
-torch-tomogram = { workspace = true }
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
@@ -148,7 +151,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["torch_tomogram"]
+source = ["torch_tilt_series"]
 
 [tool.check-manifest]
 ignore = [
