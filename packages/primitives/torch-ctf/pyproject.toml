@@ -6,6 +6,11 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+tag-pattern = "^torch-ctf@v(?P<version>.+)$"
+fallback-version = "0.0.1"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -19,7 +24,7 @@ name = "torch-ctf"
 dynamic = ["version"]
 description = "CTF calculation for cryoEM in torch"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "Josh Dickerson", email = "jdickerson@berkeley.edu" }]
 # https://pypi.org/classifiers/
@@ -48,8 +53,8 @@ dependencies = [
 # name = ["dependency"]
 
 [project.urls]
-homepage = "https://github.com/jdickerson95/torch-ctf"
-repository = "https://github.com/jdickerson95/torch-ctf"
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
@@ -73,9 +78,6 @@ dev = [
     "rich",  # https://github.com/Textualize/rich
     "ruff",
 ]
-
-[tool.uv.sources]
-torch-ctf = { workspace = true }
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
