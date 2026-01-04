@@ -1,7 +1,7 @@
 
   ## Primitives Packages
 
-  - [ ] `torch-fourier-slice` - extracting/inserting central slices of Fourier transforms
+  - [x] `torch-fourier-slice` - extracting/inserting central slices of Fourier transforms
   - [x] `torch-fourier-rescale` - rescale by padding/cropping Fourier transforms
   - [x] `torch-fourier-shift` - subpixel shift by phase shifting Fourier transforms
   - [ ] `torch-ctf` - Contrast Transfer Function utilities
