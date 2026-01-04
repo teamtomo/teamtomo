@@ -3,6 +3,7 @@
 This guide outlines the process for migrating existing standalone TeamTomo GitHub repositories into the monorepo workspace structure.
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Prerequisites](#prerequisites)
 3. [Step-by-Step Migration Process](#step-by-step-migration-process)
@@ -17,9 +18,11 @@ This guide outlines the process for migrating existing standalone TeamTomo GitHu
 ## Overview
 
 ### Purpose
+
 Consolidate existing standalone TeamTomo packages into a unified monorepo workspace for better maintainability, shared tooling, and easier cross-package development.
 
 ### Benefits
+
 - **Unified versioning**: Coordinated releases across packages
 - **Shared tooling**: Single set of dev tools, linters, and CI/CD
 - **Easier development**: Cross-package changes in single PR
@@ -27,6 +30,7 @@ Consolidate existing standalone TeamTomo packages into a unified monorepo worksp
 - **Consistent standards**: Shared configuration and best practices
 
 ### Reference Example
+
 This guide uses the `torch-grid-utils` migration as a reference. The original repository at `teamtomo/torch-grid-utils` was successfully migrated to `packages/primitives/torch-grid-utils/` in the monorepo.
 
 ## Prerequisites
@@ -81,12 +85,14 @@ ls -la | grep "^\."
 **3. Identify files to migrate**
 
 Files to **COPY**:
+
 - `src/` - Entire source directory
 - `tests/` - All test files
 - `README.md` - Package documentation
 - `LICENSE` - License file
 
 Files to **SKIP** (not needed in monorepo):
+
 - `.github/` - CI/CD workflows (monorepo handles this)
 - `.gitignore` - Use monorepo's root .gitignore
 - `.pre-commit-config.yaml` - Use monorepo's root config
@@ -103,6 +109,7 @@ mkdir -p packages/<category>/<package-name>
 ```
 
 **Example:**
+
 ```bash
 mkdir -p packages/primitives/torch-grid-utils
 ```
@@ -188,6 +195,7 @@ source = ["<actual_package_name>"]  # e.g., "torch_grid_utils"
 **4. Review and verify configuration**
 
 Check that:
+
 - Package name matches directory structure
 - Dependencies are correct
 - Python version requirement is compatible (>=3.12 for monorepo)
@@ -205,6 +213,7 @@ uv sync
 ```
 
 This will:
+
 - Discover the new package via glob patterns in root `pyproject.toml`
 - Install it as an editable package
 - Update `uv.lock`
@@ -325,6 +334,7 @@ teamtomo/                            # Monorepo root
 ```
 
 **Key differences:**
+
 - No `.github/`, `.gitignore`, or `.pre-commit-config.yaml` in package (uses monorepo's)
 - Package LICENSE is copy of root LICENSE (TeamTomo copyright)
 - Package lives in `packages/<category>/<name>/`
@@ -336,12 +346,14 @@ teamtomo/                            # Monorepo root
 ### Version Configuration
 
 **Before (standalone):**
+
 ```toml
 [tool.hatch.version]
 source = "vcs"
 ```
 
 **After (monorepo):**
+
 ```toml
 [tool.hatch.version]
 source = "vcs"
@@ -353,6 +365,7 @@ search_parent_directories = true
 ```
 
 **Why:**
+
 - `tag-pattern`: Enables package-specific tags (e.g., `torch-grid-utils@v1.0.0`) in monorepo
 - `fallback-version`: Provides default when no tags exist
 - `search_parent_directories`: Finds `.git` directory in monorepo root
@@ -360,6 +373,7 @@ search_parent_directories = true
 ### Repository URLs
 
 **Before (standalone):**
+
 ```toml
 [project.urls]
 homepage = "https://github.com/alisterburt/torch-grids"
@@ -367,6 +381,7 @@ repository = "https://github.com/alisterburt/torch-grids"
 ```
 
 **After (monorepo):**
+
 ```toml
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -376,12 +391,14 @@ repository = "https://github.com/teamtomo/teamtomo"
 ### Coverage Configuration
 
 **Before (may have incorrect name):**
+
 ```toml
 [tool.coverage.run]
 source = ["torch_grids"]  # Wrong!
 ```
 
 **After (corrected):**
+
 ```toml
 [tool.coverage.run]
 source = ["torch_grid_utils"]  # Correct package name
@@ -422,14 +439,17 @@ The `tag-pattern` in `pyproject.toml` extracts the version from these tags.
 **Approach**: Copy files without git history
 
 **Pros:**
+
 - Cleaner monorepo history
 - Simpler process
 - No merge conflicts
 
 **Cons:**
+
 - Loses individual package history
 
 **When to use:**
+
 - Most migrations (default choice)
 - Package has limited history value
 - Simplicity preferred
@@ -442,19 +462,23 @@ This guide uses Option A (copy files directly)
 **Approach**: Preserve full git history using subtree merge
 
 **Pros:**
+
 - Preserves complete package history
 - Maintains commit attribution
 
 **Cons:**
+
 - More complex process
 - Can clutter monorepo history
 - Potential merge conflicts
 
 **When to use:**
+
 - Package has valuable historical context
 - Attribution/blame history important
 
 **How:**
+
 ```bash
 # In monorepo root
 git subtree add --prefix=packages/<category>/<name> \
@@ -515,18 +539,22 @@ Use this checklist to ensure complete migration:
 ### Issue: Tests fail after migration
 
 **Symptoms:**
+
 ```
 ERROR: file not found: tests/
 ```
 
 **Solutions:**
+
 1. Check `[tool.pytest.ini_options]` in `pyproject.toml`:
+
    ```toml
    [tool.pytest.ini_options]
    testpaths = ["tests"]  # Should be relative to package root
    ```
 
 2. Verify dependencies installed:
+
    ```bash
    uv sync
    uv run pytest packages/<category>/<name>/tests/
@@ -537,29 +565,35 @@ ERROR: file not found: tests/
 ### Issue: Version detection fails
 
 **Symptoms:**
+
 ```
 Version not detected, using fallback: 0.0.1
 ```
 
 **Solutions:**
+
 1. Verify tag pattern in `pyproject.toml`:
+
    ```toml
    [tool.hatch.version]
    tag-pattern = "^<package-name>@v(?P<version>.+)$"
    ```
 
 2. Ensure `search_parent_directories = true`:
+
    ```toml
    [tool.hatch.version.raw-options]
    search_parent_directories = true
    ```
 
 3. Create a test tag:
+
    ```bash
    git tag <package-name>@v0.0.1
    ```
 
 4. Check fallback is set:
+
    ```toml
    [tool.hatch.version]
    fallback-version = "0.0.1"
@@ -568,12 +602,15 @@ Version not detected, using fallback: 0.0.1
 ### Issue: Import errors
 
 **Symptoms:**
+
 ```python
 ModuleNotFoundError: No module named '<package>'
 ```
 
 **Solutions:**
+
 1. Run `uv sync` to reinstall editable package:
+
    ```bash
    uv sync
    ```
@@ -583,6 +620,7 @@ ModuleNotFoundError: No module named '<package>'
    - Module name: `torch_grid_utils` (in `src/`)
 
 3. Check workspace members in root `pyproject.toml`:
+
    ```toml
    [tool.uv.workspace]
    members = [
@@ -593,6 +631,7 @@ ModuleNotFoundError: No module named '<package>'
 ### Issue: Coverage source incorrect
 
 **Symptoms:**
+
 ```
 Coverage.py warning: No data was collected
 ```
@@ -608,6 +647,7 @@ source = ["torch_grid_utils"]  # Use underscore, not hyphen
 ### Issue: Build fails with "no files found"
 
 **Symptoms:**
+
 ```
 WARNING: No files found for package
 ```
@@ -660,6 +700,7 @@ Here are the exact changes made to migrate `torch-grid-utils`:
 ### Migration Summary
 
 **Files kept in package:**
+
 - `src/torch_grid_utils/` (12 Python modules, 2,228 lines)
 - `tests/` (8 test files, 1,718 lines, 67 tests)
 - `README.md` (package documentation)
@@ -667,6 +708,7 @@ Here are the exact changes made to migrate `torch-grid-utils`:
 - `pyproject.toml` (modified for monorepo)
 
 **Files removed (now at monorepo level):**
+
 - `.github/workflows/ci.yml` → Root `.github/workflows/`
 - `.gitignore` → Root `.gitignore`
 - `.pre-commit-config.yaml` → Root `.pre-commit-config.yaml`
@@ -674,11 +716,13 @@ Here are the exact changes made to migrate `torch-grid-utils`:
 - `.github/dependabot.yml` → Root `.github/dependabot.yml`
 
 **Configuration changes:**
+
 - 3 additions (tag-pattern, fallback-version, search_parent_directories)
 - 2 URL updates (homepage, repository)
 - 1 fix (coverage source)
 
 **Verification:**
+
 ```bash
 # Tests pass
 uv run pytest packages/primitives/torch-grid-utils/tests/
