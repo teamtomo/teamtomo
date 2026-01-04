@@ -1,0 +1,9 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+mode: tooling
+module_name: torch_tomogram
+project_name: torch-tomogram
+project_short_description: Tomogram reconstruction, subtomogram reconstruction, and
+    subtilt extraction for cryo-ET.
+
