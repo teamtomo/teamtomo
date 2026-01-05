@@ -9,6 +9,6 @@ except PackageNotFoundError:
 __author__ = "Marten Chaillet"
 __email__ = "martenchaillet@gmail.com"
 
-from torch_tilt_series.tomogram import Tomogram
+from torch_tilt_series.tilt_series import TiltSeries
 
-__all__ = ["Tomogram"]
+__all__ = ["TiltSeries"]
