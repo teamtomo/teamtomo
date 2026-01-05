@@ -3157,6 +3157,7 @@ test = [
     { name = "scipy" },
     { name = "torch-fourier-shell-correlation" },
     { name = "ttsim3d" },
+    { name = "urllib3" },
 ]
 
 [package.metadata]
@@ -3178,6 +3179,7 @@ requires-dist = [
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "ttsim3d", marker = "extra == 'test'" },
+    { name = "urllib3", marker = "extra == 'test'" },
 ]
 provides-extras = ["dev", "test"]
 

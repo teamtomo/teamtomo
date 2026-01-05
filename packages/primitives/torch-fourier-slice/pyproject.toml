@@ -58,6 +58,7 @@ test = [
     "matplotlib",
     "scipy",
     "ttsim3d",  # For simulating test volume data
+    "urllib3",  # For downloading test PDB data
 ]
 # add anything else you like to have in your dev environment here
 dev = [
