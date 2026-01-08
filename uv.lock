@@ -21,6 +21,7 @@ members = [
     "torch-tilt-series",
     "torch-transform-image",
 ]
+overrides = [{ name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" }]
 
 [[package]]
 name = "annotated-types"
@@ -2972,20 +2973,6 @@ dependencies = [
     { name = "torch" },
     { name = "torch-ctf" },
     { name = "torch-grid-utils" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "ipython" },
-    { name = "mypy" },
-    { name = "pdbpp" },
-    { name = "pre-commit" },
-    { name = "rich" },
-    { name = "ruff" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
 ]
 
 [package.metadata]

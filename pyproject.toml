@@ -27,6 +27,12 @@ dependencies = [
     "torch-tilt-series",
 ]
 
+# Force uv to use workspace versions of packages (instead of PyPI versions)
+[tool.uv]
+override-dependencies = [
+    "torch-fourier-filter",
+]
+
 [tool.uv.sources]
 torch-grid-utils = { workspace = true }
 torch-affine-utils = { workspace = true }
@@ -60,7 +66,7 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 tag-pattern = "^teamtomo@v(?P<version>.+)$"
-fallback-version = "0.0.1"
+fallback-version = "0.5.0"
 
 
 [dependency-groups]
