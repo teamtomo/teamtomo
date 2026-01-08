@@ -30,5 +30,7 @@ source .venv/bin/activate
 And finally sync with the repository to install packages
 
 ```bash
-uv sync
+uv sync --all-extras --all-packages
 ```
+
+Note that the `--all-extras` and `--all-packages` flags install the development and testing requirements for all sub-packages. More granular install options are possible, if your system requires it.

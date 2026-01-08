@@ -47,6 +47,9 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# Files downloaded for unit tests
+**/tests/tmp/
+
 # Translations
 *.mo
 *.pot

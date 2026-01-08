@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 tag-pattern = "^torch-so3@v(?P<version>.+)$"
-fallback-version = "0.0.1"
+fallback-version = "0.5.0"
 
 [tool.hatch.version.raw-options]
 search_parent_directories = true

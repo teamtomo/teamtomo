@@ -10,6 +10,11 @@ def _add_soft_edge_single_binary_image(
         return image.float()
     # move explicitly to cpu for scipy
     distances = ndi.distance_transform_edt(torch.logical_not(image).to("cpu"))
+
+    # mps device does not support float64, move to float32 before tensor conversion
+    if image.device.type == "mps":
+        distances = distances.astype("float32")
+
     distances = torch.as_tensor(distances, device=image.device).float()
     idx = torch.logical_and(distances > 0, distances <= smoothing_radius)
     output = torch.clone(image).float()

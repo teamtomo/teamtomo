@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "vcs"
 tag-pattern = "^torch-grid-utils@v(?P<version>.+)$"
-fallback-version = "0.0.1"
+fallback-version = "0.5.0"
 
 # https://github.com/ofek/hatch-vcs#readme
 [tool.hatch.version.raw-options]
