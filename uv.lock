@@ -24,6 +24,19 @@ members = [
 overrides = [{ name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" }]
 
 [[package]]
+name = "alnfile"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pandas" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/09/fa/20227683447c56563380473879672175790f380a41bd239404acad5bda31/alnfile-0.1.1.tar.gz", hash = "sha256:446b51d909f07514f49e33e274456b8c0991a8926b863902329000f8176611fe", size = 28185, upload-time = "2025-10-22T15:47:34.858Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/3f/b1b312494849250a9ac646dffabebc2ae7f1ba63187d033e23e20362c08c/alnfile-0.1.1-py3-none-any.whl", hash = "sha256:c5858676a1df93c446318a6ba5c31e2e750e9a46a232b64e67b29a78251a2833", size = 12048, upload-time = "2025-10-22T15:47:33.838Z" },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -507,6 +520,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e5/81/df4fbe24dff8ba3934af99044188e20a98ed441ad17a274539b74e82e126/einops-0.8.1.tar.gz", hash = "sha256:de5d960a7a761225532e0f1959e5315ebeafc0cd43394732f103ca44b9837e84", size = 54805, upload-time = "2025-02-09T03:17:00.434Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/87/62/9773de14fe6c45c23649e98b83231fffd7b9892b6cf863251dc2afa73643/einops-0.8.1-py3-none-any.whl", hash = "sha256:919387eb55330f5757c6bea9165c5ff5cfe63a642682ea788a6d472576d81737", size = 64359, upload-time = "2025-02-09T03:17:01.998Z" },
+]
+
+[[package]]
+name = "etomofiles"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mrcfile" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/ab/66be00df0fab12a0b13868c720bcc934b78a816f4201d335bd524220f8cb/etomofiles-0.1.1.tar.gz", hash = "sha256:8f41827145cd2a256622cf10ade48307a3e7c50a535befe81a49d54a84b1ca76", size = 16603, upload-time = "2025-10-22T10:09:58.764Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c6/f5/7e403f93faae3c9b64a54c6158292d9e7453c043b177b32ab30b40207e8a/etomofiles-0.1.1-py3-none-any.whl", hash = "sha256:9f692ef3ca4c9be76ef055b9f87bc621cf0224e50fbab1346a9360801265b68a", size = 9390, upload-time = "2025-10-22T10:09:57.751Z" },
 ]
 
 [[package]]
@@ -2673,7 +2701,7 @@ requires-dist = [
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
-    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tilt-series", editable = "packages/wip/torch-tilt-series" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
@@ -3334,9 +3362,12 @@ provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-tilt-series"
-source = { editable = "packages/primitives/torch-tilt-series" }
+source = { editable = "packages/wip/torch-tilt-series" }
 dependencies = [
+    { name = "alnfile" },
     { name = "einops" },
+    { name = "etomofiles" },
+    { name = "mrcfile" },
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils" },
@@ -3361,8 +3392,11 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alnfile" },
     { name = "einops" },
+    { name = "etomofiles" },
     { name = "ipython", marker = "extra == 'dev'" },
+    { name = "mrcfile" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
     { name = "pdbpp", marker = "extra == 'dev'" },

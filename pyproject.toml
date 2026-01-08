@@ -55,7 +55,7 @@ members = [
     "packages/io/*",
     "packages/primitives/*",
     "packages/algorithms/*",
-    "packages/experimental/*"
+    "packages/wip/*"
 ]
 
 [build-system]

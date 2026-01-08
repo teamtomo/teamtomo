@@ -6,7 +6,7 @@ from torch_tilt_series import Tomogram
 
 # Paths
 ALN_PATH = Path('/Path/to/your/alnfile.aln')
-TILT_STACK_PATH = Path('/Path/to/your/raw/tilt_stack.ts_ext')
+TILT_STACK_PATH = Path('/Path/to/your/raw/tilt_stack.mrc')
 
 # Read AreTomo alignment data
 df = alnfile.read(ALN_PATH)

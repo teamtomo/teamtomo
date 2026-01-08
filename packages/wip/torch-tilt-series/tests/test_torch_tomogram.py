@@ -25,16 +25,16 @@ def test_device_move():
         sample_translations=sample_translations,
         images=images,
     )
-    assert "cpu" == str(tomogram.images.device)
+    assert "cpu" == str(tomogram.tilt_images.device)
 
     tomogram.to("cuda")
 
     # Check shape and type
-    assert "cuda" in str(tomogram.images.device)
+    assert "cuda" in str(tomogram.tilt_images.device)
     assert "cuda" in str(tomogram.device)
-    assert "cuda" in str(tomogram.tilt_angles.device)
+    assert "cuda" in str(tomogram.stage_tilt_angles.device)
     assert "cuda" in str(tomogram.tilt_axis_angle.device)
-    assert "cuda" in str(tomogram.sample_translations.device)
+    assert "cuda" in str(tomogram.image_shifts_angstroms.device)
 
 
 @pytest.mark.parametrize(
@@ -59,7 +59,7 @@ def test_projection_matrices(device):
     )
 
     # Get projection matrices
-    matrices = tomogram.projection_matrices
+    matrices = tomogram.get_sample2detector_transform
 
     # Check shape and type
     assert matrices.shape == (3, 4, 4)  # 3 tilts, 4x4 matrices
