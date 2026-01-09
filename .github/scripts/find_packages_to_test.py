@@ -5,6 +5,10 @@ import sys
 from pathlib import Path
 
 
+def log(msg):
+    print(msg, file=sys.stderr)
+
+
 def run(cmd):
     try:
         result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode("utf-8").strip()
@@ -13,6 +17,7 @@ def run(cmd):
         # We print to stderr so it doesn't mess up the GITHUB_OUTPUT
         print(f"Command failed: {cmd}\n{e.output.decode()}", file=sys.stderr)
         return ""
+
 
 def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
     package_names = run("uv workspace list --preview-features workspace-list")
@@ -29,17 +34,26 @@ def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
     ]
     return packages
 
-def get_affected_packages()  -> list[dict[str, str]]:  # pkg_name: path:
 
-    packages = get_workspace_packages()
-    if not packages:
+def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
+    workspace_packages = get_workspace_packages()
+    if not workspace_packages:
+        log("no packages found")
         return []
+    log(
+        f"found following packages in workspace: {
+        [
+            f"{pkg["name"]} @ {pkg['path']}\n"
+            for pkg in workspace_packages
+        ]
+        }"
+    )
 
     # 1. Map package names to relative paths
     package_name_to_path = {
         package["name"]: package["path"]
         for package
-        in packages
+        in workspace_packages
     }
 
     # 2. FIX: Determine base for comparison
