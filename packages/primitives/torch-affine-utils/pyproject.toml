@@ -12,6 +12,7 @@ fallback-version = "0.5.0"
 [tool.hatch.version.raw-options]
 search_parent_directories = true
 
+
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
 [tool.hatch.build.targets.wheel]
@@ -45,21 +46,19 @@ dependencies = [
     "einops",
 ]
 
-# https://peps.python.org/pep-0621/#dependencies-optional-dependencies
-# "extras" (e.g. for `pip install .[test]`)
-[project.optional-dependencies]
-# add dependencies used for testing here
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+# https://peps.python.org/pep-0735/
+[dependency-groups]
 test = ["pytest", "pytest-cov"]
-# add anything else you like to have in your dev environment here
 dev = [
+    { include-group = "test" },
     "ipython",
     "pdbpp",  # https://github.com/pdbpp/pdbpp
     "rich",  # https://github.com/Textualize/rich
 ]
-
-[project.urls]
-homepage = "https://github.com/teamtomo/teamtomo"
-repository = "https://github.com/teamtomo/teamtomo"
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points

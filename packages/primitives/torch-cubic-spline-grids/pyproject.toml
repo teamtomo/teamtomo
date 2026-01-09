@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 name = "torch-cubic-spline-grids"
 description = "Cubic spline interpolation on multidimensional grids in PyTorch"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = {text = "BSD 3-Clause License"}
 authors = [
   {email = "alisterburt@gmail.com"},
@@ -32,24 +32,22 @@ dependencies = [
     "typing-extensions",
 ]
 
-# extras
-# https://peps.python.org/pep-0621/#dependencies-optional-dependencies
-[project.optional-dependencies]
-test = ["pytest>=6.0", "pytest-cov"]
-dev = [
-    "ipython",
-    "mypy",
-    "pdbpp",
-    "pre-commit",
-    "pytest-cov",
-    "pytest",
-    "rich",
-    "ruff",
-]
-
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
+
+# https://peps.python.org/pep-0735/
+[dependency-groups]
+test = ["pytest>=6.0", "pytest-cov"]
+dev = [
+    { include-group = "test" },
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "pre-commit-uv",
+    "rich",
+    "ruff",
+]
 
 # same as console_scripts entry point
 # [project.scripts]
