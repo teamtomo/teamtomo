@@ -20,8 +20,8 @@ def run(cmd):
 
 
 def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
-    package_names = run("uv workspace list --preview-features workspace-list")
-    package_paths = run("uv workspace list --paths --preview-features workspace-list")
+    package_names = run("uv workspace list --preview-features workspace-list").splitlines()
+    package_paths = run("uv workspace list --paths --preview-features workspace-list").splitlines()
     if not package_names:
         return []
     packages = [
