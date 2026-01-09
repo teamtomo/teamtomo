@@ -27,7 +27,7 @@ def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
     packages = [
         {
             "name": name,
-            "path": Path(abs_path),
+            "path": Path(abs_path).relative_to(os.getcwd()),
         }
         for name, abs_path
         in zip(package_names, package_paths)
@@ -40,14 +40,9 @@ def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
     if not workspace_packages:
         log("no packages found")
         return []
-    log(
-        f"found following packages in workspace: {
-        [
-            f"{pkg["name"]} @ {pkg['path']}\n"
-            for pkg in workspace_packages
-        ]
-        }"
-    )
+    log("found following packages in workspace")
+    for pkg in workspace_packages:
+        log(f"{pkg['name']}: {pkg['path']}")
 
     # 1. Map package names to relative paths
     package_name_to_path = {
