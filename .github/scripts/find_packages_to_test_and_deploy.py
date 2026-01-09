@@ -110,8 +110,10 @@ def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
             if parts:
                 dep_name = parts[0]
                 if dep_name in workspace_package_name_to_path:
-                    log(f"\t{dep_name}")
                     packages_to_test.add(dep_name)
+
+    for package in packages_to_test:
+        log(f"\t{package}")
 
     return [{"name": name, "path": workspace_package_name_to_path[name]} for name in sorted(packages_to_test)]
 
