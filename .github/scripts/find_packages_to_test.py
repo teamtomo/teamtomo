@@ -27,7 +27,7 @@ def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
     packages = [
         {
             "name": name,
-            "path": Path(abs_path).relative_to(os.getcwd()),
+            "path": str(Path(abs_path).relative_to(os.getcwd())),
         }
         for name, abs_path
         in zip(package_names, package_paths)
