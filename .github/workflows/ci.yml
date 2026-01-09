@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # --- phase 1: discover packages to test ---
+  # --- phase 1: discover packages to test and deploy ---
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -26,9 +26,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: find packages to test
         id: set-matrix
-        run: python .github/scripts/find_packages_to_test.py >> $GITHUB_OUTPUT
+        run: python .github/scripts/find_packages_to_test_and_deploy.py >> $GITHUB_OUTPUT
 
-  # --- phase 2: test affected packages ---
+  # --- phase 2: test relevant packages ---
   test:
     needs: detect-changes
     # Don't run if no packages were affected (e.g., only a README change)
