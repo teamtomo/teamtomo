@@ -2794,10 +2794,12 @@ dependencies = [
     { name = "torch" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
 ]
 test = [
@@ -2808,15 +2810,22 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-ctf"
@@ -2878,12 +2887,12 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "rich" },
@@ -2897,21 +2906,26 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=6.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
     { name = "typing-extensions" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest", specifier = ">=6.0" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest", specifier = ">=6.0" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-find-peaks"
@@ -2923,16 +2937,22 @@ dependencies = [
     { name = "torch-subpixel-crop" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
+    { name = "ipykernel" },
     { name = "ipython" },
+    { name = "matplotlib" },
     { name = "mkdocs" },
     { name = "mkdocs-jupyter" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "mrcfile" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pooch" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -2941,54 +2961,36 @@ test = [
     { name = "pytest-cov" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "ipykernel" },
-    { name = "matplotlib" },
-    { name = "mkdocs" },
-    { name = "mkdocs-jupyter" },
-    { name = "mkdocs-material" },
-    { name = "mkdocstrings", extra = ["python"] },
-    { name = "mrcfile" },
-    { name = "pooch" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
 [package.metadata]
 requires-dist = [
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mkdocs", marker = "extra == 'dev'" },
-    { name = "mkdocs-jupyter", marker = "extra == 'dev'" },
-    { name = "mkdocs-material", marker = "extra == 'dev'" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "pandas", specifier = ">=2.2.3" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch", specifier = ">=2.6.0" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
 ]
-provides-extras = ["dev", "test"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "ipykernel", specifier = ">=6.29.5" },
+    { name = "ipython" },
     { name = "matplotlib", specifier = ">=3.9.4" },
-    { name = "mkdocs" },
     { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "mkdocs-jupyter" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extras = ["python"] },
     { name = "mrcfile", specifier = ">=1.5.4" },
+    { name = "mypy" },
+    { name = "pdbpp" },
     { name = "pooch", specifier = ">=1.8.2" },
+    { name = "pre-commit-uv" },
     { name = "pytest", specifier = ">=8.3.5" },
+    { name = "pytest-cov" },
+    { name = "rich" },
     { name = "ruff", specifier = ">=0.11.4" },
+]
+test = [
+    { name = "pytest", specifier = ">=8.3.5" },
+    { name = "pytest-cov" },
 ]
 
 [[package]]
@@ -3006,21 +3008,28 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "scipy" },
     { name = "starfile" },
     { name = "torch" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-fourier-rescale"
@@ -3031,12 +3040,14 @@ dependencies = [
     { name = "torch" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3048,18 +3059,25 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-fourier-shell-correlation"
@@ -3070,12 +3088,14 @@ dependencies = [
     { name = "torch-grid-utils" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3086,19 +3106,26 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-fourier-shift"
@@ -3109,12 +3136,14 @@ dependencies = [
     { name = "torch" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3130,20 +3159,29 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mkdocs-material", marker = "extra == 'docs'" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
-provides-extras = ["dev", "docs", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+docs = [
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extras = ["python"] },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-fourier-slice"
@@ -3156,14 +3194,21 @@ dependencies = [
     { name = "torch-image-interpolation" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "scipy" },
+    { name = "torch-fourier-shell-correlation" },
+    { name = "ttsim3d" },
+    { name = "urllib3" },
 ]
 test = [
     { name = "matplotlib" },
@@ -3178,25 +3223,37 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "matplotlib", marker = "extra == 'test'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "scipy", marker = "extra == 'test'" },
     { name = "torch" },
-    { name = "torch-fourier-shell-correlation", marker = "extra == 'test'", editable = "packages/primitives/torch-fourier-shell-correlation" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
-    { name = "ttsim3d", marker = "extra == 'test'" },
-    { name = "urllib3", marker = "extra == 'test'" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "scipy" },
+    { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
+    { name = "ttsim3d" },
+    { name = "urllib3" },
+]
+test = [
+    { name = "matplotlib" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "scipy" },
+    { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
+    { name = "ttsim3d" },
+    { name = "urllib3" },
+]
 
 [[package]]
 name = "torch-grid-utils"
@@ -3208,12 +3265,14 @@ dependencies = [
     { name = "torch" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3225,19 +3284,26 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "scipy" },
     { name = "torch" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-image-interpolation"
@@ -3248,12 +3314,14 @@ dependencies = [
     { name = "torch" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3265,18 +3333,25 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-so3"
@@ -3287,12 +3362,14 @@ dependencies = [
     { name = "torch" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3304,18 +3381,25 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "healpy", marker = "sys_platform != 'win32'" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-subpixel-crop"
@@ -3328,12 +3412,14 @@ dependencies = [
     { name = "torch-grid-utils" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3345,20 +3431,27 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
     { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-tilt-series"
@@ -3376,12 +3469,14 @@ dependencies = [
     { name = "torch-subpixel-crop" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "mypy" },
     { name = "pdbpp" },
-    { name = "pre-commit" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
 ]
@@ -3395,23 +3490,30 @@ requires-dist = [
     { name = "alnfile" },
     { name = "einops" },
     { name = "etomofiles" },
-    { name = "ipython", marker = "extra == 'dev'" },
     { name = "mrcfile" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "torch-transform-image"
@@ -3423,10 +3525,12 @@ dependencies = [
     { name = "torch-image-interpolation" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "ipython" },
     { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "rich" },
 ]
 test = [
@@ -3436,17 +3540,24 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ipython", marker = "extra == 'dev'" },
-    { name = "pdbpp", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "pytest-cov", marker = "extra == 'test'" },
-    { name = "rich", marker = "extra == 'dev'" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
 ]
-provides-extras = ["dev", "test"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
 
 [[package]]
 name = "tornado"
