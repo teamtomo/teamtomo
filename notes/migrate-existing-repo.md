@@ -159,21 +159,16 @@ cp ../../../LICENSE ./LICENSE
 **3. Modify `pyproject.toml`**
 
 Edit `packages/<category>/<package-name>/pyproject.toml`:
+Note that current Python tooling necessitates each sub-package has a fixed version rather than using some dynamic version resolving process. Ensure that 
 
-**Add/Update `[tool.hatch.version]` section:**
-
-```toml
-[tool.hatch.version]
-source = "vcs"
-tag-pattern = "^<package-name>@v(?P<version>.+)$"
-fallback-version = "0.0.1"
-```
-
-**Add `[tool.hatch.version.raw-options]` section:**
+**Set fixed package version under `[project]` section:**
 
 ```toml
-[tool.hatch.version.raw-options]
-search_parent_directories = true  # Find .git in monorepo root
+# https://peps.python.org/pep-0621/
+[project]
+name = "<package-name>"
+version = "x.y.z"
+...
 ```
 
 **Update `[project.urls]`:**

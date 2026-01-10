@@ -1,16 +1,7 @@
 # https://peps.python.org/pep-0517/
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-# https://hatch.pypa.io/latest/config/metadata/
-[tool.hatch.version]
-source = "vcs"
-tag-pattern = "^torch-ctf@v(?P<version>.+)$"
-fallback-version = "0.5.0"
-
-[tool.hatch.version.raw-options]
-search_parent_directories = true
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -21,7 +12,7 @@ sources = ["src"]
 # https://peps.python.org/pep-0621/
 [project]
 name = "torch-ctf"
-dynamic = ["version"]
+version = "0.5.0"
 description = "CTF calculation for cryoEM in torch"
 readme = "README.md"
 requires-python = ">=3.11"

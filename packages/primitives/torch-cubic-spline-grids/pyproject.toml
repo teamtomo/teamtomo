@@ -1,11 +1,12 @@
 # https://peps.python.org/pep-0517/
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 # https://peps.python.org/pep-0621/
 [project]
 name = "torch-cubic-spline-grids"
+version = "0.5.0"
 description = "Cubic spline interpolation on multidimensional grids in PyTorch"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,7 +25,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-dynamic = ["version"]
 dependencies = [
     "torch",
     "numpy",
@@ -57,15 +57,6 @@ dev = [
 # https://peps.python.org/pep-0621/#entry-points
 # [project.entry-points."spam.magical"]
 # tomatoes = "spam:main_tomatoes"
-
-# https://hatch.pypa.io/latest/config/metadata/
-[tool.hatch.version]
-source = "vcs"
-tag-pattern = "^torch-cubic-spline-grids@v(?P<version>.+)$"
-fallback-version = "0.5.0"
-
-[tool.hatch.version.raw-options]
-search_parent_directories = true
 
 # https://hatch.pypa.io/latest/config/build/#file-selection
 # [tool.hatch.build.targets.sdist]
