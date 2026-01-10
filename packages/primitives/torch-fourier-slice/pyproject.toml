@@ -1,7 +1,21 @@
 # https://peps.python.org/pep-0517/
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^torch-fourier-slice@v(?P<version>.+)$"
+fallback-version = "0.5.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+# Parse tags of the form: <package-name>@v<semver>
+tag_regex = "^torch-fourier-slice@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
+# See https://github.com/ofek/hatch-vcs/issues/71
+git_describe_command = "git describe --dirty --tags --long --match 'torch-fourier-slice@v[0-9]*.[0-9]*.[0-9]*'"
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -12,7 +26,7 @@ sources = ["src"]
 # https://peps.python.org/pep-0621/
 [project]
 name = "torch-fourier-slice"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Fourier slice extraction/insertion in PyTorch."
 readme = "README.md"
 requires-python = ">=3.11"
