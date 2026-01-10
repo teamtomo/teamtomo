@@ -341,6 +341,9 @@ teamtomo/                            # Monorepo root
 
 ### Version Configuration
 
+Teamtomo uses a dynamic versioning process through `hatch-vcs` to detect git tags with a package's specific version; these git tags follow a scheme of `<package-name>@v<x.y.z>`.
+Ensure the `[tool.hatch.version]` and `[tool.hatch.version.raw-options]` tables are updated accordingly:
+
 **Before (standalone):**
 
 ```toml
@@ -358,6 +361,12 @@ fallback-version = "0.0.1"
 
 [tool.hatch.version.raw-options]
 search_parent_directories = true
+# Parse tags of the form: <package-name>@v<semver>
+tag_regex = "^torch-grid-utils@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
+# See https://github.com/ofek/hatch-vcs/issues/71
+git_describe_command = "git describe --dirty --tags --long --match 'torch-grid-utils@v[0-9]*.[0-9]*.[0-9]*'"
+
 ```
 
 **Why:**
@@ -575,11 +584,16 @@ Version not detected, using fallback: 0.0.1
    tag-pattern = "^<package-name>@v(?P<version>.+)$"
    ```
 
-2. Ensure `search_parent_directories = true`:
+2. Ensure `search_parent_directories = true` and the `tag_regex` and `git_describe_command` fields match exactly:
 
    ```toml
    [tool.hatch.version.raw-options]
    search_parent_directories = true
+   # Parse tags of the form: <package-name>@v<semver>
+   tag_regex = "^torch-affine-utils@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+   # Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
+   # See https://github.com/ofek/hatch-vcs/issues/71
+   git_describe_command = "git describe --dirty --tags --long --match 'torch-affine-utils@v[0-9]*.[0-9]*.[0-9]*'"
    ```
 
 3. Create a test tag:
@@ -673,6 +687,11 @@ Here are the exact changes made to migrate `torch-grid-utils`:
 +
 +[tool.hatch.version.raw-options]
 +search_parent_directories = true
++# Parse tags of the form: <package-name>@v<semver>
++tag_regex = "^torch-affine-utils@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
++# Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
++# See https://github.com/ofek/hatch-vcs/issues/71
++git_describe_command = "git describe --dirty --tags --long --match 'torch-affine-utils@v[0-9]*.[0-9]*.[0-9]*'"
 ```
 
 **Changed lines (repository URLs):**
