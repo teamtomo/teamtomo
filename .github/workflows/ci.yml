@@ -44,9 +44,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v7
+        with:
           enable-cache: true
 
       - name: Install Package Dependencies
@@ -59,11 +61,16 @@ jobs:
             --cov=${{ matrix.package.path }} \
             --cov-report=xml
 
-  # --- PHASE 3: DEPLOYMENT ---
+  # --- phase 3: deployment ---
   deploy:
     needs: test
-    # Only run if a scoped tag was pushed (e.g. pkg@v1.2.3)
-    if: success() && contains(github.ref, '@v') && github.event_name != 'schedule'
+    # If statement selects to only run on version tags pushed to main
+    if: |
+      success() && 
+      contains(github.ref, '@v') && 
+      github.event_name != 'schedule' && 
+      github.ref_type == 'tag' &&
+      github.event.base_ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -73,7 +80,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Needed for hatch-vcs to see tags
-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - uses: astral-sh/setup-uv@v7
 
       - name: get package name
