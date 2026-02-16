@@ -1,9 +1,8 @@
 """Envelope functions for the Fourier filter."""
 
 import torch
+from torch_ctf import calculate_relativistic_electron_wavelength
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
-
-from torch_fourier_filter.ctf import calculate_relativistic_electron_wavelength
 
 
 def b_envelope(
