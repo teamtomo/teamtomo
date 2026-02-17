@@ -11,7 +11,11 @@ def log(msg):
 
 def run(cmd):
     try:
-        result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode("utf-8").strip()
+        result = (
+            subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+            .decode("utf-8")
+            .strip()
+        )
         return result
     except subprocess.CalledProcessError as e:
         # We print to stderr so it doesn't mess up the GITHUB_OUTPUT
@@ -20,8 +24,12 @@ def run(cmd):
 
 
 def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
-    package_names = run("uv workspace list --preview-features workspace-list").splitlines()
-    package_paths = run("uv workspace list --paths --preview-features workspace-list").splitlines()
+    package_names = run(
+        "uv workspace list --preview-features workspace-list"
+    ).splitlines()
+    package_paths = run(
+        "uv workspace list --paths --preview-features workspace-list"
+    ).splitlines()
     if not package_names:
         return []
     packages = [
@@ -29,8 +37,7 @@ def get_workspace_packages() -> list[dict[str, str]]:  # pkg_name: relative_path
             "name": name,
             "path": str(Path(abs_path).relative_to(os.getcwd())),
         }
-        for name, abs_path
-        in zip(package_names, package_paths)
+        for name, abs_path in zip(package_names, package_paths)
     ]
     return packages
 
@@ -46,9 +53,7 @@ def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
 
     # 1. Map package names to relative paths
     workspace_package_name_to_path = {
-        package["name"]: package["path"]
-        for package
-        in workspace_packages
+        package["name"]: package["path"] for package in workspace_packages
     }
 
     # 2. FIX: Determine base for comparison
@@ -83,7 +88,12 @@ def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
         log(f"\t{pkg_name}")
 
     # 4. Global Overrides
-    global_triggers = ["uv.lock", "pyproject.toml", ".python-version", ".github/workflows/ci.yml"]
+    global_triggers = [
+        "uv.lock",
+        "pyproject.toml",
+        ".python-version",
+        ".github/workflows/ci.yml",
+    ]
     if any(f in changed_files for f in global_triggers):
         log("Global change detected. Testing all packages.")
         modified_package_names = set(workspace_package_name_to_path.keys())
@@ -106,7 +116,13 @@ def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
     for pkg in modified_package_names:
         rev_deps = run(f"uv tree --package {pkg} --reverse --depth 1")
         for line in rev_deps.splitlines():
-            parts = line.replace("│", "").replace("├", "").replace("─", "").replace("└", "").split()
+            parts = (
+                line.replace("│", "")
+                .replace("├", "")
+                .replace("─", "")
+                .replace("└", "")
+                .split()
+            )
             if parts:
                 dep_name = parts[0]
                 if dep_name in workspace_package_name_to_path:
@@ -115,13 +131,16 @@ def get_affected_packages() -> list[dict[str, str]]:  # pkg_name: path:
     for package in packages_to_test:
         log(f"\t{package}")
 
-    return [{"name": name, "path": workspace_package_name_to_path[name]} for name in sorted(packages_to_test)]
+    return [
+        {"name": name, "path": workspace_package_name_to_path[name]}
+        for name in sorted(packages_to_test)
+    ]
 
 
 if __name__ == "__main__":
     try:
         affected = get_affected_packages()
         print(f"packages={json.dumps(affected)}")
-    except Exception as e:
+    except Exception:
         all_packages = get_workspace_packages()
         print(f"packages={json.dumps(all_packages)}")

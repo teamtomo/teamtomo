@@ -82,6 +82,7 @@ test = [
     "ttsim3d>=0.4.2", # package 'torch-fourier-slice' testing dependency
 ]
 dev = [
+    { include-group = "test" },
     "pytest",
     "pytest-cov",
     "ipython",

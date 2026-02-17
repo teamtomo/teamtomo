@@ -52,7 +52,7 @@ jobs:
           enable-cache: true
 
       - name: Install Package Dependencies
-        run: uv sync --no-dev --group test --package ${{ matrix.package.name }}
+        run: uv sync --no-dev --group test --project ${{ matrix.package.path }}
 
       - name: run tests
         run: |
