@@ -52,12 +52,22 @@ jobs:
           enable-cache: true
 
       - name: Install Package Dependencies
-        run: uv sync --no-dev --group test --project ${{ matrix.package.path }}
-
-      - name: run tests
         run: |
-          uv run --package ${{ matrix.package.name }} \
-            pytest ${{ matrix.package.path }} \
+          uv sync \
+            --python ${{ matrix.python-version }} \
+            --no-dev \
+            --group test \
+            --project ${{ matrix.package.path }}
+
+      - name: Print Environment Info
+        run: |
+          uv run python -V
+          uv run which pytest
+          uv run pytest --version
+
+      - name: Run Tests
+        run: |
+          uv run pytest ${{ matrix.package.path }} \
             --cov=${{ matrix.package.path }} \
             --cov-report=xml
 
