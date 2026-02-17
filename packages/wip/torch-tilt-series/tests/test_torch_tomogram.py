@@ -1,8 +1,10 @@
-# import pytest
-# import torch
-#
-# from torch_tilt_series import TiltSeries
-#
+def test_tilt_series_import():
+    """Test that TiltSeries can be imported."""
+    from torch_tilt_series import TiltSeries
+
+    assert TiltSeries is not None
+
+
 # DEVICES = ["cpu"]
 # if torch.cuda.is_available():
 #     DEVICES.append("cuda")
