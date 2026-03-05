@@ -75,7 +75,7 @@ def split_name(full_name: str) -> tuple[str | None, str | None]:
     if not parts:
         return None, None
     if len(parts) == 1:
-        return parts[0], None
+        return None, parts[0]
     return " ".join(parts[:-1]), parts[-1]
 
 
