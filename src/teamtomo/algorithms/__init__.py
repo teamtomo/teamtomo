@@ -16,4 +16,14 @@ try:
 except ImportError:
     torch_cryoeraser = None  # type: ignore[assignment]
 
-__all__ = ["torch_2dtm", "torch_motion_correction", "torch_cryoeraser"]
+try:
+    import torch_refine_tilt_axis_angle
+except ImportError:
+    torch_refine_tilt_axis_angle = None  # type: ignore[assignment]
+
+__all__ = [
+    "torch_2dtm",
+    "torch_motion_correction",
+    "torch_cryoeraser",
+    "torch_refine_tilt_axis_angle",
+]

@@ -28,6 +28,7 @@ dependencies = [
     "torch-2dtm",
     "torch-motion-correction",
     "torch-cryoeraser",
+    "torch-refine-tilt-axis-angle",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -53,6 +54,7 @@ torch-tilt-series = { workspace = true }
 torch-2dtm = { workspace = true }
 torch-motion-correction = { workspace = true }
 torch-cryoeraser = { workspace = true }
+torch-refine-tilt-axis-angle = { workspace = true }
 
 [tool.uv.workspace]
 members = [
