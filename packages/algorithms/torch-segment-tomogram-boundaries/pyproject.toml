@@ -1,0 +1,180 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^torch-segment-tomogram-boundaries@v(?P<version>.+)$"
+fallback-version = "0.5.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+# Parse tags of the form: <package-name>@v<semver>
+tag_regex = "^torch-segment-tomogram-boundaries@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
+# See https://github.com/ofek/hatch-vcs/issues/71
+git_describe_command = "git describe --dirty --tags --long --match 'torch-segment-tomogram-boundaries@v[0-9]*.[0-9]*.[0-9]*'"
+
+# read more about configuring hatch at:
+# https://hatch.pypa.io/latest/config/build/
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "torch-segment-tomogram-boundaries"
+description = "A PyTorch Lightning/MONAI application to segment boundaries in tomographic volumes."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Pranav NM Shah", email = "p.shah.lab@gmail.com" }]
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "torch",
+    "torchvision",
+    "pytorch-lightning",
+    "monai",
+    "torchio",
+    "mrcfile",
+    "scikit-learn",
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "albumentations",
+    "tensorboard",
+    "pooch",
+]
+
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+# https://peps.python.org/pep-0735/
+# setup with `uv sync` or `pip install -e . --group dev`
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+dev = [
+    { include-group = "test" },
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "pre-commit-uv",
+    "rich",
+    "ruff",
+    "pytest-mock"
+]
+optuna = [
+    "optuna>=3.0.0",
+    "optuna-integration[pytorch-lightning]>=3.0.0"
+]
+
+[tool.uv.sources]
+torch-tomo-slab = { workspace = true }
+
+# https://docs.astral.sh/ruff
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+src = ["src"]
+fix = true
+
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = [
+    "E", "W", "F", "D", "I", "UP", "C4", "B", "A001", "RUF", "TC", "TID",
+]
+ignore = [
+    "D401", # First line should be in imperative mood (remove to opt in)
+    "D417", # Missing argument descriptions in Docstrings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+"docs/*.py" = ["D", "A"]
+"src/torch_tomo_slab/scripts/*.py" = ["D"] # Relax docstring rules for scripts
+
+# https://docs.astral.sh/ruff/formatter/
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = false
+
+# https://docs.pytest.org/
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = ["--color=yes", "-ra", "-m not slow"]
+testpaths = ["tests"]
+filterwarnings = ["error", "ignore::lightning_fabric.utilities.warnings.PossibleUserWarning"]
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+
+# https://mypy.readthedocs.io/en/stable/config_file.html
+[tool.mypy]
+files = "src/torch_segment_tomogram_boundaries"
+strict = true
+disallow_any_generics = false
+disallow_subclassing_any = false
+show_error_codes = true
+pretty = true
+
+# Module specific overrides for libraries that may not have perfect type hints
+[[tool.mypy.overrides]]
+module = [
+    "imodmodel.*",
+    "mrcfile.*",
+    "torchio.*",
+    "monai.*",
+    "sklearn.*",
+    "pandas.*",
+]
+ignore_missing_imports = true
+
+# https://coverage.readthedocs.io/
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "except ImportError",
+    "raise AssertionError",
+    "\\.\\.\\.",
+    "if __name__ == .__main__.:",
+    "def __repr__",
+    "raise NotImplementedError()",
+    "pass",
+]
+
+[tool.coverage.run]
+source = ["torch_tomo_slab"]
+omit = [
+    "src/torch_tomo_slab/scripts/*", # Often not useful to check coverage on top-level scripts
+]
+
+# https://github.com/mgedmin/check-manifest#configuration
+[tool.check-manifest]
+ignore = [
+    ".pre-commit-config.yaml",
+    ".ruff_cache/**/*",
+    "tests/**/*",
+    "uv.lock",
+    ".vscode/**/*",
+    "lightning_logs/**/*",
+]
+
+# https://github.com/crate-ci/typos/blob/master/docs/reference.md
+[tool.typos.default]
+extend-ignore-identifiers-re = []
