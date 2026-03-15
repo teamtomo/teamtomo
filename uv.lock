@@ -11,6 +11,7 @@ members = [
     "teamtomo",
     "torch-2dtm",
     "torch-affine-utils",
+    "torch-cryoeraser",
     "torch-ctf",
     "torch-cubic-spline-grids",
     "torch-find-peaks",
@@ -2943,6 +2944,7 @@ source = { editable = "." }
 dependencies = [
     { name = "torch-2dtm" },
     { name = "torch-affine-utils" },
+    { name = "torch-cryoeraser" },
     { name = "torch-ctf" },
     { name = "torch-cubic-spline-grids" },
     { name = "torch-find-peaks" },
@@ -2984,6 +2986,7 @@ test = [
 requires-dist = [
     { name = "torch-2dtm", editable = "packages/algorithms/torch-2dtm" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-cryoeraser", editable = "packages/algorithms/torch-cryoeraser" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
     { name = "torch-find-peaks", editable = "packages/primitives/torch-find-peaks" },
@@ -3036,6 +3039,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/de/00/e404f48a165d99b8283c506562e943c80739893d680aa847178f760e955a/teamtomo_basemodel-0.1.1.tar.gz", hash = "sha256:098fd8b627a3c1864447517d8e8fa97751fcf7a4bfb8dafe0baa81aa2c51359c", size = 10832, upload-time = "2025-08-27T20:34:25.986Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/20/2e82d450f0340ef4f122c1450f8841840618add8f980383a60df575bda04/teamtomo_basemodel-0.1.1-py3-none-any.whl", hash = "sha256:898ec9e69198a34b0c5eebca76baae6c5cc34b168bcdb54b064d18d53ab858f4", size = 6196, upload-time = "2025-08-27T20:34:24.576Z" },
+]
+
+[[package]]
+name = "tifffile"
+version = "2026.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/cb/2f6d79c7576e22c116352a801f4c3c8ace5957e9aced862012430b62e14f/tifffile-2026.3.3.tar.gz", hash = "sha256:d9a1266bed6f2ee1dd0abde2018a38b4f8b2935cb843df381d70ac4eac5458b7", size = 388745, upload-time = "2026-03-03T19:14:38.134Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/e4/e804505f87627cd8cdae9c010c47c4485fd8c1ce31a7dd0ab7fcc4707377/tifffile-2026.3.3-py3-none-any.whl", hash = "sha256:e8be15c94273113d31ecb7aa3a39822189dd11c4967e3cc88c178f1ad2fd1170", size = 243960, upload-time = "2026-03-03T19:14:35.808Z" },
 ]
 
 [[package]]
@@ -3233,6 +3248,61 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+
+[[package]]
+name = "torch-cryoeraser"
+source = { editable = "packages/algorithms/torch-cryoeraser" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "mkdocs-jupyter" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extra = ["python"] },
+    { name = "pdbpp" },
+    { name = "pooch" },
+    { name = "rich" },
+    { name = "tifffile" },
+]
+examples = [
+    { name = "matplotlib" },
+    { name = "pooch" },
+    { name = "tifffile" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "matplotlib", marker = "extra == 'dev'" },
+    { name = "matplotlib", marker = "extra == 'examples'" },
+    { name = "mkdocs-jupyter", marker = "extra == 'dev'" },
+    { name = "mkdocs-material", marker = "extra == 'dev'" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'" },
+    { name = "numpy" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pooch", marker = "extra == 'dev'" },
+    { name = "pooch", marker = "extra == 'examples'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "scipy" },
+    { name = "tifffile", marker = "extra == 'dev'" },
+    { name = "tifffile", marker = "extra == 'examples'" },
+    { name = "torch" },
+]
+provides-extras = ["dev", "examples", "test"]
 
 [[package]]
 name = "torch-ctf"
