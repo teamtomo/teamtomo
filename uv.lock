@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "teamtomo",
+    "torch-2dtm",
     "torch-affine-utils",
     "torch-ctf",
     "torch-cubic-spline-grids",
@@ -2939,6 +2940,7 @@ wheels = [
 name = "teamtomo"
 source = { editable = "." }
 dependencies = [
+    { name = "torch-2dtm" },
     { name = "torch-affine-utils" },
     { name = "torch-ctf" },
     { name = "torch-cubic-spline-grids" },
@@ -2978,6 +2980,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "torch-2dtm", editable = "packages/algorithms/torch-2dtm" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
@@ -3148,6 +3151,43 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/8c/3da60787bcf70add986c4ad485993026ac0ca74f2fc21410bc4eb1bb7695/torch-2.9.1-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:07c8a9660bc9414c39cac530ac83b1fb1b679d7155824144a40a54f4a47bfa73", size = 899735500, upload-time = "2025-11-12T15:24:08.788Z" },
     { url = "https://files.pythonhosted.org/packages/db/2b/f7818f6ec88758dfd21da46b6cd46af9d1b3433e53ddbb19ad1e0da17f9b/torch-2.9.1-cp314-cp314t-win_amd64.whl", hash = "sha256:c88d3299ddeb2b35dcc31753305612db485ab6f1823e37fb29451c8b2732b87e", size = 111163659, upload-time = "2025-11-12T15:23:20.009Z" },
 ]
+
+[[package]]
+name = "torch-2dtm"
+source = { editable = "packages/algorithms/torch-2dtm" }
+dependencies = [
+    { name = "einops" },
+    { name = "setuptools" },
+    { name = "torch" },
+    { name = "torch-fourier-slice" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "scipy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "scipy", marker = "extra == 'test'" },
+    { name = "setuptools" },
+    { name = "torch" },
+    { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
+]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-affine-utils"
