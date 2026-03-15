@@ -101,3 +101,5 @@ ENV/
 # IDEs
 .idea/
 .vscode/
+
+lightning_logs/

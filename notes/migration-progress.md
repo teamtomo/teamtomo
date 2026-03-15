@@ -28,18 +28,18 @@ _Note: File i/o packages remain separate from the monorepo_
 
 ### Algorithms packages migration
 
-- [ ] `torch-2dtm`                        - 2D template matching in cryo-EM images
+- [x] `torch-2dtm`                        - 2D template matching in cryo-EM images
 - [ ] `torch-ctf-estimation`              - estimate local defocus in cryo-EM images
-- [ ] `torch-cryoeraser`                  - erase regions in cryo-EM images
-- [ ] `torch-motion-correction`           - correct local motion in cryo-EM images
-- [ ] `torch-refine-tilt-axis-angle`      - tilt axis angle refinement for cryo-ET tilt series
-- [ ] `torch-segment-fiducials-2d`        - segment gold fiducials in cryo-EM images
+- [x] `torch-cryoeraser`                  - erase regions in cryo-EM images
+- [x] `torch-motion-correction`           - correct local motion in cryo-EM images
+- [x] `torch-refine-tilt-axis-angle`      - tilt axis angle refinement for cryo-ET tilt series
+- [x] `torch-segment-fiducials-2d`        - segment gold fiducials in cryo-EM images
 - [ ] `torch-segment-tomogram-boundaries` - detect boundaries of cryo-ET volumes
-- [ ] `torch-tiltxcorr`                   - coarse tilt series alignment for cryo-ET tilt series
+- [x] `torch-tiltxcorr`                   - coarse tilt series alignment for cryo-ET tilt series
 
 ### Util packages migration
 
-- [ ] `teamtomo-basemodel` - Helpful Pydantic wrapper for parsing, validation, and serialization reuse.
+- [x] `teamtomo-basemodel` - Helpful Pydantic wrapper for parsing, validation, and serialization reuse.
 
 ### Work in progress packages
 

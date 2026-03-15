@@ -1,0 +1,161 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^teamtomo-basemodel@v(?P<version>.+)$"
+fallback-version = "0.5.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+# Parse tags of the form: <package-name>@v<semver>
+tag_regex = "^teamtomo-basemodel@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
+# See https://github.com/ofek/hatch-vcs/issues/71
+git_describe_command = "git describe --dirty --tags --long --match 'teamtomo-basemodel@v[0-9]*.[0-9]*.[0-9]*'"
+
+# read more about configuring hatch at:
+# https://hatch.pypa.io/latest/config/build/
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "teamtomo-basemodel"
+dynamic = ["version"]
+description = "Custom BaseModel class and type-hints for using Pydantic within TeamTomo."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Matthew Giammar", email = "matthew_giammar@berkeley.edu" }]
+# https://pypi.org/classifiers/
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "torch",
+    "pandas",
+    "numpy",
+    "pydantic",
+    "pyyaml",
+    "types-PyYAML",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pre-commit",
+    "pylint",
+    "black",
+    "flake8",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+# Entry points
+# https://peps.python.org/pep-0621/#entry-points
+# same as console_scripts entry point
+# [project.scripts]
+# match-template-cli = "leopard_em:programs:match_template:main_cli"
+# refine-template-cli = "leopard_em:programs:refine_template:main_cli"
+
+# https://docs.astral.sh/ruff
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+src = ["src"]
+
+# https://docs.astral.sh/ruff/rules
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = [
+    "E",    # style errors
+    "W",    # style warnings
+    "F",    # flakes
+    "D",    # pydocstyle
+    "D417", # Missing argument descriptions in Docstrings
+    "I",    # isort
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+    "B",    # flake8-bugbear
+    "A001", # flake8-builtins
+    "RUF",  # ruff-specific rules
+    "TCH",  # flake8-type-checking
+    "TID",  # flake8-tidy-imports
+]
+ignore = [
+    "D401", # First line should be in imperative mood (remove to opt in)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+"tests/pydantic_models/test_basic_imports.py" = ["F401"]
+
+# https://docs.astral.sh/ruff/formatter/
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = false # default is false
+
+# https://mypy.readthedocs.io/en/stable/config_file.html
+[tool.mypy]
+files = "src/**/"
+strict = true
+disallow_any_generics = false
+disallow_subclassing_any = false
+show_error_codes = true
+pretty = true
+
+# # module specific overrides
+# [[tool.mypy.overrides]]
+# module = ["numpy.*",]
+# ignore_errors = true
+
+# https://docs.pytest.org/
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+# https://coverage.readthedocs.io/
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "except ImportError",
+    "\\.\\.\\.",
+    "raise NotImplementedError()",
+    "pass",
+]
+
+[tool.coverage.run]
+source = ["/src/teamtomo_basemodel"]
+
+# https://github.com/mgedmin/check-manifest#configuration
+# add files that you want check-manifest to explicitly ignore here
+# (files that are in the repo but shouldn't go in the package)
+[tool.check-manifest]
+ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]
