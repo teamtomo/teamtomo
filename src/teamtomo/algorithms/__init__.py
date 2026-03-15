@@ -26,9 +26,16 @@ try:
 except ImportError:
     torch_segment_fiducials_2d = None  # type: ignore[assignment]
 
+try:
+    import torch_tiltxcorr
+except ImportError:
+    torch_tiltxcorr = None  # type: ignore[assignment]
+
 __all__ = [
     "torch_2dtm",
     "torch_motion_correction",
     "torch_cryoeraser",
     "torch_refine_tilt_axis_angle",
+    "torch_segment_fiducials_2d",
+    "torch_tiltxcorr",
 ]

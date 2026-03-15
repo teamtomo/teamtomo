@@ -29,6 +29,7 @@ members = [
     "torch-so3",
     "torch-subpixel-crop",
     "torch-tilt-series",
+    "torch-tiltxcorr",
     "torch-transform-image",
 ]
 overrides = [{ name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" }]
@@ -3940,6 +3941,7 @@ dependencies = [
     { name = "torch-so3" },
     { name = "torch-subpixel-crop" },
     { name = "torch-tilt-series" },
+    { name = "torch-tiltxcorr" },
     { name = "torch-transform-image" },
 ]
 
@@ -3984,6 +3986,7 @@ requires-dist = [
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
     { name = "torch-tilt-series", editable = "packages/wip/torch-tilt-series" },
+    { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
@@ -5152,6 +5155,53 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+
+[[package]]
+name = "torch-tiltxcorr"
+source = { editable = "packages/algorithms/torch-tiltxcorr" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "torch" },
+    { name = "torch-affine-utils" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-fourier-rescale" },
+    { name = "torch-transform-image" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-fourier-shift" },
+    { name = "torch-fourier-slice" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "ipython", marker = "extra == 'dev'" },
+    { name = "numpy" },
+    { name = "pdbpp", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-cov", marker = "extra == 'test'" },
+    { name = "rich", marker = "extra == 'dev'" },
+    { name = "scipy" },
+    { name = "torch" },
+    { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-fourier-shift", marker = "extra == 'test'", editable = "packages/primitives/torch-fourier-shift" },
+    { name = "torch-fourier-slice", marker = "extra == 'test'", editable = "packages/primitives/torch-fourier-slice" },
+    { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
+]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "torch-transform-image"
