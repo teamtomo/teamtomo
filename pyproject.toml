@@ -26,6 +26,7 @@ dependencies = [
     "torch-find-peaks",
     "torch-tilt-series",
     "torch-2dtm",
+    "torch-motion-correction",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -49,6 +50,7 @@ torch-cubic-spline-grids = { workspace = true }
 torch-find-peaks = { workspace = true }
 torch-tilt-series = { workspace = true }
 torch-2dtm = { workspace = true }
+torch-motion-correction = { workspace = true }
 
 [tool.uv.workspace]
 members = [

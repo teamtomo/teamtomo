@@ -6,4 +6,9 @@ try:
 except ImportError:
     torch_2dtm = None  # type: ignore[assignment]
 
+try:
+    import torch_motion_correction
+except ImportError:
+    torch_motion_correction = None  # type: ignore[assignment]
+
 __all__ = ["torch_2dtm"]
