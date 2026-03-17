@@ -73,7 +73,7 @@ jobs:
             TAG="${pkg_name}@${VERSION}"
             echo "Creating tag: $TAG"
             if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-              git tag "$TAG"
+              git tag -a "$TAG" -m "Release $VERSION"
             else
               echo "Tag $TAG already exists, skipping"
             fi

@@ -26,20 +26,19 @@ git push upstream main --follow-tags
 
 ## Coordinated Release (All Packages)
 
-To release all packages in the workspace with the same version, tag the commit with `teamtomo@vX.Y.Z`:
+To release all packages in the workspace with the same version, run the coordinated tagging script locally.
 
 ```bash
-git tag teamtomo@v3.4.5
-git push upstream main --follow-tags
+cd path/to/teamtomo
+./scripts/coordinated_release.sh v3.4.5
 ```
 
 **What happens next:**
 
-1. The `Coordinate Release` workflow triggers
-2. Waits for CI to pass on Python 3.13
-3. Extracts the version from the tag
-4. Automatically tags all workspace packages with `package-name@v1.0.0`
-5. Individual `Deploy` workflows trigger for each package
-6. All packages are built and published to PyPI simultaneously
+1. The script validates that no tags already exist for the version
+2. Tags `teamtomo@vX.Y.Z` and every package `package-name@vX.Y.Z`
+3. Pushes the tags to `upstream`
+4. Individual `Deploy` workflows trigger for each package
+5. All packages are built and published to PyPI simultaneously
 
 **Note:** The coordinated release approach is recommended when you want to ensure version consistency across all packages in the TeamTomo workspace.

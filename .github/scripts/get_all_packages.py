@@ -7,6 +7,7 @@ PATTERNS = [
     "packages/io/*/pyproject.toml",
     "packages/primitives/*/pyproject.toml",
     "packages/algorithms/*/pyproject.toml",
+    "packages/utils/*/pyproject.toml",
     "packages/wip/*/pyproject.toml",
 ]
 
