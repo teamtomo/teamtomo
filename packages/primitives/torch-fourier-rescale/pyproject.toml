@@ -29,7 +29,7 @@ name = "torch-fourier-rescale"
 dynamic = ["version"]
 description = "Rescale 2D and 3D images by Fourier padding/cropping in PyTorch"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "Alister Burt", email = "alisterburt@gmail.com" }]
 # https://pypi.org/classifiers/
@@ -37,9 +37,10 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
 # add your package dependencies here
@@ -61,7 +62,7 @@ dev = [
     "ipython",
     "mypy",
     "pdbpp",  # https://github.com/pdbpp/pdbpp
-    "pre-commit-uv",
+    "pre-commit",
     "rich",  # https://github.com/Textualize/rich
     "ruff",
 ]

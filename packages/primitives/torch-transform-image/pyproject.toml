@@ -29,19 +29,18 @@ name = "torch-transform-image"
 dynamic = ["version"]
 description = "Real space transformations of 2D/3D images in PyTorch"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "BSD-3-Clause" }
 authors = [{ name = "Alister Burt", email = "alisterburt@gmail.com" }]
 # https://pypi.org/classifiers/
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
-    "Programming Language :: Python :: 3",    
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
 # add your package dependencies here
@@ -62,8 +61,8 @@ test = ["pytest", "pytest-cov"]
 dev = [
     { include-group = "test" },
     "ipython",
-    "pdbpp",  # https://github.com/pdbpp/pdbpp
-    "rich",  # https://github.com/Textualize/rich
+    "pdbpp",                    # https://github.com/pdbpp/pdbpp
+    "rich",                     # https://github.com/Textualize/rich
 ]
 
 [tool.uv.sources]
@@ -79,7 +78,6 @@ torch-image-interpolation = { workspace = true }
 
 # [project.entry-points."some.group"]
 # tomatoes = "torch_transform_image:main_tomatoes"
-
 
 
 # https://docs.pytest.org/
@@ -108,8 +106,4 @@ source = ["torch_transform_image"]
 # add files that you want check-manifest to explicitly ignore here
 # (files that are in the repo but shouldn't go in the package)
 [tool.check-manifest]
-ignore = [
-    ".pre-commit-config.yaml",
-    ".ruff_cache/**/*",
-    "tests/**/*",
-]
+ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]

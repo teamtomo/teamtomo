@@ -1,6 +1,6 @@
 # Migrating Existing TeamTomo Repositories to Monorepo
 
-This guide outlines the process for migrating existing standalone TeamTomo GitHub repositories into the monorepo workspace structure.
+This guide outlines the process for migrating existing standalone TeamTomo GitHub repositories into the monorepo workspace structure. The same should also apply when migrating in a new package not previously part of TeamTomo (e.g. moving personal package into TeamTomo).
 
 ## Table of Contents
 
@@ -8,20 +8,18 @@ This guide outlines the process for migrating existing standalone TeamTomo GitHu
 2. [Prerequisites](#prerequisites)
 3. [Step-by-Step Migration Process](#step-by-step-migration-process)
 4. [Before vs After Comparison](#before-vs-after-comparison)
-5. [Configuration Changes](#configuration-changes)
-6. [CI/CD Considerations](#cicd-considerations)
-7. [Git History Options](#git-history-options)
-8. [Post-Migration Checklist](#post-migration-checklist)
-9. [Common Issues and Solutions](#common-issues-and-solutions)
-10. [Example: torch-grid-utils Migration](#example-torch-grid-utils-migration)
+5. [Post-Migration Checklist](#post-migration-checklist)
+<!-- 5. [Configuration Changes](#configuration-changes) -->
+<!-- 6. [CI/CD Considerations](#cicd-considerations) -->
+<!-- 7. [Git History Options](#git-history-options) -->
+<!-- 9. [Common Issues and Solutions](#common-issues-and-solutions) -->
+<!-- 10. [Example: torch-grid-utils Migration](#example-torch-grid-utils-migration) -->
 
 ## Overview
 
 ### Purpose
 
-Consolidate existing standalone TeamTomo packages into a unified monorepo workspace for better maintainability, shared tooling, and easier cross-package development.
-
-### Benefits
+To consolidate existing standalone TeamTomo packages into a unified monorepo workspace for better maintainability, shared tooling, and easier cross-package development. This comes with a few key benefits:
 
 - **Unified versioning**: Coordinated releases across packages
 - **Shared tooling**: Single set of dev tools, linters, and CI/CD
@@ -35,6 +33,8 @@ This guide uses the `torch-grid-utils` migration as a reference. The original re
 
 ## Prerequisites
 
+This guide assumes you've successfully cloned and set up the `teamtomo/teamtomo` repository locally. Please see [README.md](../README.md) for development installation instructions.
+
 ### Before Starting
 
 1. **Identify the repository**
@@ -43,9 +43,9 @@ This guide uses the `torch-grid-utils` migration as a reference. The original re
    - Active development status
 
 2. **Determine category**
-   - `io/`: Data I/O, file format handling, geometry utilities
    - `primitives/`: Core data structures, types, arrays
    - `algorithms/`: Processing algorithms, analysis tools
+   - `utils/`: (unlikely) Organization utilities unrelated to data processing
 
 3. **Package naming**
    - Confirm package name (usually same as repo name)
@@ -57,9 +57,9 @@ This guide uses the `torch-grid-utils` migration as a reference. The original re
 
 ## Step-by-Step Migration Process
 
-### Phase 1: Preparation
+### Phase 1: Preparation of old repository for migration
 
-**1. Clone the original repository**
+First, clone the existing repository into some directory on your system. Here, we are using `/tmp` as temporary storage, but a different storage location may be more practical
 
 ```bash
 cd /tmp
@@ -67,9 +67,9 @@ git clone https://github.com/teamtomo/<repo-name>.git
 cd <repo-name>
 ```
 
-**IMPORTANT**: We'll use `git subtree add --squash` which preserves history while keeping it clean.
+<!-- **IMPORTANT**: We'll use `git subtree add --squash` which preserves history while keeping it clean. -->
 
-**2. Review current structure**
+Next, check the structure of and configuration files for the existing repository. Generally, there should be no issues since packages have an `src/` style layout and a well-defined `pyproject.toml` file.
 
 ```bash
 # Check directory structure
@@ -82,14 +82,12 @@ cat pyproject.toml
 ls -la | grep "^\."
 ```
 
-**3. Identify files to migrate**
-
-Files to **COPY**:
+The files and directories to **COPY** into the monorepo are:
 
 - `src/` - Entire source directory
 - `tests/` - All test files
 - `README.md` - Package documentation
-- `LICENSE` - License file
+- `LICENSE` - License file (should be BSD-3 or MIT)
 - `pyproject.toml` - Package dependencies and setup
 
 Files to **SKIP** (not needed in monorepo):
@@ -100,33 +98,36 @@ Files to **SKIP** (not needed in monorepo):
 - `.copier-answers.yml` - Template metadata
 - Any other repo-specific config files
 
-### Phase 2: Directory Setup
+### Phase 2: Directory Setup and File Migration
 
-**1. Create package directory in monorepo**
-
-```bash
-cd /path/to/teamtomo  # Your monorepo root
-mkdir -p packages/<category>/<package-name>
-```
-
-**Example:**
+Navigate to the root of your TeamTomo repository
 
 ```bash
-mkdir -p packages/primitives/torch-grid-utils
+cd /path/to/teamtomo
 ```
 
-**2. Copy source files**
+And based on the decisions from the prerequisite steps, set the following environment variables for easier re-use. Again, we are using `torch-grid-utils` as an example.
+
+```bash
+export PACKAGE_CATEGORY=primitives  # one of {io, primitives, algorithms}
+export PACKAGE_NAME=torch-grid-utils  # e.g., torch-grid-utils
+mkdir -p packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}
+```
+
+Then run the following commands to copy the relevant files from the original repository into the monorepo structure:
+
+#### Copy files into monorepo
 
 ```bash
 # Copy from original repo to monorepo
-cp -r /tmp/<repo-name>/src packages/<category>/<package-name>/
-cp -r /tmp/<repo-name>/tests packages/<category>/<package-name>/
-cp /tmp/<repo-name>/README.md packages/<category>/<package-name>/
-cp /tmp/<repo-name>/LICENSE packages/<category>/<package-name>/
-cp /tmp/<repo-name>/pyproject.toml packages/<category>/<package-name>/
+cp -r /tmp/${PACKAGE_NAME}/src packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
+cp -r /tmp/${PACKAGE_NAME}/tests packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
+cp /tmp/${PACKAGE_NAME}/README.md packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
+cp /tmp/${PACKAGE_NAME}/LICENSE packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
+cp /tmp/${PACKAGE_NAME}/pyproject.toml packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
 ```
 
-### Phase 3: Clean Up and Configure Package
+<!-- ### Phase 3: Clean Up and Configure Package
 
 **1. Remove monorepo-level config files from package**
 
@@ -147,31 +148,41 @@ rm .copier-answers.yml       # Template metadata (if exists)
 # - pyproject.toml (will modify)
 # - src/ (source code)
 # - tests/ (tests)
-```
+``` -->
 
-**2. Update LICENSE to TeamTomo copyright**
+### Phase 3: Configure Package in the Monorepo
+
+TeamTomo uses a standardized BSD 3-Clause License across all packages. Copy over the root LICENSE file to ensure consistent copyright attribution:
 
 ```bash
-# Copy root LICENSE to standardize copyright
-cp ../../../LICENSE ./LICENSE
+cp LICENSE packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/LICENSE
 ```
 
-**3. Modify `pyproject.toml`**
+Next, we need to update the `pyproject.toml` file for the package to ensure it is correctly configured for the monorepo environment. This includes setting the versioning scheme, repository URLs, and verifying any coverage configuration.
 
-Edit `packages/<category>/<package-name>/pyproject.toml`:
-Note that current Python tooling necessitates each sub-package has a fixed version rather than using some dynamic version resolving process. Ensure that 
+#### Update hatch versioning scheme
 
-**Set fixed package version under `[project]` section:**
+The hatch versioning block either needs added or updated to the following. Note that `<PACKAGE_NAME>` should be replaced with the actual package name (e.g., `torch-grid-utils`):
 
 ```toml
-# https://peps.python.org/pep-0621/
-[project]
-name = "<package-name>"
-version = "x.y.z"
-...
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^<PACKAGE_NAME>@v(?P<version>.+)$"
+fallback-version = "0.5.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+# Parse tags of the form: <package-name>@v<semver>
+tag_regex = "^<PACKAGE_NAME>@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
+# See https://github.com/ofek/hatch-vcs/issues/71
+git_describe_command = "git describe --dirty --tags --long --match '<PACKAGE_NAME>@v[0-9]*.[0-9]*.[0-9]*'"
 ```
 
-**Update `[project.urls]`:**
+#### Update repository URLs
+
+The `homepage` and `repository` fields should point to the monorepo location.
 
 ```toml
 [project.urls]
@@ -179,16 +190,16 @@ homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
 ```
 
-**Verify coverage source (if present):**
+#### Verify coverage source (if present)
 
 Make sure `[tool.coverage.run]` has the correct source:
 
 ```toml
 [tool.coverage.run]
-source = ["<actual_package_name>"]  # e.g., "torch_grid_utils"
+source = ["<PACKAGE_NAME>"]  # e.g., "torch_grid_utils"
 ```
 
-**4. Review and verify configuration**
+#### Review and verify configuration
 
 Check that:
 
@@ -201,7 +212,7 @@ Check that:
 
 ### Phase 4: Workspace Integration
 
-**1. Register package with workspace**
+#### Register package with uv workspace
 
 ```bash
 cd /path/to/teamtomo
@@ -214,71 +225,73 @@ This will:
 - Install it as an editable package
 - Update `uv.lock`
 
-**2. Update root `pyproject.toml` (if needed)**
+#### Update root `pyproject.toml` dependency list
 
-Only if the package should be a default dependency of the metapackage:
+Packages should be added as dependencies to the root `pyproject.toml`. Edit the `[project.dependencies]` section to include the new package:
 
 ```toml
 [project]
+name = "teamtomo"
+# ... other fields ...
 dependencies = [
+    # ... other dependencies ...
     "torch-grid-utils",  # Add your package
 ]
 ```
 
-**3. Update metapackage exports (optional)**
+#### Update metapackage exports
 
-If the package should be re-exported through the main `teamtomo` namespace, edit `src/teamtomo/__init__.py`:
+Packages can be imported as `from teamtomo.PACKAGE_CATEGORY import PACKAGE_NAME` for convenience.
+
+Edit the `src/teamtomo/PACKAGE_CATEGORY/__init__.py` file to re-export the package namespace. For example, for `torch-grid-utils` in the `primitives` category, edit `src/teamtomo/primitives/__init__.py`:
 
 ```python
-# Re-export from subpackage
-try:
-    from <package_module> import function1, function2
-except ImportError:
-    pass  # Package not installed
+# File: src/teamtomo/primitives/__init__.py
+# ... other imports ...
 
+# Add this block
+try:
+    import torch_grid_utils
+except ImportError:
+   torch_grid_utils = None
+
+# Add package to __all__ for export
 __all__ = [
-    "function1",
-    "function2",
     # ... other exports
+    "torch_grid_utils",
 ]
 ```
 
 ### Phase 5: Verification
 
-**1. Run tests**
+#### Unit tests and imports
+
+Run unit tests for the migrated package to ensure everything is working correctly in the monorepo environment.
 
 ```bash
-# Test the migrated package
-uv run pytest packages/<category>/<package-name>/tests/
+uv run pytest packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/tests/
 
 # With coverage
-uv run pytest packages/<category>/<package-name>/tests/ \
-    --cov=<package_module> --cov-report=term-missing
+uv run pytest packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/tests/ \
+    --cov=${PACKAGE_MODULE} --cov-report=term-missing
 ```
 
-**2. Verify imports**
+Verify that the package can be imported and used:
 
 ```bash
 # Check import works
 uv run python -c "import <package_module>; print(<package_module>.__version__)"
-
-# Test specific functions
-uv run python -c "from <package_module> import <function>; print(<function>)"
 ```
 
-**3. Build package**
+#### Building the package
+
+Finally, check that the package builds correctly:
 
 ```bash
 uv build packages/<category>/<package-name>/
 ```
 
 Check that `dist/` contains `.whl` and `.tar.gz` files.
-
-**4. Type checking**
-
-```bash
-uv run mypy packages/<category>/<package-name>/src/
-```
 
 ## Before vs After Comparison
 
@@ -337,7 +350,7 @@ teamtomo/                            # Monorepo root
 - Modified `pyproject.toml` with monorepo-specific configuration
 - Shared tooling and CI/CD at monorepo level
 
-## Configuration Changes
+<!-- ## Configuration Changes
 
 ### Version Configuration
 
@@ -490,7 +503,7 @@ git subtree add --prefix=packages/<category>/<name> \
     https://github.com/teamtomo/<repo-name>.git main --squash
 ```
 
-Note: This guide focuses on Option A. Use Option B only if history preservation is critical.
+Note: This guide focuses on Option A. Use Option B only if history preservation is critical. -->
 
 ## Post-Migration Checklist
 
@@ -534,12 +547,10 @@ Use this checklist to ensure complete migration:
 - [ ] Coverage runs correctly
 
 ### Cleanup
-- [ ] Original repo archived or marked as deprecated on GitHub
-- [ ] README updated with deprecation notice (point to monorepo)
 - [ ] Migration documented in monorepo changelog/PR
 ```
 
-## Common Issues and Solutions
+<!-- ## Common Issues and Solutions
 
 ### Issue: Tests fail after migration
 
@@ -750,7 +761,7 @@ uv run python -c "import torch_grid_utils; print(torch_grid_utils.__version__)"
 # Build succeeds
 uv build packages/primitives/torch-grid-utils/
 # Successfully built torch_grid_utils-0.0.1.tar.gz and .whl
-```
+``` -->
 
 ---
 

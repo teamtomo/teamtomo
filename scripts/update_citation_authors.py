@@ -60,12 +60,26 @@ def get_contributors(token: str | None = None) -> set[str]:
 
 
 def get_orcid(login: str, token: str | None = None) -> str | None:
-    """Return the ORCID URL from a user's GitHub social accounts, if present."""
+    """Return the ORCID URL from a user's GitHub social accounts or profile page, if present."""
     accounts = github_get(f"/users/{login}/social_accounts", token)
     for account in accounts:
         url = account.get("url", "")
         if "orcid.org" in url:
             return url
+    # Fall back to scraping the profile page: GitHub exposes ORCID as a verified
+    # badge on user profiles, but this is not included in the REST API response
+    # (neither /users/{login} nor /users/{login}/social_accounts). Scraping the
+    # HTML is the only way to retrieve it programmatically.
+    try:
+        req = urllib.request.Request(f"https://github.com/{login}")
+        req.add_header("User-Agent", "teamtomo-citation-updater")
+        with urllib.request.urlopen(req) as resp:
+            html = resp.read().decode()
+        match = re.search(r'href="(https://orcid\.org/[\w-]+)"', html)
+        if match:
+            return match.group(1)
+    except urllib.error.URLError:
+        pass
     return None
 
 

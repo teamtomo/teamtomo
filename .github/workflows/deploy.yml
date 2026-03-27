@@ -12,10 +12,14 @@
 name: Deploy
 
 on:
-  push:
-    tags:
-      - "*@v*"
-      - "!teamtomo@v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: 'Release name to deploy (e.g., torch-2dtm@v0.6.2rc7)'
+        required: false
+        type: string
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -74,9 +78,18 @@ jobs:
       - name: Extract package name from tag
         id: info
         run: |
-          TAG_NAME=${{ github.ref_name }}
+          # Get tag name from release event or workflow dispatch input
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          if [[ -z "$TAG_NAME" ]]; then
+            TAG_NAME="${{ inputs.release_name }}"
+          fi
+          if [[ -z "$TAG_NAME" ]]; then
+            echo "ERROR: No tag name found"
+            exit 1
+          fi
           PKG_NAME=${TAG_NAME%@*}
           echo "pkg_name=$PKG_NAME" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "Deploying package: $PKG_NAME"
 
       - name: Install package dependencies

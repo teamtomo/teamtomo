@@ -14,6 +14,7 @@ authors:
     family-names: Barad
     alias: bbarad
     affiliation: Oregon Health & Science University
+    orcid: "https://orcid.org/0000-0002-1016-862X"
   - given-names: Ray
     family-names: Berkeley
     alias: ray-berkeley
@@ -50,6 +51,7 @@ authors:
   - given-names: Utz
     family-names: Ermel
     alias: uermel
+    orcid: "https://orcid.org/0000-0003-4685-037X"
   - given-names: Ryan
     family-names: Feathers
     alias: ryanfeathers
@@ -60,10 +62,12 @@ authors:
     family-names: Gaifas
     alias: brisvag
     affiliation: napari
+    orcid: "https://orcid.org/0000-0003-4875-9422"
   - given-names: Guillaume
     family-names: Gaullier
     alias: Guillawme
     affiliation: Uppsala University
+    orcid: "https://orcid.org/0000-0003-3405-6021"
   - given-names: Matthew
     family-names: Giammar
     alias: mgiammar
@@ -102,6 +106,7 @@ authors:
     family-names: Johnston
     alias: BradyAJohnston
     affiliation: Freelance scientific animator & developer.
+    orcid: "https://orcid.org/0000-0001-6301-2269"
   - given-names: Diyor
     family-names: Khayrutdinov
     alias: dijor0310
@@ -111,9 +116,11 @@ authors:
   - given-names: Lorenz
     family-names: Lamm
     alias: LorenzLamm
+    orcid: "https://orcid.org/0000-0003-0698-7769"
   - given-names: Hanjin
     family-names: Liu
     alias: hanjinliu
+    orcid: "https://orcid.org/0009-0006-5724-8121"
   - given-names: Alan R
     family-names: Lowe
     alias: quantumjot
@@ -132,6 +139,7 @@ authors:
   - given-names: Ricardo
     family-names: Righetto
     alias: rdrighetto
+    orcid: "https://orcid.org/0000-0003-4247-4303"
   - given-names: Spencer J
     family-names: Rothfuss
     alias: sjrothfuss
@@ -146,6 +154,7 @@ authors:
   - given-names: Philippe Van der
     family-names: Stappen
     alias: Phaips
+    orcid: "https://orcid.org/0009-0006-8746-1222"
   - given-names: Davide
     family-names: Torre
     alias: davidetorre99

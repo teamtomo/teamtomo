@@ -37,10 +37,10 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
 # add your package dependencies here
@@ -64,16 +64,16 @@ test = [
     "torch-fourier-shell-correlation",
     "matplotlib",
     "scipy",
-    "ttsim3d",  # For simulating test volume data
-    "urllib3",  # For downloading test PDB data
+    "ttsim3d",                         # For simulating test volume data
+    "urllib3",                         # For downloading test PDB data
 ]
 dev = [
     { include-group = "test" },
     "ipython",
     "mypy",
-    "pdbpp", # https://github.com/pdbpp/pdbpp
-    "pre-commit-uv",
-    "rich", # https://github.com/Textualize/rich
+    "pdbpp",                    # https://github.com/pdbpp/pdbpp
+    "pre-commit",
+    "rich",                     # https://github.com/Textualize/rich
     "ruff",
 ]
 
@@ -96,25 +96,25 @@ src = ["src"]
 [tool.ruff.lint]
 pydocstyle = { convention = "numpy" }
 select = [
-    "E", # style errors
-    "W", # style warnings
-    "F", # flakes
-    "D", # pydocstyle
+    "E",    # style errors
+    "W",    # style warnings
+    "F",    # flakes
+    "D",    # pydocstyle
     "D417", # Missing argument descriptions in Docstrings
-    "I", # isort
-    "UP", # pyupgrade
-    "C4", # flake8-comprehensions
-    "B", # flake8-bugbear
+    "I",    # isort
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
+    "B",    # flake8-bugbear
     "A001", # flake8-builtins
-    "RUF", # ruff-specific rules
-    "TCH", # flake8-type-checking
-    "TID", # flake8-tidy-imports
+    "RUF",  # ruff-specific rules
+    "TCH",  # flake8-type-checking
+    "TID",  # flake8-tidy-imports
 ]
 ignore = [
-    "D401", # First line should be in imperative mood (remove to opt in)
-    "D100", # Missing docstring in public module
-    "D107", # Missing docstring in __init__
-    "TID252",  # Allow relative imports
+    "D401",   # First line should be in imperative mood (remove to opt in)
+    "D100",   # Missing docstring in public module
+    "D107",   # Missing docstring in __init__
+    "TID252", # Allow relative imports
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -123,7 +123,7 @@ ignore = [
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]
 docstring-code-format = true
-skip-magic-trailing-comma = false  # default is false
+skip-magic-trailing-comma = false # default is false
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
@@ -165,8 +165,4 @@ source = ["torch_fourier_slice"]
 # add files that you want check-manifest to explicitly ignore here
 # (files that are in the repo but shouldn't go in the package)
 [tool.check-manifest]
-ignore = [
-    ".pre-commit-config.yaml",
-    ".ruff_cache/**/*",
-    "tests/**/*",
-]
+ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]

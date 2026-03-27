@@ -37,7 +37,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -45,17 +44,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 # add your package dependencies here
-dependencies = [
-    "torch",
-    "scipy",
-    "einops",
-    "torch-grid-utils>=v0.1.0",
-]
+dependencies = ["torch", "scipy", "einops", "torch-grid-utils>=v0.1.0"]
 
-# https://peps.python.org/pep-0621/#dependencies-optional-dependencies
-# add dependencies for "extra" features here.  Not dev dependencies.
-# [project.optional-dependencies]
-# name = ["dependency"]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -78,9 +68,9 @@ dev = [
     { include-group = "test" },
     "ipython",
     "mypy",
-    "pdbpp",  # https://github.com/pdbpp/pdbpp
-    "pre-commit-uv",
-    "rich",  # https://github.com/Textualize/rich
+    "pdbpp",                    # https://github.com/pdbpp/pdbpp
+    "pre-commit",
+    "rich",                     # https://github.com/Textualize/rich
     "ruff",
 ]
 
@@ -121,7 +111,7 @@ ignore = [
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]
 docstring-code-format = true
-skip-magic-trailing-comma = false  # default is false
+skip-magic-trailing-comma = false # default is false
 
 # https://docs.pytest.org/
 [tool.pytest.ini_options]

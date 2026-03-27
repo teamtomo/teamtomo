@@ -25,6 +25,13 @@ dependencies = [
     "torch-cubic-spline-grids",
     "torch-find-peaks",
     "torch-tilt-series",
+    "torch-2dtm",
+    "torch-motion-correction",
+    "torch-cryoeraser",
+    "torch-refine-tilt-axis-angle",
+    "torch-segment-fiducials-2d",
+    "torch-tiltxcorr",
+    "teamtomo-basemodel",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -47,6 +54,13 @@ torch-fourier-shell-correlation = { workspace = true }
 torch-cubic-spline-grids = { workspace = true }
 torch-find-peaks = { workspace = true }
 torch-tilt-series = { workspace = true }
+torch-2dtm = { workspace = true }
+torch-motion-correction = { workspace = true }
+torch-cryoeraser = { workspace = true }
+torch-refine-tilt-axis-angle = { workspace = true }
+torch-segment-fiducials-2d = { workspace = true }
+torch-tiltxcorr = { workspace = true }
+teamtomo-basemodel = { workspace = true }
 
 [tool.uv.workspace]
 members = [
@@ -54,6 +68,7 @@ members = [
     "packages/primitives/*",
     "packages/algorithms/*",
     "packages/wip/*",
+    "packages/utils/*",
 ]
 
 [build-system]
@@ -92,3 +107,7 @@ dev = [
     "rich",
     "ruff",
 ]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not slow'"
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]

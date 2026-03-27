@@ -19,11 +19,11 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
 ]
 dependencies = [
     "torch",
@@ -44,7 +44,7 @@ dev = [
     "ipython",
     "mypy",
     "pdbpp",
-    "pre-commit-uv",
+    "pre-commit",
     "rich",
     "ruff",
 ]
