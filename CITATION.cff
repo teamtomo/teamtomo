@@ -1,5 +1,7 @@
 cff-version: 1.2.0
 title: 'teamtomo: modular Python packages for cryo-EM and cryo-ET'
+license: BSD-3-Clause
+version: 0.0.2
 message: If you use this software, please cite it as below.
 type: software
 abstract: ''
@@ -217,5 +219,3 @@ authors:
   affiliation: "Iber Lab - ETH Z\xFCrich"
   orcid: null
 keywords: []
-license: BSD-3-Clause
-version: 0.0.2

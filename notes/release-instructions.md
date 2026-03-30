@@ -1,11 +1,22 @@
 # Release Instructions
 
 ## Prerequisites
+
+### Place yourself on the main branch
+
 Ensure you have push access to the repository and are on an up-to-date main branch:
 
 ```bash
 git checkout main
 git pull upstream main
+```
+
+### Check that the authors in `CITATION.cff` are up to date
+
+Before making a new release, run the following command to update the `CITATION.cff` file with the latest list of contributors:
+
+```bash
+python scripts/update_citation.py
 ```
 
 ## Single Package Release
