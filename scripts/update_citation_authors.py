@@ -11,7 +11,7 @@ Set the GITHUB_TOKEN environment variable to your GitHub personal access token v
 # - Existing contributor adds ORCID to GitHub profile (will duplicate person)
 # - New contributor has same name as existing (will merge with existing, but may be
 #   different person)
-# - Contributor previously only had GitHub username, bu later adds name fields (again
+# - Contributor previously only had GitHub username, but later adds name fields (again
 #   will duplicate entries, one with GitHub username as given name, one with real name)
 
 import click
@@ -113,7 +113,12 @@ class CitationCFF:
 
     def render_yaml(self) -> str:
         """Render the CitationCFF data as a YAML string."""
-        return yaml.dump(self.to_dict(), default_flow_style=False, sort_keys=False)
+        return yaml.safe_dump(
+            self.to_dict(),
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
 
 
 def github_get(path: str, token: str | None = None) -> list | dict:
@@ -168,13 +173,13 @@ def parse_existing_citation() -> CitationCFF | None:
         )
 
     return CitationCFF(
-        cff_version=data["cff-version"],
-        title=data["title"],
-        version=data["version"],
-        license=data["license"],
-        type=data["type"],
-        abstract=data["abstract"],
-        message=data["message"],
+        cff_version=data.get("cff-version", ""),
+        title=data.get("title", ""),
+        version=data.get("version", ""),
+        license=data.get("license", ""),
+        type=data.get("type", ""),
+        abstract=data.get("abstract", ""),
+        message=data.get("message", ""),
         authors=authors,
         keywords=data.get("keywords", []),
     )

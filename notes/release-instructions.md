@@ -16,7 +16,7 @@ git pull upstream main
 Before making a new release, run the following command to update the `CITATION.cff` file with the latest list of contributors:
 
 ```bash
-python scripts/update_citation.py
+uv run python scripts/update_citation_authors.py
 ```
 
 ## Single Package Release

@@ -70,7 +70,7 @@ jobs:
 
           git add CITATION.cff
           git diff --cached --quiet || git commit -m "update citation authors for ${{ steps.check-tag.outputs.version }} release"
-          git push
+          git push origin HEAD:main
 
       - name: Tag all workspace packages
         run: |
