@@ -7,49 +7,17 @@ type: software
 abstract: ''
 authors:
 - given-names: EuanPyle
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: HanyiZhang
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: MrCurtis
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: alexjnoble
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: amineuron
-  family-names: null
-  affiliation: null
   orcid: https://orcid.org/0000-0001-9480-5915
 - given-names: aysecanuenal
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: cormsby626
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: rezaparaancryoem
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: rsanchezgarc
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: sumslogs
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: vschwarze
-  family-names: null
-  affiliation: null
-  orcid: null
 - given-names: Benjamin
   family-names: Barad
   affiliation: Oregon Health & Science University
@@ -57,19 +25,13 @@ authors:
 - given-names: Ray
   family-names: Berkeley
   affiliation: Scripps Research
-  orcid: null
 - given-names: Yakau
   family-names: Bubnou
-  affiliation: null
-  orcid: null
 - given-names: Genevieve
   family-names: Buckley
   affiliation: Monash University
-  orcid: null
 - given-names: Alister
   family-names: Burt
-  affiliation: null
-  orcid: null
 - given-names: Marten
   family-names: Chaillet
   affiliation: Hubrecht Institute
@@ -77,31 +39,20 @@ authors:
 - given-names: Oscar
   family-names: Despard
   affiliation: MRC Laboratory of Molecular Biology
-  orcid: null
 - given-names: Eric
   family-names: Deveaud
   affiliation: Institut Pasteur
-  orcid: null
 - given-names: Josh
   family-names: Dickerson
-  affiliation: null
-  orcid: null
 - given-names: Johannes
   family-names: Elferich
-  affiliation: null
-  orcid: null
 - given-names: Utz
   family-names: Ermel
-  affiliation: null
   orcid: https://orcid.org/0000-0003-4685-037X
 - given-names: Ryan
   family-names: Feathers
-  affiliation: null
-  orcid: null
 - given-names: Chloe
   family-names: Fisher
-  affiliation: null
-  orcid: null
 - given-names: Lorenzo
   family-names: Gaifas
   affiliation: napari
@@ -113,109 +64,69 @@ authors:
 - given-names: Matthew
   family-names: Giammar
   affiliation: University of California, Berkeley
-  orcid: null
 - given-names: Miles
   family-names: Graham
-  affiliation: null
-  orcid: null
 - given-names: Kabilar
   family-names: Gunalan
   affiliation: MIT
-  orcid: null
 - given-names: John
   family-names: Heumann
-  affiliation: null
-  orcid: null
 - given-names: Thomas
   family-names: Hoffmann
   affiliation: EMBL
-  orcid: null
 - given-names: James
   family-names: Hooker
   affiliation: MRC LMB
-  orcid: null
 - given-names: Mikel
   family-names: Izeta
   affiliation: CNB-CSIC
-  orcid: null
 - given-names: Huw
   family-names: Jenkins
-  affiliation: null
-  orcid: null
 - given-names: Daniel
   family-names: Ji
-  affiliation: null
-  orcid: null
 - given-names: Brady
   family-names: Johnston
   affiliation: Freelance scientific animator & developer.
   orcid: https://orcid.org/0000-0001-6301-2269
 - given-names: Diyor
   family-names: Khayrutdinov
-  affiliation: null
-  orcid: null
 - given-names: Viacheslav
   family-names: Kralin
-  affiliation: null
-  orcid: null
 - given-names: Lorenz
   family-names: Lamm
-  affiliation: null
   orcid: https://orcid.org/0000-0003-0698-7769
 - given-names: Hanjin
   family-names: Liu
-  affiliation: null
   orcid: https://orcid.org/0009-0006-5724-8121
 - given-names: Alan R
   family-names: Lowe
-  affiliation: null
-  orcid: null
 - given-names: Dennis J.
   family-names: Michalak
-  affiliation: null
-  orcid: null
 - given-names: Braxton
   family-names: Owens
-  affiliation: null
-  orcid: null
 - given-names: Gonzalo
-  family-names: "Pe\xF1a-Castellanos"
-  affiliation: null
-  orcid: null
+  family-names: Peña-Castellanos
 - given-names: Stephen
   family-names: Riggs
-  affiliation: null
-  orcid: null
 - given-names: Ricardo
   family-names: Righetto
-  affiliation: null
   orcid: https://orcid.org/0000-0003-4247-4303
 - given-names: Spencer J
   family-names: Rothfuss
   affiliation: Vanderbilt University
-  orcid: null
 - given-names: Andreas
   family-names: Schenk
   affiliation: Novartis Institutes for BioMedical Research
-  orcid: null
 - given-names: Pranav NM
   family-names: Shah
-  affiliation: null
-  orcid: null
 - given-names: Philippe Van der
   family-names: Stappen
-  affiliation: null
   orcid: https://orcid.org/0009-0006-8746-1222
 - given-names: Davide
   family-names: Torre
-  affiliation: null
-  orcid: null
 - given-names: Moritz
   family-names: Wachsmuth-Melm
-  affiliation: null
-  orcid: null
 - given-names: Kevin
   family-names: Yamauchi
-  affiliation: "Iber Lab - ETH Z\xFCrich"
-  orcid: null
+  affiliation: Iber Lab - ETH Zürich
 keywords: []

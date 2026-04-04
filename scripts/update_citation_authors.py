@@ -101,10 +101,14 @@ class CitationCFF:
             "abstract": self.abstract,
             "authors": [
                 {
-                    "given-names": author.given_names,
-                    "family-names": author.family_names,
-                    "affiliation": author.affiliation,
-                    "orcid": author.orcid,
+                    k: v
+                    for k, v in {
+                        "given-names": author.given_names,
+                        "family-names": author.family_names,
+                        "affiliation": author.affiliation,
+                        "orcid": author.orcid,
+                    }.items()
+                    if v is not None
                 }
                 for author in self.authors
             ],
@@ -216,7 +220,13 @@ def get_repo_logins(repo_name: str, token: str | None = None) -> list[str]:
 
 
 def parse_login_to_author(login: str, token: str | None = None) -> Author:
-    """Convert a GitHub login to an Author object with placeholder metadata."""
+    """Convert a GitHub login to an Author object with placeholder metadata.
+
+    Note
+    ----
+    This is a simplistic approach which depends on a GitHub profile having a maintained
+    name field and/or company field.
+    """
     login_info = github_get(f"/users/{login}", token)
     name = login_info.get("name", "")
     company = login_info.get("company", None)
@@ -229,11 +239,12 @@ def parse_login_to_author(login: str, token: str | None = None) -> Author:
     # NOTE: This is a simplistic approach which does not broadly cover all conventions.
     given_names = None
     family_names = None
-    if name is None:
+    name = name.strip() if name else None
+    if not name:
         warnings.warn(f"User '{login}' GitHub profile name, using login instead.")
         given_names = login
     else:
-        parts = name.strip().split()
+        parts = name.split()
         if len(parts) == 1:
             given_names = parts[0]
         elif len(parts) > 1:
@@ -249,7 +260,20 @@ def parse_login_to_author(login: str, token: str | None = None) -> Author:
 
 
 def parse_login_to_orcid(login: str, token: str | None = None) -> str | None:
-    """TODO: Docstring"""
+    """Attempt an ORCID resolution from GitHub profile.
+
+    Parameters
+    ----------
+    login : str
+        The GitHub username.
+    token : str, optional
+        A GitHub personal access token to increase rate limits.
+
+    Returns
+    -------
+    str | None
+        The ORCID if found, otherwise None.
+    """
     # 1. Check social accounts for ORCID URL
     accounts_info = github_get(f"/users/{login}/social_accounts", token)
     for account in accounts_info:
