@@ -28,6 +28,21 @@ def test_get_uniform_euler_angles():
     assert (angles[:, 2] <= 360).all()
 
 
+def test_get_uniform_euler_angles_includes_zero():
+    """Test that (0, 0, 0) Euler angles are included in the output."""
+    angles = get_uniform_euler_angles(base_grid_method="uniform")
+
+    # Check if any row matches (0, 0, 0) within tolerance
+    zero_angle = np.array([0.0, 0.0, 0.0])
+    # Convert to numpy for comparison
+    angles_np = angles.numpy()
+
+    # Check if any row is close to (0, 0, 0) by computing differences
+    differences = np.abs(angles_np - zero_angle)
+    matches = np.all(differences < 1e-5, axis=1)
+    assert np.any(matches), "Euler angles (0, 0, 0) should be included in the output"
+
+
 @pytest.mark.skipif(
     platform.system() == "Windows", reason="healpy is not supported on Windows"
 )
@@ -47,6 +62,21 @@ def test_get_local_high_resolution_angles():
     assert (local_angles[:, 1] <= 2.51).all()
     assert np.allclose(local_angles[:, 2].min().item(), -1.50)
     assert np.allclose(local_angles[:, 2].max().item(), 1.50)
+
+
+def test_get_local_high_resolution_angles_includes_zero():
+    """Test that (0, 0, 0) Euler angles are included in the output."""
+    local_angles = get_local_high_resolution_angles()
+
+    # Check if any row matches (0, 0, 0) within tolerance
+    zero_angle = np.array([0.0, 0.0, 0.0])
+    # Convert to numpy for comparison
+    local_angles_np = local_angles.numpy()
+
+    # Check if any row is close to (0, 0, 0) by computing differences
+    differences = np.abs(local_angles_np - zero_angle)
+    matches = np.all(differences < 1e-5, axis=1)
+    assert np.any(matches), "Euler angles (0, 0, 0) should be included in the output"
 
 
 def test_get_roll_angles():

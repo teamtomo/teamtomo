@@ -5,6 +5,7 @@ import warnings
 
 import numpy as np
 import torch
+
 if platform.system() == "Windows":
     warnings.warn("healpy cannot be installed on Windows systems.", stacklevel=2)
 else:
@@ -69,6 +70,10 @@ def uniform_base_grid(
             phi_values = np.array([phi_min_rad], dtype=np.float64)
         else:
             phi_values = np.arange(phi_min_rad, phi_max_rad, phi_step, dtype=np.float64)
+        # At the pole (theta=0), all phi values are equivalent
+        # If 0.0 is in range, use it as the canonical value
+        if np.abs(theta_all[i]) < 1e-10 and phi_min_rad < 0 <= phi_max_rad:
+            phi_values = np.array([0.0], dtype=np.float64)
         theta_values = np.full_like(phi_values, theta_all[i])
         angle_pairs.append(np.stack([phi_values, theta_values], axis=1))
 
