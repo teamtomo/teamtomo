@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -19,7 +19,13 @@ def sample_data():
 
 def test_refine_tilt_axis_angle_default_parameters(sample_data):
     """Test refine_tilt_axis_angle with default parameters."""
-    with patch("torch.optim.LBFGS.step"):
+    mock_result = MagicMock()
+    mock_result.x = 0.0
+
+    with patch(
+        "torch_refine_tilt_axis_angle.refine_tilt_axis_angle.minimize_scalar",
+        return_value=mock_result,
+    ):
         # Setup
         tilt_series = sample_data["tilt_series"]
 
@@ -27,13 +33,19 @@ def test_refine_tilt_axis_angle_default_parameters(sample_data):
         result = refine_tilt_axis_angle(tilt_series=tilt_series)
 
         # Assertions
-        assert isinstance(result, torch.Tensor)
-        assert result.ndim == 0  # should be a single value
+        assert isinstance(result, float)
 
 
-def test_refine_tilt_axis_angle_with_single_grid_point(sample_data):
-    """Test refine_tilt_axis_angle with a single grid point."""
-    with patch("torch.optim.LBFGS.step"):
+def test_refine_tilt_axis_angle_with_custom_parameters(sample_data):
+    """Test refine_tilt_axis_angle with custom parameters."""
+    # Create a mock result object
+    mock_result = MagicMock()
+    mock_result.x = 42.5
+
+    with patch(
+        "torch_refine_tilt_axis_angle.refine_tilt_axis_angle.minimize_scalar",
+        return_value=mock_result,
+    ):
         # Setup
         tilt_series = sample_data["tilt_series"]
         initial_angle = 45.0
@@ -42,51 +54,63 @@ def test_refine_tilt_axis_angle_with_single_grid_point(sample_data):
         result = refine_tilt_axis_angle(
             tilt_series=tilt_series,
             tilt_axis_angle=initial_angle,
-            grid_points=1,
-            iterations=2,
+            search_range=15.0,
+            max_iter=20,
         )
 
         # Assertions
-        assert result.ndim == 0  # With grid_points=1, should return float
+        assert isinstance(result, float)
+        assert result == 42.5
 
 
-def test_refine_tilt_axis_angle_with_multiple_grid_points(sample_data):
-    """Test refine_tilt_axis_angle with multiple grid points."""
-    with patch("torch.optim.LBFGS.step"):
+def test_refine_tilt_axis_angle_bounds(sample_data):
+    """Test that minimize_scalar is called with correct bounds."""
+    mock_result = MagicMock()
+    mock_result.x = 5.0
+
+    with patch(
+        "torch_refine_tilt_axis_angle.refine_tilt_axis_angle.minimize_scalar",
+        return_value=mock_result,
+    ) as mock_minimize:
         # Setup
         tilt_series = sample_data["tilt_series"]
-        initial_angle = 45.0
+        initial_angle = 30.0
+        search_range = 10.0
 
         # Call the function
-        result = refine_tilt_axis_angle(
-            tilt_series=tilt_series,
-            tilt_axis_angle=initial_angle,
-            iterations=2,
-            return_single_angle=False,
-        )
-
-        # Assertions
-        assert isinstance(
-            result, torch.Tensor
-        )  # With grid_points>1, should return tensor
-        assert result.shape[0] == tilt_series.shape[0]  # One angle per tilt
-        assert not result.requires_grad  # Should be detached
-
-
-def test_refine_tilt_axis_angle_optimization_iterations(sample_data):
-    """Test that the number of optimization iterations are executed."""
-    # Setup
-    tilt_series = sample_data["tilt_series"]
-    initial_angle = 45.0
-
-    # Call the function with different iteration counts
-    with patch("torch.optim.LBFGS.step") as mock_step:
         refine_tilt_axis_angle(
             tilt_series=tilt_series,
             tilt_axis_angle=initial_angle,
-            grid_points=3,
-            iterations=5,
+            search_range=search_range,
         )
 
-        # Assert that step was called the correct number of times
-        assert mock_step.call_count == 5
+        # Assert minimize_scalar was called with correct bounds
+        mock_minimize.assert_called_once()
+        call_kwargs = mock_minimize.call_args[1]
+        assert call_kwargs["bounds"] == (20.0, 40.0)  # initial ± search_range
+        assert call_kwargs["method"] == "bounded"
+
+
+def test_refine_tilt_axis_angle_optimization_max_iter(sample_data):
+    """Test that max_iter parameter is passed to minimize_scalar."""
+    mock_result = MagicMock()
+    mock_result.x = 0.0
+
+    with patch(
+        "torch_refine_tilt_axis_angle.refine_tilt_axis_angle.minimize_scalar",
+        return_value=mock_result,
+    ) as mock_minimize:
+        # Setup
+        tilt_series = sample_data["tilt_series"]
+        max_iter = 15
+
+        # Call the function
+        refine_tilt_axis_angle(
+            tilt_series=tilt_series,
+            max_iter=max_iter,
+        )
+
+        # Assert minimize_scalar was called with correct max_iter
+        mock_minimize.assert_called_once()
+        call_kwargs = mock_minimize.call_args[1]
+        assert call_kwargs["options"]["maxiter"] == max_iter
