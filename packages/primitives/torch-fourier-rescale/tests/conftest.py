@@ -14,7 +14,7 @@ def circle():
 @pytest.fixture
 def sphere():
     coordinate_grid = einops.rearrange(
-        np.indices((14, 14, 14)), "zyx d h w -> d h w zyx"
+        np.indices((28, 28, 28)), "zyx d h w -> d h w zyx"
     )
-    coordinate_grid -= np.array([7, 7, 7])
+    coordinate_grid -= np.array([14, 14, 14])
     return (torch.tensor(np.sum(coordinate_grid**2, axis=-1) ** 0.5) < 4).float()
