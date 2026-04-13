@@ -1,10 +1,19 @@
+"""Generate Fourier-domain phase-shift grids for 1D, 2D, and 3D transforms."""
+
+import os
 from functools import lru_cache
 
 import einops
 import torch
 
-from .fftfreq_grids import fftfreq_grid_2d, fftfreq_grid_3d, fftfreq_grid_1d
 from .dft_utils import fftshift_1d, fftshift_2d, fftshift_3d
+from .fftfreq_grids import fftfreq_grid_1d, fftfreq_grid_2d, fftfreq_grid_3d
+
+CACHE_SIZE = int(os.environ.get("TORCH_FOURIER_SHIFT_CACHE_SIZE", 3))
+
+fftfreq_grid_1d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid_1d)
+fftfreq_grid_2d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid_2d)
+fftfreq_grid_3d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid_3d)
 
 
 def phase_shift_grid_1d(
@@ -12,6 +21,7 @@ def phase_shift_grid_1d(
     image_shape: tuple[int],
     rfft: bool = False,
     fftshift: bool = False,
+    cache_intermediates: bool = False,
 ):
     """Generate arrays of values for phase shifting 1D DFTs by multiplication.
 
@@ -26,16 +36,23 @@ def phase_shift_grid_1d(
         the non-redundant half DFT outputs of the FFT for real inputs from `rfft`.
     fftshift: bool
         If `True`, fftshift the output.
+    cache_intermediates: bool
+        If `True`, the fftfreq_grid is cached
+
     Returns
     -------
     phase_shifts: torch.Tensor
         `(..., w)` complex valued array of phase shifts for the fft or rfft
         of signals with `image_shape`.
     """
-    fftfreq_grid = fftfreq_grid_1d(
-        image_shape=image_shape, rfft=rfft, device=shifts.device
+    fftfreq_grid = (
+        fftfreq_grid_1d_with_cache(
+            image_shape=image_shape, rfft=rfft, device=shifts.device
+        )
+        if cache_intermediates
+        else fftfreq_grid_1d(image_shape=image_shape, rfft=rfft, device=shifts.device)
     )  # (w, )
-    shifts = einops.rearrange(shifts, '... -> ... 1')
+    shifts = einops.rearrange(shifts, "... -> ... 1")
 
     # radians/cycle * cycles/sample * samples = radians
     angles = -2 * torch.pi * fftfreq_grid * shifts  # (..., w)
@@ -51,6 +68,7 @@ def phase_shift_grid_2d(
     image_shape: tuple[int, int],
     rfft: bool = False,
     fftshift: bool = False,
+    cache_intermediates: bool = False,
 ):
     """Generate arrays of values for phase shifting 2D DFTs by multiplication.
 
@@ -65,20 +83,27 @@ def phase_shift_grid_2d(
         the non-redundant half DFT outputs of the FFT for real inputs from `rfft`.
     fftshift: bool
         If `True`, fftshift the output.
+    cache_intermediates: bool
+        If `True`, the fftfreq_grid is cached
+
     Returns
     -------
     phase_shifts: torch.Tensor
         `(..., h, w)` complex valued array of phase shifts for the fft or rfft
         of images with `image_shape`.
     """
-    fftfreq_grid = fftfreq_grid_2d(
-        image_shape=image_shape, rfft=rfft, device=shifts.device
+    fftfreq_grid = (
+        fftfreq_grid_2d_with_cache(
+            image_shape=image_shape, rfft=rfft, device=shifts.device
+        )
+        if cache_intermediates
+        else fftfreq_grid_2d(image_shape=image_shape, rfft=rfft, device=shifts.device)
     )  # (h, w, 2)
-    shifts = einops.rearrange(shifts, '... shift -> ... 1 1 shift')
+    shifts = einops.rearrange(shifts, "... shift -> ... 1 1 shift")
 
     # radians/cycle * cycles/sample * samples = radians
     angles = einops.reduce(
-        -2 * torch.pi * fftfreq_grid * shifts, '... h w 2 -> ... h w', reduction='sum'
+        -2 * torch.pi * fftfreq_grid * shifts, "... h w 2 -> ... h w", reduction="sum"
     )
     phase_shifts = torch.complex(real=torch.cos(angles), imag=torch.sin(angles))
     if fftshift is True:
@@ -90,7 +115,8 @@ def phase_shift_grid_3d(
     shifts: torch.Tensor,
     image_shape: tuple[int, int, int],
     rfft: bool = False,
-    fftshift: bool = False
+    fftshift: bool = False,
+    cache_intermediates: bool = False,
 ):
     """Generate arrays of values for phase shifting 3D DFTs by multiplication.
 
@@ -105,6 +131,8 @@ def phase_shift_grid_3d(
         the non-redundant half DFT outputs of the FFT for real inputs from `rfft`.
     fftshift: bool
         If `True`, fftshift the output.
+    cache_intermediates: bool
+        If `True`, the fftfreq_grid is cached
 
     Returns
     -------
@@ -112,14 +140,20 @@ def phase_shift_grid_3d(
         `(..., d, h, w)` complex valued array of phase shifts for the fft or rfft
         of images with `image_shape`.
     """
-    fftfreq_grid = fftfreq_grid_3d(
-        image_shape=image_shape, rfft=rfft, device=shifts.device
+    fftfreq_grid = (
+        fftfreq_grid_3d_with_cache(
+            image_shape=image_shape, rfft=rfft, device=shifts.device
+        )
+        if cache_intermediates
+        else fftfreq_grid_3d(image_shape=image_shape, rfft=rfft, device=shifts.device)
     )  # (d, h, w, 3)
-    shifts = einops.rearrange(shifts, '... shift -> ... 1 1 1 shift')
+    shifts = einops.rearrange(shifts, "... shift -> ... 1 1 1 shift")
 
     # radians/cycle * cycles/sample * samples = radians
     angles = einops.reduce(
-        -2 * torch.pi * fftfreq_grid * shifts, '... d h w 3 -> ... d h w', reduction='sum'
+        -2 * torch.pi * fftfreq_grid * shifts,
+        "... d h w 3 -> ... d h w",
+        reduction="sum",
     )
     phase_shifts = torch.complex(real=torch.cos(angles), imag=torch.sin(angles))
     if fftshift is True:
