@@ -2,6 +2,7 @@
 
 import warnings
 
+import einops
 import torch
 from scipy import constants as C
 
@@ -79,6 +80,57 @@ def calculate_defocus_phase_aberration(
         k1 * fftfreq_grid_angstrom_squared * defocus
         + k2 * fftfreq_grid_angstrom_squared**2
     )
+
+
+def apply_astigmatism_to_defocus(
+    defocus: torch.Tensor,
+    astigmatism: torch.Tensor,
+    astigmatism_angle: torch.Tensor,
+    fft_freq_grid: torch.Tensor,
+    fft_freq_grid_squared: torch.Tensor,
+) -> torch.Tensor:
+    """Apply astigmatism parameterization to produce per-frequency defocus.
+
+    Parameters
+    ----------
+    defocus : torch.Tensor
+        Mean defocus in micrometers with shape ``(..., 1, 1)``.
+    astigmatism : torch.Tensor
+        Astigmatism magnitude in micrometers with shape ``(...)``.
+    astigmatism_angle : torch.Tensor
+        Astigmatism angle in degrees with shape ``(...)``.
+    fft_freq_grid : torch.Tensor
+        Frequency grid in cycles/Angstrom with shape ``(..., H, W, 2)``.
+    fft_freq_grid_squared : torch.Tensor
+        Squared norm of frequency grid with shape ``(..., H, W)``.
+
+    Returns
+    -------
+    defocus : torch.Tensor
+        Per-frequency defocus map with shape ``(..., H, W)``.
+    """
+    sin_theta = torch.sin(torch.deg2rad(astigmatism_angle))
+    cos_theta = torch.cos(torch.deg2rad(astigmatism_angle))
+    unit_astigmatism_vector_yx = einops.rearrange(
+        [sin_theta, cos_theta], "yx ... -> ... yx"
+    )
+    astigmatism = einops.rearrange(astigmatism, "... -> ... 1")
+
+    astigmatism_vector = torch.sqrt(astigmatism) * unit_astigmatism_vector_yx
+    fft_freq_grid_norm = torch.sqrt(
+        einops.rearrange(fft_freq_grid_squared, "... -> ... 1")
+        + torch.finfo(torch.float32).eps
+    )
+    direction_unitvector = fft_freq_grid / fft_freq_grid_norm
+
+    astigmatism_adjustment = einops.einsum(
+        direction_unitvector,
+        astigmatism_vector,
+        "... h w f, ... f -> ... h w",
+    )
+    astigmatism_adjustment = (astigmatism_adjustment**2) * 2
+    defocus = defocus - einops.rearrange(astigmatism, "... -> ... 1")
+    return defocus + astigmatism_adjustment
 
 
 def beam_tilt_to_zernike_coeffs(

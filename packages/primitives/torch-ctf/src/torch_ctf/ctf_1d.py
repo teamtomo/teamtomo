@@ -155,7 +155,7 @@ def _setup_ctf_1d(
     pixel_size = torch.as_tensor(pixel_size, dtype=torch.float, device=device)
 
     # construct frequency vector and rescale cycles / px -> cycles / Å
-    fftfreq_grid = torch.linspace(0, 0.5, steps=n_samples)  # (n_samples,
+    fftfreq_grid = torch.linspace(0, 0.5, steps=n_samples, device=device)  # (n_samples,
     # oversampling...
     if oversampling_factor > 1:
         frequency_delta = 0.5 / (n_samples - 1)
@@ -164,7 +164,10 @@ def _setup_ctf_1d(
             oversampling_factor - 1
         )
         per_frequency_deltas = torch.linspace(
-            0, oversampled_interval_length, steps=oversampling_factor
+            0,
+            oversampled_interval_length,
+            steps=oversampling_factor,
+            device=device,
         )
         per_frequency_deltas -= oversampled_interval_length / 2
         per_frequency_deltas = einops.rearrange(per_frequency_deltas, "os -> os 1")

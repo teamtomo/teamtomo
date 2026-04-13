@@ -5,6 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 from torch_ctf.ctf_1d import calculate_ctf_1d
 from torch_ctf.ctf_2d import calculate_ctf_2d
 from torch_ctf.ctf_aberrations import (
+    apply_astigmatism_to_defocus,
     apply_even_zernikes,
     apply_odd_zernikes,
     beam_tilt_to_zernike_coeffs,
@@ -23,6 +24,12 @@ from torch_ctf.ctf_lpp import (
     initialize_laser_params,
     make_laser_coords,
 )
+from torch_ctf.ctf_thickness import (
+    calculate_ctf_thickness_1d,
+    calculate_ctf_thickness_2d,
+    calculate_ctf_thickness_lpp,
+    calculate_ctf_with_thickness,
+)
 from torch_ctf.ctf_utils import (
     calculate_additional_phase_shift,
     calculate_amplitude_contrast_equivalent_phase_shift,
@@ -37,6 +44,7 @@ __author__ = "Josh Dickerson"
 __email__ = "jdickerson@berkeley.edu"
 
 __all__ = [
+    "apply_astigmatism_to_defocus",
     "apply_even_zernikes",
     "apply_odd_zernikes",
     "beam_tilt_to_zernike_coeffs",
@@ -46,6 +54,10 @@ __all__ = [
     "calculate_amplitude_contrast_equivalent_phase_shift",
     "calculate_ctf_1d",
     "calculate_ctf_2d",
+    "calculate_ctf_thickness_1d",
+    "calculate_ctf_thickness_2d",
+    "calculate_ctf_thickness_lpp",
+    "calculate_ctf_with_thickness",
     "calculate_ctfp_and_ctfq_2d",
     "calculate_defocus_phase_aberration",
     "calculate_relativistic_beta",

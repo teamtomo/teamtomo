@@ -1,18 +1,20 @@
 """Laser Phase Plate (LPP) CTF calculation functions."""
 
-import einops
+from collections.abc import Callable
+
 import numpy as np
 import torch
 from scipy import constants as C
-from torch_grid_utils.fftfreq_grid import fftfreq_grid, transform_fftfreq_grid
 
-from torch_ctf.ctf_2d import _setup_ctf_2d
-from torch_ctf.ctf_aberrations import (
-    apply_even_zernikes,
-    apply_odd_zernikes,
-    calculate_relativistic_electron_wavelength,
+from torch_ctf._ctf_core import (
+    _phase_antisymmetric,
+    _phase_symmetric,
+    _render_ctf,
+    _setup_ctf_context_2d,
 )
-from torch_ctf.ctf_utils import calculate_total_phase_shift
+from torch_ctf.ctf_aberrations import calculate_relativistic_electron_wavelength
+
+PhaseShiftProvider = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 
 def calculate_relativistic_gamma(
@@ -433,6 +435,103 @@ def calc_LPP_phase(
     return eta
 
 
+def _lpp_phase_shift_degrees_from_grid(
+    fft_freq_grid: torch.Tensor,
+    voltage: float | torch.Tensor,
+    NA: float,
+    laser_wavelength_angstrom: float,
+    focal_length_angstrom: float,
+    laser_xy_angle_deg: float,
+    laser_xz_angle_deg: float,
+    laser_long_offset_angstrom: float,
+    laser_trans_offset_angstrom: float,
+    laser_polarization_angle_deg: float,
+    peak_phase_deg: float,
+    dual_laser: bool,
+) -> torch.Tensor:
+    """Build spatially varying LPP phase shift in degrees from a frequency grid."""
+    if dual_laser:
+        phase1 = calc_LPP_phase(
+            fft_freq_grid=fft_freq_grid,
+            NA=NA,
+            laser_wavelength_angstrom=laser_wavelength_angstrom,
+            focal_length_angstrom=focal_length_angstrom,
+            laser_xy_angle_deg=laser_xy_angle_deg,
+            laser_xz_angle_deg=laser_xz_angle_deg,
+            laser_long_offset_angstrom=laser_long_offset_angstrom,
+            laser_trans_offset_angstrom=laser_trans_offset_angstrom,
+            laser_polarization_angle_deg=laser_polarization_angle_deg,
+            peak_phase_deg=peak_phase_deg,
+            voltage=voltage,
+        )
+        phase2 = calc_LPP_phase(
+            fft_freq_grid=fft_freq_grid,
+            NA=NA,
+            laser_wavelength_angstrom=laser_wavelength_angstrom,
+            focal_length_angstrom=focal_length_angstrom,
+            laser_xy_angle_deg=laser_xy_angle_deg + 90,
+            laser_xz_angle_deg=laser_xz_angle_deg,
+            laser_long_offset_angstrom=laser_long_offset_angstrom,
+            laser_trans_offset_angstrom=laser_trans_offset_angstrom,
+            laser_polarization_angle_deg=laser_polarization_angle_deg,
+            peak_phase_deg=peak_phase_deg,
+            voltage=voltage,
+        )
+        laser_phase_radians = phase1 + phase2
+    else:
+        laser_phase_radians = calc_LPP_phase(
+            fft_freq_grid=fft_freq_grid,
+            NA=NA,
+            laser_wavelength_angstrom=laser_wavelength_angstrom,
+            focal_length_angstrom=focal_length_angstrom,
+            laser_xy_angle_deg=laser_xy_angle_deg,
+            laser_xz_angle_deg=laser_xz_angle_deg,
+            laser_long_offset_angstrom=laser_long_offset_angstrom,
+            laser_trans_offset_angstrom=laser_trans_offset_angstrom,
+            laser_polarization_angle_deg=laser_polarization_angle_deg,
+            peak_phase_deg=peak_phase_deg,
+            voltage=voltage,
+        )
+
+    return torch.rad2deg(laser_phase_radians)
+
+
+def _make_lpp_phase_shift_provider(
+    NA: float,
+    laser_wavelength_angstrom: float,
+    focal_length_angstrom: float,
+    laser_xy_angle_deg: float,
+    laser_xz_angle_deg: float,
+    laser_long_offset_angstrom: float,
+    laser_trans_offset_angstrom: float,
+    laser_polarization_angle_deg: float,
+    peak_phase_deg: float,
+    dual_laser: bool,
+) -> PhaseShiftProvider:
+    """Build a named phase-shift provider for LPP-enabled CTF calculations."""
+
+    def phase_shift_provider(
+        fft_freq_grid_local: torch.Tensor,
+        voltage_local: torch.Tensor,
+    ) -> torch.Tensor:
+        return _lpp_phase_shift_degrees_from_grid(
+            fft_freq_grid=fft_freq_grid_local,
+            voltage=voltage_local,
+            NA=NA,
+            laser_wavelength_angstrom=laser_wavelength_angstrom,
+            focal_length_angstrom=focal_length_angstrom,
+            laser_xy_angle_deg=laser_xy_angle_deg,
+            laser_xz_angle_deg=laser_xz_angle_deg,
+            laser_long_offset_angstrom=laser_long_offset_angstrom,
+            laser_trans_offset_angstrom=laser_trans_offset_angstrom,
+            laser_polarization_angle_deg=laser_polarization_angle_deg,
+            peak_phase_deg=peak_phase_deg,
+            dual_laser=dual_laser,
+        )
+
+    return phase_shift_provider
+
+
 def calc_LPP_ctf_2D(
     defocus: float | torch.Tensor,
     astigmatism: float | torch.Tensor,
@@ -454,10 +553,12 @@ def calc_LPP_ctf_2D(
     laser_trans_offset_angstrom: float,
     laser_polarization_angle_deg: float,
     peak_phase_deg: float,
+    dual_laser: bool = False,
     beam_tilt_mrad: torch.Tensor | None = None,
     even_zernike_coeffs: dict | None = None,
     odd_zernike_coeffs: dict | None = None,
     transform_matrix: torch.Tensor | None = None,
+    return_complex_ctf: bool = False,
 ) -> torch.Tensor:
     """Calculate the Laser Phase Plate (LPP) modified CTF for a 2D image.
 
@@ -508,6 +609,10 @@ def calc_LPP_ctf_2D(
         Polarization angle of the laser in degrees.
     peak_phase_deg : float
         Desired peak phase in degrees.
+    dual_laser : bool, optional
+        If True, add a second laser with the same parameters but rotated 90° in the
+        xy plane (perpendicular to the first). The two phase contributions are summed.
+        Default is False.
     beam_tilt_mrad : torch.Tensor | None
         Beam tilt in milliradians. [bx, by] in mrad
     even_zernike_coeffs : dict | None
@@ -520,30 +625,33 @@ def calc_LPP_ctf_2D(
         Optional 2x2 transformation matrix for anisotropic magnification.
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
+    return_complex_ctf: bool = False,
+        Whether to return the complex CTF e^(-i*chi)
 
     Returns
     -------
     ctf : torch.Tensor
         The Laser Phase Plate modified Contrast Transfer Function.
     """
-    # Use _setup_ctf_2d to get the frequency grid and setup parameters
     (
         defocus,
         voltage,
         spherical_aberration,
         amplitude_contrast,
-        _,
+        phase_shift,
+        fft_freq_grid,
         fft_freq_grid_squared,
         rho,
         theta,
-    ) = _setup_ctf_2d(
+    ) = _setup_ctf_context_2d(
         defocus=defocus,
         astigmatism=astigmatism,
         astigmatism_angle=astigmatism_angle,
         voltage=voltage,
         spherical_aberration=spherical_aberration,
         amplitude_contrast=amplitude_contrast,
-        phase_shift=torch.tensor(0.0),  # Not used, will be replaced by laser phase
+        # Placeholder, actual shift is provided by laser phase plate calculation
+        phase_shift=torch.tensor(0.0),
         pixel_size=pixel_size,
         image_shape=image_shape,
         rfft=rfft,
@@ -551,37 +659,7 @@ def calc_LPP_ctf_2D(
         transform_matrix=transform_matrix,
     )
 
-    # Get the frequency grid for laser calculations
-    # We need to reconstruct it from the squared version or get it from _setup_ctf_2d
-    # For now, let's get it directly
-    if isinstance(defocus, torch.Tensor):
-        device = defocus.device
-    else:
-        device = torch.device("cpu")
-
-    pixel_size_tensor = torch.as_tensor(pixel_size, dtype=torch.float, device=device)
-    image_shape_tensor = torch.as_tensor(image_shape, dtype=torch.int, device=device)
-
-    fft_freq_grid = fftfreq_grid(
-        image_shape=image_shape_tensor,
-        rfft=rfft,
-        fftshift=fftshift,
-        norm=False,
-        device=device,
-    )
-    if transform_matrix is not None:
-        fft_freq_grid = transform_fftfreq_grid(
-            frequency_grid=fft_freq_grid,
-            real_space_matrix=transform_matrix,
-            device=device,
-        )
-    fft_freq_grid = fft_freq_grid / einops.rearrange(
-        pixel_size_tensor, "... -> ... 1 1 1"
-    )
-
-    # Calculate laser phase using the dedicated function
-    laser_phase_radians = calc_LPP_phase(
-        fft_freq_grid=fft_freq_grid,
+    phase_shift_provider = _make_lpp_phase_shift_provider(
         NA=NA,
         laser_wavelength_angstrom=laser_wavelength_angstrom,
         focal_length_angstrom=focal_length_angstrom,
@@ -591,44 +669,39 @@ def calc_LPP_ctf_2D(
         laser_trans_offset_angstrom=laser_trans_offset_angstrom,
         laser_polarization_angle_deg=laser_polarization_angle_deg,
         peak_phase_deg=peak_phase_deg,
+        dual_laser=dual_laser,
+    )
+
+    total_phase_shift = _phase_symmetric(
+        defocus=defocus,
         voltage=voltage,
-    )
-
-    # Convert laser phase from radians to degrees for compatibility
-    laser_phase_degrees = torch.rad2deg(laser_phase_radians)
-
-    # Calculate total phase shift using laser phase instead of uniform phase shift
-    total_phase_shift = calculate_total_phase_shift(
-        defocus_um=defocus,
-        voltage_kv=voltage,
-        spherical_aberration_mm=spherical_aberration,
-        phase_shift_degrees=laser_phase_degrees,  # Use spatially varying phase
-        amplitude_contrast_fraction=amplitude_contrast,
-        fftfreq_grid_angstrom_squared=fft_freq_grid_squared,
-    )
-
-    # Apply even Zernike coefficients if provided
-    if even_zernike_coeffs is not None:
-        total_phase_shift = apply_even_zernikes(
-            even_zernike_coeffs,
-            total_phase_shift,
-            rho,
-            theta,
-        )
-
-    # Calculate CTF
-    ctf = -torch.sin(total_phase_shift)
-
-    # Apply odd Zernike coefficients if provided
-    if odd_zernike_coeffs is None and beam_tilt_mrad is None:
-        return ctf
-
-    antisymmetric_phase_shift = apply_odd_zernikes(
-        odd_zernikes=odd_zernike_coeffs,
+        spherical_aberration=spherical_aberration,
+        amplitude_contrast=amplitude_contrast,
+        phase_shift=phase_shift,
+        fft_freq_grid_squared=fft_freq_grid_squared,
         rho=rho,
         theta=theta,
-        voltage_kv=voltage,
-        spherical_aberration_mm=spherical_aberration,
-        beam_tilt_mrad=beam_tilt_mrad,
+        even_zernike_coeffs=even_zernike_coeffs,
+        phase_shift_provider=phase_shift_provider,
+        fft_freq_grid=fft_freq_grid,
     )
-    return ctf * torch.exp(1j * antisymmetric_phase_shift)
+
+    include_antisymmetric_phase = (
+        odd_zernike_coeffs is not None or beam_tilt_mrad is not None
+    )
+    antisymmetric_phase_shift = _phase_antisymmetric(
+        reference=total_phase_shift,
+        voltage=voltage,
+        spherical_aberration=spherical_aberration,
+        rho=rho,
+        theta=theta,
+        beam_tilt_mrad=beam_tilt_mrad,
+        odd_zernike_coeffs=odd_zernike_coeffs,
+    )
+
+    return _render_ctf(
+        symmetric_phase_shift=total_phase_shift,
+        antisymmetric_phase_shift=antisymmetric_phase_shift,
+        return_complex_ctf=return_complex_ctf,
+        include_antisymmetric_phase=include_antisymmetric_phase,
+    )

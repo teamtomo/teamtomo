@@ -4,14 +4,15 @@ import einops
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
 
-from torch_ctf.ctf_2d import _setup_ctf_2d
+from torch_ctf._ctf_core import (
+    _phase_antisymmetric,
+    _phase_symmetric,
+    _setup_ctf_context_2d,
+)
 from torch_ctf.ctf_aberrations import (
-    apply_even_zernikes,
-    apply_odd_zernikes,
     calculate_defocus_phase_aberration,
     calculate_relativistic_electron_wavelength,
 )
-from torch_ctf.ctf_utils import calculate_total_phase_shift
 
 
 def calculate_ctfp_and_ctfq_2d(
@@ -111,10 +112,11 @@ def calculate_ctfp_and_ctfq_2d(
         spherical_aberration,
         amplitude_contrast,
         phase_shift,
+        _,
         fft_freq_grid_squared,
         rho,
         theta,
-    ) = _setup_ctf_2d(
+    ) = _setup_ctf_context_2d(
         defocus=defocus,
         astigmatism=astigmatism,
         astigmatism_angle=astigmatism_angle,
@@ -129,22 +131,17 @@ def calculate_ctfp_and_ctfq_2d(
         transform_matrix=transform_matrix,
     )
 
-    total_phase_shift = calculate_total_phase_shift(
-        defocus_um=defocus,
-        voltage_kv=voltage,
-        spherical_aberration_mm=spherical_aberration,
-        phase_shift_degrees=phase_shift,
-        amplitude_contrast_fraction=amplitude_contrast,
-        fftfreq_grid_angstrom_squared=fft_freq_grid_squared,
+    total_phase_shift = _phase_symmetric(
+        defocus=defocus,
+        voltage=voltage,
+        spherical_aberration=spherical_aberration,
+        amplitude_contrast=amplitude_contrast,
+        phase_shift=phase_shift,
+        fft_freq_grid_squared=fft_freq_grid_squared,
+        rho=rho,
+        theta=theta,
+        even_zernike_coeffs=even_zernike_coeffs,
     )
-
-    if even_zernike_coeffs is not None:
-        total_phase_shift = apply_even_zernikes(
-            even_zernike_coeffs,
-            total_phase_shift,
-            rho,
-            theta,
-        )
 
     # calculate ctf
     # ctfp: real = -sin, imag = +cos
@@ -161,13 +158,14 @@ def calculate_ctfp_and_ctfq_2d(
 
     # Apply odd zernike coefficients if provided
     if odd_zernike_coeffs is not None or beam_tilt_mrad is not None:
-        antisymmetric_phase_shift = apply_odd_zernikes(
-            odd_zernikes=odd_zernike_coeffs,
+        antisymmetric_phase_shift = _phase_antisymmetric(
+            reference=total_phase_shift,
+            voltage=voltage,
+            spherical_aberration=spherical_aberration,
             rho=rho,
             theta=theta,
-            voltage_kv=voltage,
-            spherical_aberration_mm=spherical_aberration,
             beam_tilt_mrad=beam_tilt_mrad,
+            odd_zernike_coeffs=odd_zernike_coeffs,
         )
         ctfp = ctfp * torch.exp(1j * antisymmetric_phase_shift)
         ctfq = ctfq * torch.exp(1j * antisymmetric_phase_shift)
