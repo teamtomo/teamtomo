@@ -1,11 +1,12 @@
+"""Common two-dimensional shapes for masking or filtering."""
+
 import einops
 import torch
 
 from .coordinate_grid import coordinate_grid
-
-from .soft_edge import add_soft_edge_2d
-from .geometry import _angle_between_vectors
 from .fftfreq_grid import dft_center
+from .geometry import _angle_between_vectors
+from .soft_edge import add_soft_edge_2d
 
 
 def circle(
@@ -15,6 +16,28 @@ def circle(
     smoothing_radius: float = 0,
     device: torch.device | None = None,
 ) -> torch.Tensor:
+    """Construct a 2D circular mask.
+
+    Parameters
+    ----------
+    radius: float
+        Radius of the circle in pixels.
+    image_shape: tuple[int, int] | int
+        Shape `(h, w)` of 2D image(s) for the circle mask.
+    center: tuple[float, float] | None
+        `(h, w)` coordinates of the center of the circle. If `None`, the center of the
+        image will be used.
+    smoothing_radius: float
+        Radius of the soft edge to be added around the circle.
+    device: torch.device | None
+        Device on which to create the mask. If `None`, the device of the output will be
+        the same as the default torch device.
+
+    Returns
+    -------
+    circle_mask: torch.Tensor
+        `(h, w)` array with values in [0, 1].
+    """
     if isinstance(image_shape, int):
         image_shape = (image_shape, image_shape)
     if center is None:
@@ -37,6 +60,28 @@ def rectangle(
     smoothing_radius: float = 0,
     device: torch.device | None = None,
 ) -> torch.Tensor:
+    """Construct a 2D rectangular mask.
+
+    Parameters
+    ----------
+    dimensions: tuple[float, float]
+        `(height, width)` of the rectangle in pixels.
+    image_shape: tuple[int, int] | int
+        Shape `(h, w)` of 2D image(s) for the rectangle mask.
+    center: tuple[float, float] | None
+        `(h, w)` coordinates of the center of the rectangle. If `None`, the center of
+        the image will be used.
+    smoothing_radius: float
+        Radius of the soft edge to be added around the rectangle.
+    device: torch.device | None
+        Device on which to create the mask. If `None`, the device of the output will be
+        the same as the default torch device.
+
+    Returns
+    -------
+    rectangle_mask: torch.Tensor
+        `(h, w)` array with values in [0, 1].
+    """
     if isinstance(image_shape, int):
         image_shape = (image_shape, image_shape)
     if center is None:
@@ -60,6 +105,28 @@ def square(
     smoothing_radius: float = 0,
     device: torch.device | None = None,
 ) -> torch.Tensor:
+    """Construct a 2D square mask.
+
+    Parameters
+    ----------
+    sidelength: float
+        Length of each side of the square in pixels.
+    image_shape: tuple[int, int] | int
+        Shape `(h, w)` of 2D image(s) for the square mask.
+    center: tuple[float, float] | None
+        `(h, w)` coordinates of the center of the square. If `None`, the center of the
+        image will be used.
+    smoothing_radius: float
+        Radius of the soft edge to be added around the square.
+    device: torch.device | None
+        Device on which to create the mask. If `None`, the device of the output will be
+        the same as the default torch device.
+
+    Returns
+    -------
+    square_mask: torch.Tensor
+        `(h, w)` array with values in [0, 1].
+    """
     square = rectangle(
         dimensions=(sidelength, sidelength),
         image_shape=image_shape,
@@ -77,22 +144,46 @@ def wedge(
     smoothing_radius: float = 0,
     device: torch.device | None = None,
 ) -> torch.Tensor:
+    """Construct a 2D wedge-shaped mask.
+
+    Parameters
+    ----------
+    aperture: float
+        Aperture of the wedge in degrees.
+    image_shape: tuple[int, int] | int
+        Shape `(h, w)` of 2D image(s) for the wedge mask.
+    principal_axis: tuple[float, float]
+        Vector defining the principal axis of the wedge.
+    smoothing_radius: float
+        Radius of the soft edge to be added around the wedge.
+    device: torch.device | None
+        Device on which to create the mask. If `None`, the device of the output will be
+        the same as the default torch device.
+
+    Returns
+    -------
+    wedge_mask: torch.Tensor
+        `(h, w)` array with values in [0, 1].
+    """
     if isinstance(image_shape, int):
         image_shape = (image_shape, image_shape)
-    center = dft_center(
-        image_shape, rfft=False, fftshift=True
-    )
+    center = dft_center(image_shape, rfft=False, fftshift=True)
     vectors = coordinate_grid(
         image_shape=image_shape,
         center=center,
         device=device,
     ).float()
-    vectors_norm = einops.reduce(vectors ** 2, '... c -> ... 1', reduction='sum') ** 0.5
+    vectors_norm = einops.reduce(vectors**2, "... c -> ... 1", reduction="sum") ** 0.5
     vectors /= vectors_norm
     principal_axis = torch.as_tensor(principal_axis, dtype=vectors.dtype, device=device)
-    principal_axis_norm = einops.reduce(
-        principal_axis ** 2, '... c -> ... 1', reduction='sum'
-    ) ** 0.5
+    principal_axis_norm = (
+        einops.reduce(
+            principal_axis**2,  # type: ignore[operator]
+            "... c -> ... 1",
+            reduction="sum",
+        )
+        ** 0.5
+    )
     principal_axis /= principal_axis_norm
     angles = _angle_between_vectors(vectors, principal_axis)
     acute_bound = aperture / 2

@@ -5,6 +5,8 @@ from typing import Sequence
 import einops
 import torch
 
+from torch_grid_utils.fft_shape import rfft_shape
+
 
 # no lru_cache as it interferes with gradient calculation (see torch-fourier-shift PR#5)
 def fftfreq_grid(
@@ -48,7 +50,7 @@ def fftfreq_grid(
         frequency_grid = _construct_fftfreq_grid_2d(
             image_shape=image_shape,
             rfft=rfft,
-            spacing=spacing,
+            spacing=spacing,  # type: ignore[arg-type]
             device=device,
         )
         if fftshift is True:
@@ -59,7 +61,7 @@ def fftfreq_grid(
         frequency_grid = _construct_fftfreq_grid_3d(
             image_shape=image_shape,
             rfft=rfft,
-            spacing=spacing,
+            spacing=spacing,  # type: ignore[arg-type]
             device=device,
         )
         if fftshift is True:
@@ -215,13 +217,6 @@ def _construct_fftfreq_grid_3d(
     freq_yy = einops.repeat(freq_y, "h -> d h w", d=d, w=w)
     freq_xx = einops.repeat(freq_x, "w -> d h w", d=d, h=h)
     return einops.rearrange([freq_zz, freq_yy, freq_xx], "freq ... -> ... freq")
-
-
-def rfft_shape(input_shape: Sequence[int]) -> tuple[int, ...]:
-    """Get the output shape of an rfft on an input with input_shape."""
-    rfft_shape = list(input_shape)
-    rfft_shape[-1] = int((rfft_shape[-1] / 2) + 1)
-    return tuple(rfft_shape)
 
 
 def dft_center(
