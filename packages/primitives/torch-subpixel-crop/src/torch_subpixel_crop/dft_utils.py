@@ -1,4 +1,6 @@
-from typing import Tuple, Sequence
+"""Discrete Fourier Transform (DFT) utilities for shapes/dimensions."""
+
+from typing import Sequence, Tuple
 
 import torch
 
@@ -15,19 +17,14 @@ def dft_center(
     rfft: bool,
     fftshifted: bool,
     device: torch.device | None = None,
-) -> torch.Tensor:
+) -> torch.LongTensor:
     """Return the position of the DFT center for a given input shape."""
     fft_center = torch.zeros(size=(len(image_shape),), device=device)
-
-    if rfft:
-        image_shape = rfft_shape(image_shape)
-    
-    image_shape_t = torch.tensor(image_shape).float()
-
-    if fftshifted:
-        fft_center = torch.divide(image_shape_t, 2, rounding_mode='floor')
-
-    if rfft:
+    image_shape = torch.as_tensor(image_shape).float()
+    if rfft is True:
+        image_shape = torch.tensor(rfft_shape(image_shape))
+    if fftshifted is True:
+        fft_center = torch.divide(image_shape, 2, rounding_mode="floor")
+    if rfft is True:
         fft_center[-1] = 0
-
     return fft_center.long()

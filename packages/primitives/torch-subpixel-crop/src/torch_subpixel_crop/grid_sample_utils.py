@@ -1,3 +1,5 @@
+"""Grid sampling utilities for `torch.nn.functional.grid_sample`."""
+
 from typing import Sequence
 
 import torch
@@ -21,8 +23,8 @@ def array_to_grid_sample(
         shape of the array being sampled at `array_coordinates`.
     """
     dtype, device = array_coordinates.dtype, array_coordinates.device
-    array_shape_t = torch.tensor(array_shape, dtype=dtype, device=device)
-    grid_sample_coordinates = (array_coordinates / (0.5 * array_shape_t - 0.5)) - 1
+    array_shape = torch.as_tensor(array_shape, dtype=dtype, device=device)
+    grid_sample_coordinates = (array_coordinates / (0.5 * array_shape - 0.5)) - 1  # type: ignore[operator]
     grid_sample_coordinates = torch.flip(grid_sample_coordinates, dims=(-1,))
     return grid_sample_coordinates
 
@@ -35,13 +37,14 @@ def grid_sample_to_array(
     Parameters
     ----------
     grid_sample_coordinates: torch.Tensor
-        `(..., d)` array of coordinates to be used with `torch.nn.functional.grid_sample`.
+        `(..., d)` array of coordinates to be used with
+        `torch.nn.functional.grid_sample`.
     array_shape: Sequence[int]
         shape of the array `grid_sample_coordinates` are used to sample.
     """
     dtype, device = grid_sample_coordinates.dtype, grid_sample_coordinates.device
-    array_shape_t = torch.tensor(array_shape, dtype=dtype, device=device)
-    array_shape_t = torch.flip(array_shape_t, dims=(-1,))
-    array_coordinates = (grid_sample_coordinates + 1) * (0.5 * array_shape_t - 0.5)
+    array_shape = torch.as_tensor(array_shape, dtype=dtype, device=device)
+    array_shape = torch.flip(array_shape, dims=(-1,))
+    array_coordinates = (grid_sample_coordinates + 1) * (0.5 * array_shape - 0.5)  # type: ignore[operator]
     array_coordinates = torch.flip(array_coordinates, dims=(-1,))
     return array_coordinates
