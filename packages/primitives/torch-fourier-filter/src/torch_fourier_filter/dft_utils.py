@@ -179,7 +179,7 @@ def _find_shell_indices_2d(
     list[torch.Tensor]
         List of tensors containing the indices of values in each shell
     """
-    idx_2d = coordinate_grid(values.shape[-2:]).long()
+    idx_2d = coordinate_grid(values.shape[-2:]).long().to(values.device)
     values = einops.rearrange(values, "h w -> (h w)")
     idx_2d = einops.rearrange(idx_2d, "h w idx -> (h w) idx")
     sorted_vals, sort_idx = torch.sort(values, descending=False)
@@ -206,7 +206,7 @@ def _find_shell_indices_3d(
     list[torch.Tensor]
         List of tensors containing the indices of values in each shell
     """
-    idx_3d = coordinate_grid(values.shape[-3:]).long()
+    idx_3d = coordinate_grid(values.shape[-3:]).long().to(values.device)
     values = einops.rearrange(values, "d h w -> (d h w)")
     idx_3d = einops.rearrange(idx_3d, "d h w idx -> (d h w) idx")
     sorted_vals, sort_idx = torch.sort(values, descending=False)
@@ -252,7 +252,7 @@ def _split_into_frequency_bins_2d(
         device=dft.device,
     )
     frequency_grid = einops.rearrange(frequency_grid, "h w -> (h w)")
-    shell_borders = _frequency_bin_split_values(n_bins)
+    shell_borders = _frequency_bin_split_values(n_bins, device=dft.device)
     shell_indices = _find_shell_indices_1d(frequency_grid, split_values=shell_borders)
     dft = einops.rearrange(dft, "... h w -> ... (h w)")
     shells = [dft[..., shell_idx] for shell_idx in shell_indices]
@@ -296,7 +296,7 @@ def _split_into_frequency_bins_3d(
         device=dft.device,
     )
     frequency_grid = einops.rearrange(frequency_grid, "d h w -> (d h w)")
-    shell_borders = _frequency_bin_split_values(n_bins)
+    shell_borders = _frequency_bin_split_values(n_bins, device=dft.device)
     shell_indices = _find_shell_indices_1d(frequency_grid, split_values=shell_borders)
     dft = einops.rearrange(dft, "... d h w -> ... (d h w)")
     shells = [dft[..., shell_idx] for shell_idx in shell_indices]

@@ -1,8 +1,6 @@
 import torch
 
-from torch_fourier_filter.bandpass import (
-    bandpass_filter,
-)
+from torch_fourier_filter.bandpass import bandpass_filter, bandpass_filter_hyptan
 
 
 def test_bandpass_filter():
@@ -26,3 +24,31 @@ def test_bandpass_filter():
     assert torch.all(bp_filter[in_band_idx] == 1)
     assert torch.allclose(bp_filter[lower_idx], lower_falloff.view((-1, 1)), atol=1e-6)
     assert torch.allclose(bp_filter[upper_idx], upper_falloff.view((-1, 1)), atol=1e-6)
+
+
+def test_bandpass_filter_hyptan():
+    image_shape = (20, 1)
+    device = torch.device("cpu")
+    hyp = bandpass_filter_hyptan(
+        low=0.2,
+        high=0.4,
+        falloff=0.1,
+        image_shape=image_shape,
+        rfft=False,
+        fftshift=False,
+        device=device,
+    )
+    cos = bandpass_filter(
+        low=0.2,
+        high=0.4,
+        falloff=0.1,
+        image_shape=image_shape,
+        rfft=False,
+        fftshift=False,
+        device=device,
+    )
+    assert hyp.shape == cos.shape
+    assert torch.all(torch.isfinite(hyp))
+    assert torch.all(hyp >= 0)
+    assert torch.isclose(hyp.max(), torch.tensor(1.0))
+    assert not torch.allclose(hyp, cos)

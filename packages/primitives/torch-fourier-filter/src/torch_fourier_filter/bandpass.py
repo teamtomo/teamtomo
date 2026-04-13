@@ -1,5 +1,7 @@
 """Bandpass filters using Fourier transform."""
 
+from __future__ import annotations
+
 import einops
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
@@ -18,6 +20,10 @@ def bandpass_filter(
     Create a bandpass filter for the Fourier transform.
 
     Note that low and high are in frequency range 0-0.5 at Nyquist.
+
+    Flat response at 1.0 on ``(low, high]``; quarter-cosine ramps in
+    ``(low - falloff, low]`` and ``(high, high + falloff]``. For a smooth
+    analytic mask over the whole grid, see :func:`bandpass_filter_hyptan`.
 
     Parameters
     ----------
@@ -151,3 +157,61 @@ def high_pass_filter(
         device=device,
     )
     return filter_hp
+
+
+def bandpass_filter_hyptan(
+    low: float,
+    high: float,
+    falloff: float,
+    image_shape: tuple[int, int] | tuple[int, int, int],
+    rfft: bool,
+    fftshift: bool,
+    device: torch.device = None,
+) -> torch.Tensor:
+    """Hyperbolic-tangent bandpass on the frequency grid.
+
+    Builds the mask from four shifted ``tanh`` terms, then divides by the
+    global maximum so the peak is 1. The response is smooth everywhere (not
+    flat in the passband like :func:`bandpass_filter`); edge steepness scales
+    with ``falloff * (high - low)``.
+
+    Parameters
+    ----------
+    low: float
+        Lower cutoff frequency (same normalisation as :func:`bandpass_filter`).
+    high: float
+        Higher cutoff frequency.
+    falloff: float
+        Controls edge steepness (larger gives softer edges).
+    image_shape: tuple
+        Shape of the image.
+    rfft: bool
+        If the FFT is a real FFT.
+    fftshift: bool
+        If the FFT is shifted.
+    device: torch.device
+        Device to use.
+
+    Returns
+    -------
+    bandpass: torch.Tensor
+        Values in ``[0, 1]``, same shape as the frequency grid.
+    """
+    frequency_grid = fftfreq_grid(
+        image_shape=image_shape,
+        rfft=rfft,
+        fftshift=fftshift,
+        norm=True,
+        device=device,
+    )
+    span = high - low
+    scale = falloff * span
+    d = frequency_grid
+    bandpass = 0.5 * (
+        torch.tanh(torch.pi * (d + high) / scale)
+        - torch.tanh(torch.pi * (d - high) / scale)
+        - torch.tanh(torch.pi * (d + low) / scale)
+        + torch.tanh(torch.pi * (d - low) / scale)
+    )
+    bandpass = bandpass / bandpass.max()
+    return bandpass
