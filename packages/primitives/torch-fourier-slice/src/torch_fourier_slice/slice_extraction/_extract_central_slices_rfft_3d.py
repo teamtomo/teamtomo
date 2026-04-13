@@ -1,9 +1,10 @@
 import einops
 import torch
-from torch_image_interpolation import sample_image_3d
+from torch_grid_utils.fftfreq_grid import fftfreq_grid, transform_fftfreq_grid
+from torch_image_interpolation import sample_image_2d, sample_image_3d
 
 from .._dft_utils import _fftfreq_to_dft_coordinates
-from .._grids import _central_slice_fftfreq_grid
+from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
 def _determine_near_zero_conjugate_mask(
@@ -83,12 +84,15 @@ def _determine_near_zero_conjugate_mask(
 
 def extract_central_slices_rfft_3d(
     volume_rfft: torch.Tensor,
-    image_shape: tuple[int, int, int],
     rotation_matrices: torch.Tensor,  # (..., 3, 3)
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
     x_tolerance: float = 1e-8,
     rot_tolerance: float | None = 1e-8,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,  # in kV
+    ewald_flip_sign: bool = False,  # if True, flip the sign of the Ewald curvature
+    ewald_px_size: float = 1.0,  # in Angstroms / pixel
 ) -> torch.Tensor:
     """Extract central slice from an fftshifted rfft volume.
 
@@ -106,8 +110,6 @@ def extract_central_slices_rfft_3d(
     ----------
     volume_rfft : torch.Tensor
         Input volume in fftshifted RFFT format, shape (d, d, d//2 + 1).
-    image_shape : tuple[int, int, int]
-        Original image/volume shape (depth, height, width) before RFFT.
     rotation_matrices : torch.Tensor
         Rotation matrices (..., 3, 3) defining the orientations of the central slices
         to extract. Multiple matrices can be provided for batch extraction.
@@ -125,6 +127,18 @@ def extract_central_slices_rfft_3d(
     rot_tolerance : float | None
         Tolerance for zeroing out near-zero elements in the rotation matrices to
         mitigate numerical precision issues. If None, no zeroing is performed.
+    apply_ewald_curvature : bool
+        If True, bend the central slice onto an Ewald sphere. If False (default),
+        use a flat central slice.
+    ewald_voltage_kv : float
+        Acceleration voltage in kV. Default is 300.0 kV. Wavelength is computed
+        from this using relativistic electron wavelength formula.
+    ewald_flip_sign : bool
+        If True, flip the sign of the Ewald curvature (apply the curve in the
+        opposite direction).
+    ewald_px_size : float
+        Pixel size (e.g. Å / pixel). Used to convert between grid units
+        (cycles / pixel) and physical spatial frequencies.
 
     Returns
     -------
@@ -133,6 +147,13 @@ def extract_central_slices_rfft_3d(
         (..., h, w), where h and w are the height and width of the RFFT slice.
     """
     assert volume_rfft.ndim == 3, "Input volume_rfft must be 3D tensor."
+
+    # Get the shape of the original volume from the actual rfft tensor
+    volume_shape = (
+        volume_rfft.shape[-3],
+        volume_rfft.shape[-2],
+        (volume_rfft.shape[-1] - 1) * 2,
+    )
 
     # rotation matrices rotate xyz coordinates, make them rotate zyx coordinates
     # xyz:
@@ -155,11 +176,20 @@ def extract_central_slices_rfft_3d(
 
     # generate grid of DFT sample frequencies for a central slice spanning the xy-plane
     freq_grid = _central_slice_fftfreq_grid(
-        volume_shape=image_shape,
+        volume_shape=volume_shape,
         rfft=True,
         fftshift=True,
         device=volume_rfft.device,
     )  # (h, w, 3) zyx coords
+
+    # Optionally, bend the central slice into a curved surface (Ewald sphere)
+    if apply_ewald_curvature:
+        freq_grid = _apply_ewald_curvature(
+            freq_grid=freq_grid,
+            voltage_kv=ewald_voltage_kv,
+            flip_sign=ewald_flip_sign,
+            px_size=ewald_px_size,
+        )
 
     # keep track of some shapes
     stack_shape = tuple(rotation_matrices.shape[:-2])
@@ -204,7 +234,7 @@ def extract_central_slices_rfft_3d(
 
     # convert frequencies to array coordinates in fftshifted DFT
     rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=image_shape, rfft=True
+        frequencies=rotated_coords, image_shape=volume_shape, rfft=True
     )
     samples = sample_image_3d(
         image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
@@ -223,13 +253,16 @@ def extract_central_slices_rfft_3d(
 
 
 def extract_central_slices_rfft_3d_multichannel(
-    volume_rfft: torch.Tensor,  # (c, d, d, d)
-    image_shape: tuple[int, int, int],
+    volume_rfft: torch.Tensor,  # (c, d, d, d//2 + 1)
     rotation_matrices: torch.Tensor,  # (..., 3, 3)
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
     x_tolerance: float = 1e-8,
     rot_tolerance: float | None = 1e-8,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,  # in kV
+    ewald_flip_sign: bool = False,  # if True, flip the sign of the Ewald curvature
+    ewald_px_size: float = 1.0,  # in Angstroms / pixel
 ) -> torch.Tensor:  # (..., c, h, w)
     """Extract central slices from multichannel fftshifted rfft volume.
 
@@ -247,8 +280,6 @@ def extract_central_slices_rfft_3d_multichannel(
     ----------
     volume_rfft : torch.Tensor
         Input multichannel volume in fftshifted RFFT format, shape (c, d, d, d//2 + 1).
-    image_shape : tuple[int, int, int]
-        Original image/volume shape (depth, height, width) before RFFT.
     rotation_matrices : torch.Tensor
         Rotation matrices (..., 3, 3) defining the orientations of the central slices
         to extract. Multiple matrices can be provided for batch extraction.
@@ -266,14 +297,34 @@ def extract_central_slices_rfft_3d_multichannel(
     rot_tolerance : float | None
         Tolerance for zeroing out near-zero elements in the rotation matrices to
         mitigate numerical precision issues. If None, no zeroing is performed.
+    apply_ewald_curvature : bool
+        If True, bend the central slice onto an Ewald sphere. If False (default),
+        use a flat central slice.
+    ewald_voltage_kv : float
+        Acceleration voltage in kV. Default is 300.0 kV. Wavelength is computed
+        from this using relativistic electron wavelength formula.
+    ewald_flip_sign : bool
+        If True, flip the sign of the Ewald curvature (apply the curve in the
+        opposite direction).
+    ewald_px_size : float
+        Pixel size (e.g. Å / pixel). Used to convert between grid units
+        (cycles / pixel) and physical spatial frequencies.
 
     Returns
     -------
     projection_image_dfts : torch.Tensor
         Extracted central slice DFTs in fftshifted RFFT format, shape
-        (..., c, h, w), where h and w are the height and width of the RFFT slice.
+        (..., c, h, w), where c is the number of channels, h and w are the height
+        and width of the RFFT slice.
     """
     assert volume_rfft.ndim == 4, "Input volume_rfft must be 4D tensor."
+
+    # Get the shape of the original volume from the actual rfft tensor
+    volume_shape = (
+        volume_rfft.shape[-3],
+        volume_rfft.shape[-2],
+        (volume_rfft.shape[-1] - 1) * 2,
+    )
 
     # rotation matrices rotate xyz coordinates, make them rotate zyx coordinates
     # xyz:
@@ -296,11 +347,20 @@ def extract_central_slices_rfft_3d_multichannel(
 
     # generate grid of DFT sample frequencies for a central slice spanning the xy-plane
     freq_grid = _central_slice_fftfreq_grid(
-        volume_shape=image_shape,
+        volume_shape=volume_shape,
         rfft=True,
         fftshift=True,
         device=volume_rfft.device,
     )  # (h, w, 3) zyx coords
+
+    # Optionally, bend the central slice into a curved surface (Ewald sphere)
+    if apply_ewald_curvature:
+        freq_grid = _apply_ewald_curvature(
+            freq_grid=freq_grid,
+            voltage_kv=ewald_voltage_kv,
+            flip_sign=ewald_flip_sign,
+            px_size=ewald_px_size,
+        )
 
     # keep track of some shapes
     channels = volume_rfft.shape[0]
@@ -325,7 +385,7 @@ def extract_central_slices_rfft_3d_multichannel(
     valid_coords = einops.rearrange(valid_coords, "hw zyx -> hw zyx 1")
     rotation_matrices = einops.rearrange(rotation_matrices, "... i j -> ... 1 i j")
 
-    rotated_coords = rotation_matrices @ valid_coords  # (..., b, zyx, 1)
+    rotated_coords = rotation_matrices @ valid_coords  # (..., hw, zyx, 1)
 
     # Squeeze out single broadcast dimensions
     rotated_coords = einops.rearrange(rotated_coords, "... hw zyx 1 -> ... hw zyx")
@@ -346,22 +406,249 @@ def extract_central_slices_rfft_3d_multichannel(
 
     # convert frequencies to array coordinates in fftshifted DFT
     rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=image_shape, rfft=True
+        frequencies=rotated_coords, image_shape=volume_shape, rfft=True
     )
     samples = sample_image_3d(
         image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
-    )  # shape is (..., b, c)
+    )  # shape is (..., hw, c)
 
     # take complex conjugate of values from redundant half transform
     samples[conjugate_mask] = torch.conj(samples[conjugate_mask])
 
     # Rearrange to put channels before spatial dimensions
-    samples = einops.rearrange(samples, "... b c -> ... c b")
+    samples = einops.rearrange(samples, "... hw c -> ... c hw")
 
     # insert samples back into DFTs
     projection_image_dfts = torch.zeros(
         output_shape, device=volume_rfft.device, dtype=volume_rfft.dtype
     )
     projection_image_dfts[..., freq_grid_mask] = samples
+
+    return projection_image_dfts
+
+
+def transform_slice_2d(
+    projection_image_dfts: torch.Tensor,
+    rfft_shape: tuple[int, int],
+    stack_shape: tuple[int, ...],
+    transform_matrix: torch.Tensor,
+) -> torch.Tensor:
+    """Apply anisotropic magnification transformation to a 2D slice in Fourier space.
+
+    Parameters
+    ----------
+    projection_image_dfts: torch.Tensor
+        Projection image DFTs with shape `(*stack_shape, h, w)` where `(h, w)`
+        is the rfft shape.
+    rfft_shape: tuple[int, int]
+        Shape of the rfft `(h, w_rfft)` where `w_rfft = n//2 + 1`.
+    stack_shape: tuple[int, ...]
+        Shape of batch dimensions (can be empty for single image).
+    transform_matrix: torch.Tensor
+        `(2, 2)` anisotropic magnification matrix in real space (yx ordering).
+
+    Returns
+    -------
+    transformed_dfts: torch.Tensor
+        Transformed projection image DFTs with same shape as input.
+    """
+    # Calculate full 2D image shape from rfft shape
+    # rfft_shape is (h, w_rfft) where w_rfft = n//2 + 1
+    # Full width is w_full = 2 * (w_rfft - 1) = n
+    h_full = rfft_shape[0]
+    w_full = 2 * (rfft_shape[1] - 1)
+    image_shape_2d = (h_full, w_full)
+
+    # Generate 2D frequency grid
+    freq_grid = fftfreq_grid(
+        image_shape=image_shape_2d,
+        rfft=True,
+        fftshift=True,
+        device=projection_image_dfts.device,
+    )  # (h, w, 2) yx coords
+
+    # Apply transformation matrix
+    transformed_freqs = transform_fftfreq_grid(
+        frequency_grid=freq_grid,
+        real_space_matrix=transform_matrix,
+        device=projection_image_dfts.device,
+    )  # (h, w, 2) yx coords
+
+    # Convert transformed frequencies to DFT array coordinates
+    transformed_coords = _fftfreq_to_dft_coordinates(
+        frequencies=transformed_freqs, image_shape=image_shape_2d, rfft=True
+    )
+
+    # Flatten coordinates: (h, w, 2) -> (h*w, 2)
+    transformed_coords_flat = einops.rearrange(transformed_coords, "h w yx -> (h w) yx")
+
+    # Resample each 2D DFT at the transformed frequencies
+    # Need to handle batch dimensions in stack_shape
+    if len(stack_shape) > 0:
+        # Flatten batch dimensions for processing
+        projection_image_dfts_flat = einops.rearrange(
+            projection_image_dfts, "... h w -> (...) h w"
+        )
+
+        # Use channel dimension as batch: pass (b, h, w) as (c=b, h, w)
+        resampled = sample_image_2d(
+            image=projection_image_dfts_flat,  # (b, h, w) treated as (c=b, h, w)
+            coordinates=transformed_coords_flat,  # (h*w, 2)
+            interpolation="bilinear",
+        )  # Returns (h*w, b) - samples for each "channel" (batch)
+
+        # Transpose to get (b, h*w)
+        n_coords = transformed_coords_flat.shape[0]
+        resampled = einops.rearrange(
+            resampled, "n_coords b -> b n_coords", n_coords=n_coords
+        )
+        # Reshape back to (b, h, w) - coordinates now match rfft_shape
+        resampled = einops.rearrange(
+            resampled, "b (h w) -> b h w", h=rfft_shape[0], w=rfft_shape[1]
+        )
+        # Reshape to original stack_shape
+        projection_image_dfts = resampled.reshape(*stack_shape, *rfft_shape)
+    else:
+        # Single image case
+        resampled = sample_image_2d(
+            image=projection_image_dfts[None, ...],  # Add batch dim -> (1, h, w)
+            coordinates=transformed_coords_flat,  # (h*w, 2) - no batch dim
+            interpolation="bilinear",
+        )  # Returns (h*w, 1) - samples for single "channel" (batch)
+        resampled = resampled[:, 0]  # Remove batch dim -> (h*w,)
+        projection_image_dfts = einops.rearrange(
+            resampled, "(h w) -> h w", h=rfft_shape[0], w=rfft_shape[1]
+        )
+
+    # Apply the 1/|det A| scaling to preserve total intensity
+    det_A = torch.linalg.det(transform_matrix)
+    projection_image_dfts = projection_image_dfts / det_A
+
+    return projection_image_dfts
+
+
+def transform_slice_2d_multichannel(
+    projection_image_dfts: torch.Tensor,
+    rfft_shape: tuple[int, int],
+    stack_shape: tuple[int, ...],
+    channels: int,
+    transform_matrix: torch.Tensor,
+) -> torch.Tensor:
+    """Apply anisotropic magnification transformation to a multichannel 2D slice.
+
+    Parameters
+    ----------
+    projection_image_dfts: torch.Tensor
+        Projection image DFTs with shape `(*stack_shape, c, h, w)` where `(h, w)`
+        is the rfft shape and `c` is the number of channels.
+    rfft_shape: tuple[int, int]
+        Shape of the rfft `(h, w_rfft)` where `w_rfft = n//2 + 1`.
+    stack_shape: tuple[int, ...]
+        Shape of batch dimensions (can be empty for single image).
+    channels: int
+        Number of channels.
+    transform_matrix: torch.Tensor
+        `(2, 2)` anisotropic magnification matrix in real space (yx ordering).
+
+    Returns
+    -------
+    transformed_dfts: torch.Tensor
+        Transformed projection image DFTs with same shape as input.
+    """
+    # Calculate full 2D image shape from rfft shape
+    h_full = rfft_shape[0]
+    w_full = 2 * (rfft_shape[1] - 1)
+    image_shape_2d = (h_full, w_full)
+
+    # Generate 2D frequency grid
+    freq_grid = fftfreq_grid(
+        image_shape=image_shape_2d,
+        rfft=True,
+        fftshift=True,
+        device=projection_image_dfts.device,
+    )  # (h, w, 2) yx coords
+
+    # Apply transformation matrix
+    transformed_freqs = transform_fftfreq_grid(
+        frequency_grid=freq_grid,
+        real_space_matrix=transform_matrix,
+        device=projection_image_dfts.device,
+    )  # (h, w, 2) yx coords
+
+    # Convert transformed frequencies to DFT array coordinates
+    transformed_coords = _fftfreq_to_dft_coordinates(
+        frequencies=transformed_freqs, image_shape=image_shape_2d, rfft=True
+    )
+
+    # Flatten coordinates: (h, w, 2) -> (h*w, 2)
+    transformed_coords_flat = einops.rearrange(transformed_coords, "h w yx -> (h w) yx")
+
+    # Resample each 2D DFT at the transformed frequencies
+    # Handle batch and channel dimensions
+    if len(stack_shape) > 0:
+        # Flatten batch dimensions but keep channels separate
+        projection_image_dfts_flat = einops.rearrange(
+            projection_image_dfts, "... c h w -> (...) c h w"
+        )
+
+        # Process each (batch, channel) combination
+        batch_size = projection_image_dfts_flat.shape[0]
+
+        # Flatten channels into batch for sampling - treat (b, c, h, w) as (b*c, h, w)
+        projection_image_dfts_for_sampling = einops.rearrange(
+            projection_image_dfts_flat, "b c h w -> (b c) h w"
+        )
+
+        # Use non-batched coordinates for all (b, c) combinations
+        # sample_image_2d will return (h*w, b*c) when image is (b*c, h, w)
+        # and coords are (h*w, 2)
+        resampled = sample_image_2d(
+            image=projection_image_dfts_for_sampling,  # (b*c, h, w)
+            coordinates=transformed_coords_flat,  # (h*w, 2) - non-batched
+            interpolation="bilinear",
+        )  # Returns (h*w, b*c) - samples for each coordinate, for each batch/channel
+
+        # Transpose to get (b*c, h*w)
+        n_coords = transformed_coords_flat.shape[0]
+        resampled = einops.rearrange(
+            resampled,
+            "n_coords (b c) -> (b c) n_coords",
+            b=batch_size,
+            c=channels,
+            n_coords=n_coords,
+        )
+
+        # Reshape back to (b, c, h, w) then to original stack shape
+        resampled = einops.rearrange(
+            resampled,
+            "(b c) (h w) -> b c h w",
+            b=batch_size,
+            c=channels,
+            h=rfft_shape[0],
+            w=rfft_shape[1],
+        )
+        projection_image_dfts = resampled.reshape(*stack_shape, channels, *rfft_shape)
+    else:
+        # Single image case with channels
+        # Use non-batched coordinates - sample_image_2d will return (h*w, c)
+        # when image is (c, h, w) and coords are (h*w, 2)
+        resampled = sample_image_2d(
+            image=projection_image_dfts,  # (c, h, w)
+            coordinates=transformed_coords_flat,  # (h*w, 2) - non-batched
+            interpolation="bilinear",
+        )  # Returns (h*w, c) - samples for each coordinate, for each channel
+
+        # Transpose to get (c, h*w)
+        n_coords = transformed_coords_flat.shape[0]
+        resampled = einops.rearrange(
+            resampled, "n_coords c -> c n_coords", c=channels, n_coords=n_coords
+        )
+        projection_image_dfts = einops.rearrange(
+            resampled, "c (h w) -> c h w", h=rfft_shape[0], w=rfft_shape[1]
+        )
+
+    # Apply the 1/|det A| scaling to preserve total intensity
+    det_A = torch.linalg.det(transform_matrix)
+    projection_image_dfts = projection_image_dfts / det_A
 
     return projection_image_dfts

@@ -14,6 +14,10 @@ def backproject_2d_to_3d(
     pad_factor: float = 2.0,
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,
+    ewald_flip_sign: bool = False,
+    ewald_px_size: float = 1.0,
 ) -> torch.Tensor:
     """Perform a 3D reconstruction from a set of 2D projection images.
 
@@ -34,6 +38,18 @@ def backproject_2d_to_3d(
     zyx_matrices: bool
         Set to True if the provided matrices left multiply zyx column vectors
         instead of xyz column vectors.
+    apply_ewald_curvature: bool
+        If True, bend the central slice onto an Ewald sphere. If False (default),
+        use a flat central slice.
+    ewald_voltage_kv: float
+        Acceleration voltage in kV. Default is 300.0 kV. Wavelength is computed
+        from this using relativistic electron wavelength formula.
+    ewald_flip_sign: bool
+        If True, flip the sign of the Ewald curvature (apply the curve in the
+        opposite direction).
+    ewald_px_size: float
+        Pixel size (e.g. Å / pixel). Used to convert between grid units
+        (cycles / pixel) and physical spatial frequencies.
 
     Returns
     -------
@@ -67,6 +83,10 @@ def backproject_2d_to_3d(
         rotation_matrices=rotation_matrices,
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
+        apply_ewald_curvature=apply_ewald_curvature,
+        ewald_voltage_kv=ewald_voltage_kv,
+        ewald_flip_sign=ewald_flip_sign,
+        ewald_px_size=ewald_px_size,
     )
 
     # Weight are clamped to 1 to prevent division by very small weights. As
@@ -98,6 +118,10 @@ def backproject_2d_to_3d_multichannel(
     pad_factor: float = 2.0,
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,
+    ewald_flip_sign: bool = False,
+    ewald_px_size: float = 1.0,
 ) -> torch.Tensor:
     """Perform a 3D reconstruction from multichannel 2D projection images.
 
@@ -119,6 +143,18 @@ def backproject_2d_to_3d_multichannel(
     zyx_matrices: bool
         Set to True if the provided matrices left multiply zyx column vectors
         instead of xyz column vectors.
+    apply_ewald_curvature: bool
+        If True, bend the central slice onto an Ewald sphere. If False (default),
+        use a flat central slice.
+    ewald_voltage_kv: float
+        Acceleration voltage in kV. Default is 300.0 kV. Wavelength is computed
+        from this using relativistic electron wavelength formula.
+    ewald_flip_sign: bool
+        If True, flip the sign of the Ewald curvature (apply the curve in the
+        opposite direction).
+    ewald_px_size: float
+        Pixel size (e.g. Å / pixel). Used to convert between grid units
+        (cycles / pixel) and physical spatial frequencies.
 
     Returns
     -------
@@ -152,6 +188,10 @@ def backproject_2d_to_3d_multichannel(
         rotation_matrices=rotation_matrices,
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
+        apply_ewald_curvature=apply_ewald_curvature,
+        ewald_voltage_kv=ewald_voltage_kv,
+        ewald_flip_sign=ewald_flip_sign,
+        ewald_px_size=ewald_px_size,
     )
 
     # Weight are clamped to 1 to prevent division by very small weights. As

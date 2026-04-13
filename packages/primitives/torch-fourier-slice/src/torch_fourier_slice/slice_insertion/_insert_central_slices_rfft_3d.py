@@ -3,7 +3,7 @@ import torch
 from torch_grid_utils.fftfreq_grid import rfft_shape
 
 from .._dft_utils import _fftfreq_to_dft_coordinates
-from .._grids import _central_slice_fftfreq_grid
+from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
 def insert_central_slices_rfft_3d(
@@ -12,7 +12,18 @@ def insert_central_slices_rfft_3d(
     rotation_matrices: torch.Tensor,
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,  # in kV
+    ewald_flip_sign: bool = False,  # if True, flip the sign of the Ewald curvature
+    ewald_px_size: float = 1.0,  # in Angstroms / pixel
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Insert central slices into an fftshifted rfft.
+
+    If `apply_ewald_curvature` is True, the central slice is bent into a curved
+    surface following an Ewald sphere. Wavelength is computed from `ewald_voltage_kv`
+    using relativistic electron wavelength formula. If False (default), a flat
+    central slice is used.
+    """
     rotation_matrices = rotation_matrices.to(torch.float32)
 
     ft_dtype = image_rfft.dtype
@@ -25,6 +36,15 @@ def insert_central_slices_rfft_3d(
         fftshift=True,
         device=device,
     )  # (h, w, 3)
+
+    # Optionally, bend the central slice into a curved surface (Ewald sphere)
+    if apply_ewald_curvature:
+        freq_grid = _apply_ewald_curvature(
+            freq_grid=freq_grid,
+            voltage_kv=ewald_voltage_kv,
+            flip_sign=ewald_flip_sign,
+            px_size=ewald_px_size,
+        )
 
     # get (b, 3, 1) array of zyx coordinates to rotate (up to fftfreq_max)
     if fftfreq_max is not None:
@@ -112,7 +132,18 @@ def insert_central_slices_rfft_3d_multichannel(
     rotation_matrices: torch.Tensor,  # (..., 3, 3) dims need to match rfft
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,  # in kV
+    ewald_flip_sign: bool = False,  # if True, flip the sign of the Ewald curvature
+    ewald_px_size: float = 1.0,  # in Angstroms / pixel
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    """Insert central slices into an fftshifted rfft (multichannel version).
+
+    If `apply_ewald_curvature` is True, the central slice is bent into a curved
+    surface following an Ewald sphere. Wavelength is computed from `ewald_voltage_kv`
+    using relativistic electron wavelength formula. If False (default), a flat
+    central slice is used.
+    """
     rotation_matrices = rotation_matrices.to(torch.float32)
     ft_dtype = image_rfft.dtype
     device = image_rfft.device
@@ -125,6 +156,15 @@ def insert_central_slices_rfft_3d_multichannel(
         fftshift=True,
         device=device,
     )  # (d, d, d, 3)
+
+    # Optionally, bend the central slice into a curved surface (Ewald sphere)
+    if apply_ewald_curvature:
+        freq_grid = _apply_ewald_curvature(
+            freq_grid=freq_grid,
+            voltage_kv=ewald_voltage_kv,
+            flip_sign=ewald_flip_sign,
+            px_size=ewald_px_size,
+        )
 
     # get (b, 3, 1) array of zyx coordinates to rotate (up to fftfreq_max)
     if fftfreq_max is not None:
@@ -347,7 +387,7 @@ def _insert_into_3d_dft_linear(
 
     # Enforce Friedel symmetry for insertions into x=0 plane
     # For any value inserted at (z, y, 0), also insert conj(value) at (d-z, d-y, 0)
-    d, h, w_dim = weights.shape  # d, h, w dimensions of the volume
+    d, h, _ = weights.shape
 
     # Find which corners are on the x=0 plane
     # idx_x has shape (b, 1, 2, 2, 2) after rearranging

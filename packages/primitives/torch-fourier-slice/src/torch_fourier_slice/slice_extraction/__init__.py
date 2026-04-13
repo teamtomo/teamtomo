@@ -4,10 +4,14 @@ from ._extract_central_slices_rfft_2d import extract_central_slices_rfft_2d
 from ._extract_central_slices_rfft_3d import (
     extract_central_slices_rfft_3d,
     extract_central_slices_rfft_3d_multichannel,
+    transform_slice_2d,
+    transform_slice_2d_multichannel,
 )
 
 __all__ = [
     "extract_central_slices_rfft_2d",
     "extract_central_slices_rfft_3d",
     "extract_central_slices_rfft_3d_multichannel",
+    "transform_slice_2d",
+    "transform_slice_2d_multichannel",
 ]
