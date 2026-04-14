@@ -60,7 +60,6 @@ def match_template_dft_2d(
     # Extract central slice(s) from the template volume
     fourier_slices = extract_central_slices_rfft_3d(
         volume_rfft=template_dft,
-        image_shape=(h,) * 3,  # NOTE: requires cubic template
         rotation_matrices=rotation_matrices,
     )  # (b, h, w)
     fourier_slices = torch.fft.ifftshift(fourier_slices, dim=(-2,))

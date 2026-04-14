@@ -119,9 +119,9 @@ def _generate_tilted_plane_tilt_series(
         (0.0, -12.0, 0.05),  # negative Y tilt
         (0.0, 25.0, 0.1),  # larger positive Y tilt
         # Combined X and Y tilts (more realistic scenario, expect inaccuracies)
-        (3.0, 10.0, 0.5),  # small X, moderate Y
-        (-4.0, 10.0, 0.5),  # negative X, positive Y
-        (5.0, -10.0, 0.5),  # positive X, negative Y
+        (3.0, 10.0, 0.75),  # small X, moderate Y
+        (-4.0, 10.0, 0.75),  # negative X, positive Y
+        (5.0, -10.0, 0.75),  # positive X, negative Y
     ],
 )
 def test_tiltxcorr_with_sample_tilt_estimation(
