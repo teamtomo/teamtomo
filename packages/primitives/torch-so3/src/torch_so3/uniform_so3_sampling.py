@@ -8,6 +8,7 @@ import torch
 from torch_so3.base_s2_grid import (
     cartesian_base_grid,
     healpix_base_grid,
+    healpix_sectored_base_grid,
     uniform_base_grid,
 )
 
@@ -109,3 +110,89 @@ def get_uniform_euler_angles(
     all_angles = torch.cat([base_grid, psi_mesh[:, None]], dim=1)
 
     return all_angles
+
+
+def get_sectored_euler_angles(
+    nside_coarse: int,
+    nside_fine: Optional[int] = None,
+    theta_step: float = 2.5,
+    psi_step: float = 1.5,
+    psi_min: float = 0.0,
+    psi_max: float = 360.0,
+    theta_min: float = 0.0,
+    theta_max: float = 180.0,
+    phi_min: float = 0.0,
+    phi_max: float = 360.0,
+) -> torch.Tensor:
+    """Generate ZYZ Euler angles grouped by coarse HEALPix sector.
+
+    The sphere is divided into ``n_sectors = 12 * nside_coarse**2`` equal-area sectors.
+    Within each sector a finer HEALPix grid (controlled by ``nside_fine`` or
+    ``theta_step``) provides the directional sampling, and those directions are combined
+    with a full sweep of the in-plane angle ``psi``.  Coarse sectors are dropped unless
+    at least one fine-pixel centre lies in the given ``(theta, phi)`` window; if kept,
+    the sector still contains **all** ``k2`` fine directions.
+
+    Parameters
+    ----------
+    nside_coarse : int
+        HEALPix ``nside`` for the coarse sector grid.  ``n_sectors = 12 *
+        nside_coarse**2``.
+    nside_fine : int, optional
+        HEALPix ``nside`` for the fine sampling inside each sector.  Must be >=
+        ``nside_coarse``.  If ``None``, inferred from ``theta_step``.
+    theta_step : float, optional
+        Angular step in degrees used to infer ``nside_fine`` when ``nside_fine`` is
+        ``None``.  Default is 2.5.
+    psi_step : float, optional
+        Angular step for the in-plane rotation ``psi`` in degrees.  Default is 1.5.
+    psi_min : float, optional
+        Minimum value for ``psi`` in degrees.  Default is 0.0.
+    psi_max : float, optional
+        Maximum (exclusive) value for ``psi`` in degrees.  Default is 360.0.
+    theta_min, theta_max, phi_min, phi_max : float, optional
+        In degrees.  Passed to
+        :func:`~torch_so3.base_s2_grid.healpix_sectored_base_grid` to select coarse
+        sectors (any fine centre in range keeps the full sector).
+
+    Returns
+    -------
+    torch.Tensor
+        Euler angles in degrees of shape ``(n_kept, n_per_sector, 3)`` with columns
+        ``(phi, theta, psi)``.  ``n_per_sector = k2 * n_psi`` where
+        ``k2 = (nside_fine / nside_coarse)**2`` and
+        ``n_psi = len(arange(psi_min, psi_max, psi_step))``.  ``n_kept`` is the number
+        of coarse sectors with at least one fine direction in the angular window.
+    """
+    # S2 base grid: (n_kept, k2, 2)
+    s2 = healpix_sectored_base_grid(
+        nside_coarse=nside_coarse,
+        nside_fine=nside_fine,
+        theta_step=theta_step,
+        theta_min=theta_min,
+        theta_max=theta_max,
+        phi_min=phi_min,
+        phi_max=phi_max,
+    )
+    n_sectors, k2, _ = s2.shape
+
+    # Build psi grid (same logic as get_uniform_euler_angles)
+    if psi_min >= psi_max:
+        psi_all = torch.tensor([psi_min], dtype=torch.float64)
+    else:
+        psi_all = torch.arange(psi_min, psi_max, psi_step, dtype=torch.float64)
+    n_psi = psi_all.size(0)
+
+    # Tile S2 points within each sector: each of k2 directions repeated n_psi times
+    # s2: (n_sectors, k2, 2) -> (n_sectors, k2*n_psi, 2)
+    phi_theta = s2.repeat_interleave(n_psi, dim=1)
+
+    # Tile psi values: [psi0, psi1, ...] repeated k2 times per sector
+    # psi_all: (n_psi,) -> (n_sectors, k2*n_psi, 1)
+    psi_col = psi_all.repeat(k2).unsqueeze(0).expand(n_sectors, -1).unsqueeze(-1)
+
+    # Ordering of angles is (phi, theta, psi) for ZYZ intrinsic rotations.
+    # Return shape: (n_kept, k2 * n_psi, 3) — one row per sector kept after angular
+    # filtering; along dim 1, each of the k2 directions is followed by all n_psi psi
+    # values (repeat_interleave order).
+    return torch.cat([phi_theta, psi_col], dim=-1).contiguous()
