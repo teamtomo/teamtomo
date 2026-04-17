@@ -14,8 +14,7 @@ def patch_grid_centers(
     distribute_patches: bool = True,
     device: torch.device = None,
 ) -> torch.Tensor:
-    """
-    Extract centers of a grid of patches from an image.
+    """Extract centers of a grid of patches from an image.
 
     Parameters
     ----------
@@ -74,8 +73,7 @@ def _patch_centers_1d(
     distribute_patches: bool = True,
     device: torch.device = None,
 ) -> torch.Tensor:
-    """
-    Extract centers of a 1D grid of patches from an image.
+    """Extract centers of a 1D grid of patches from an image.
 
     Parameters
     ----------
@@ -118,8 +116,7 @@ def _patch_centers_2d(
     distribute_patches: bool = True,
     device: torch.device = None,
 ) -> torch.Tensor:
-    """
-    Extract centers of a 2D grid of patches from an image.
+    """Extract centers of a 2D grid of patches from an image.
 
     Parameters
     ----------
@@ -169,8 +166,7 @@ def _patch_centers_3d(
     distribute_patches: bool = True,
     device: torch.device = None,
 ) -> torch.Tensor:
-    """
-    Extract centers of a 3D grid of patches from an image.
+    """Extract centers of a 3D grid of patches from an image.
 
     Parameters
     ----------

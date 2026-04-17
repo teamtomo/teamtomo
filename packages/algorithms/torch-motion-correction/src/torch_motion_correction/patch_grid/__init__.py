@@ -1,8 +1,11 @@
 """Utilities for extracting a grid of patches from an image."""
 
-from ._patch_grid import patch_grid, patch_grid_lazy
-from ._patch_grid_centers import patch_grid_centers
-from ._patch_grid_indices import patch_grid_indices
+from torch_grid_utils.patch_grid import (
+    patch_grid,
+    patch_grid_centers,
+    patch_grid_indices,
+    patch_grid_lazy,
+)
 
 __all__ = [
     "patch_grid",

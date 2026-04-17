@@ -3,9 +3,9 @@
 import einops
 import torch
 from scipy.signal import savgol_filter
+from torch_grid_utils.patch_grid import patch_grid_lazy
 
 from torch_motion_correction.correct_motion import correct_motion, correct_motion_fast
-from torch_motion_correction.patch_grid import patch_grid_lazy
 from torch_motion_correction.types import (
     DeformationField,
     FourierFilterConfig,

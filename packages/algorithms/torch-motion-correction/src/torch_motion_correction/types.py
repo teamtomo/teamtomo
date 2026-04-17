@@ -10,8 +10,8 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch_cubic_spline_grids import CubicBSplineGrid3d, CubicCatmullRomGrid3d
+from torch_grid_utils.patch_grid import patch_grid_centers
 
-from torch_motion_correction.patch_grid import patch_grid_centers
 from torch_motion_correction.patch_utils import ImagePatchIterator
 
 

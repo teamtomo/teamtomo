@@ -18,8 +18,7 @@ def patch_grid_indices(
 ) -> (
     tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 ):
-    """
-    Extract indices of a grid of patches from an image.
+    """Extract indices of a grid of patches from an image.
 
     Parameters
     ----------
@@ -55,16 +54,16 @@ def patch_grid_indices(
     if ndim == 2:
         return _patch_indices_2d(
             image_shape=image_shape,
-            patch_shape=cast(tuple[int, int], patch_shape),
-            patch_step=cast(tuple[int, int], patch_step),
+            patch_shape=cast("tuple[int, int]", patch_shape),
+            patch_step=cast("tuple[int, int]", patch_step),
             distribute_patches=distribute_patches,
             device=device,
         )
     elif ndim == 3:
         return _patch_indices_3d(
             image_shape=image_shape,
-            patch_shape=cast(tuple[int, int, int], patch_shape),
-            patch_step=cast(tuple[int, int, int], patch_step),
+            patch_shape=cast("tuple[int, int, int]", patch_shape),
+            patch_step=cast("tuple[int, int, int]", patch_step),
             distribute_patches=distribute_patches,
             device=device,
         )
@@ -75,8 +74,7 @@ def patch_grid_indices(
 def _patch_centers_to_indices_1d(
     patch_centers: torch.Tensor, patch_length: int, device: torch.device = None
 ) -> torch.Tensor:
-    """
-    Convert patch centers to indices.
+    """Convert patch centers to indices.
 
     Parameters
     ----------
@@ -105,8 +103,7 @@ def _patch_indices_2d(
     distribute_patches: bool = True,
     device: torch.device = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Extract indices of a 2D grid of patches from an image.
+    """Extract indices of a 2D grid of patches from an image.
 
     Parameters
     ----------
@@ -161,8 +158,7 @@ def _patch_indices_3d(
     distribute_patches: bool = True,
     device: torch.device = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Extract indices of a 3D grid of patches from an image.
+    """Extract indices of a 3D grid of patches from an image.
 
     Parameters
     ----------
