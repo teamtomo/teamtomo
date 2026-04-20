@@ -5,7 +5,7 @@ from typing import Union
 
 import torch
 
-from torch_motion_correction.types import DeformationField
+from torch_motion_correction.deformation_field import DeformationField
 
 
 def write_deformation_field_to_csv(

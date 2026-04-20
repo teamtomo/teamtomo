@@ -1,9 +1,11 @@
 """Compatibility shims — logic now lives on DeformationField in types.py."""
 
+import einops
 import torch
+import torch.nn.functional as F
 from torch_cubic_spline_grids import CubicBSplineGrid3d, CubicCatmullRomGrid3d
 
-from torch_motion_correction.types import DeformationField
+from torch_motion_correction.deformation_field import DeformationField
 
 
 def evaluate_deformation_field(
@@ -30,9 +32,6 @@ def evaluate_deformation_field_at_t(
 ) -> torch.Tensor:
     """Evaluate a dense shift grid at a single normalized timepoint."""
     if isinstance(deformation_field, (CubicCatmullRomGrid3d, CubicBSplineGrid3d)):
-        import einops
-        import torch.nn.functional as F
-
         device = deformation_field.data.device
         h, w = grid_shape
         y = torch.linspace(0, 1, steps=h, device=device)

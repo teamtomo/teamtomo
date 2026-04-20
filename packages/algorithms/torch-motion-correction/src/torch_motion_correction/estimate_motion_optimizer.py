@@ -1,6 +1,5 @@
 """Estimate local motion using a deformation field."""
 
-import functools
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -8,13 +7,12 @@ import einops
 import torch
 import torch.utils.checkpoint as checkpoint
 import tqdm
-from torch_cubic_spline_grids import CubicBSplineGrid3d, CubicCatmullRomGrid3d
 from torch_fourier_shift import fourier_shift_dft_2d
 
+from torch_motion_correction.deformation_field import DeformationField
 from torch_motion_correction.optimization_state import OptimizationTracker
 from torch_motion_correction.patch_utils import ImagePatchIterator
 from torch_motion_correction.types import (
-    DeformationField,
     FourierFilterConfig,
     OptimizationConfig,
     PatchSamplingConfig,
@@ -99,9 +97,9 @@ def estimate_local_motion(
     # Create the patch grid via PatchSamplingConfig
     image_patch_iterator = patch_sampling.get_patch_iterator(image=image, device=device)
 
-    new_deformation_field, deformation_field = _initialize_deformation_grids(
+    new_deformation_field, deformation_field = DeformationField.from_initial_field(
         resolution=deformation_field_resolution,
-        initial_deformation_field=initial_deformation_field,
+        initial_field=initial_deformation_field,
         grid_type=grid_type,
         device=device,
     )
@@ -117,7 +115,7 @@ def estimate_local_motion(
 
     motion_optimizer = _setup_optimizer(
         optimizer_type=optimizer_type,
-        parameters=new_deformation_field.parameters(),
+        parameters=list(new_deformation_field.parameters()),
         **(optimizer_kwargs if optimizer_kwargs is not None else {}),
     )
 
@@ -136,20 +134,25 @@ def estimate_local_motion(
             else True
         )
 
-    # Partial with all fixed args bound; only (patch_batch, patch_centers) remain free
-    process_batch = functools.partial(
-        _process_patch_batch,
-        circle_mask=circle_mask,
-        b_factor_envelope=b_factor_envelope,
-        bandpass=bandpass_filter,
-        base_deformation_field=deformation_field,
-        new_deformation_field=new_deformation_field,
-        pixel_spacing=pixel_spacing,
-        ph=ph,
-        pw=pw,
-        loss_type=loss_type,
-        t=t,
-    )
+    # Helper inner function to to have all other arguments fixed
+    def process_batch(
+        patch_batch: torch.Tensor,
+        patch_batch_centers: torch.Tensor,
+    ) -> torch.Tensor:
+        return _process_patch_batch(
+            patch_batch=patch_batch,
+            patch_batch_centers=patch_batch_centers,
+            circle_mask=circle_mask,
+            b_factor_envelope=b_factor_envelope,
+            bandpass=bandpass_filter,
+            base_deformation_field=deformation_field,
+            new_deformation_field=new_deformation_field,
+            pixel_spacing=pixel_spacing,
+            ph=ph,
+            pw=pw,
+            loss_type=loss_type,
+            t=t,
+        )
 
     # "Training" loop going over all patches n_iterations times
     pbar = tqdm.tqdm(range(n_iterations))
@@ -173,13 +176,13 @@ def estimate_local_motion(
         pbar.set_postfix({"avg_batch_loss": f"{avg_loss:.6f}"})
         if trajectory.sample_this_step(iter_idx):
             trajectory.add_checkpoint(
-                deformation_field=new_deformation_field.data,
+                deformation_field=new_deformation_field.data.detach(),
                 loss=avg_loss,
                 step=iter_idx,
             )
 
     # Return final deformation field
-    final_data = new_deformation_field.data + deformation_field.data
+    final_data = new_deformation_field.data.detach() + deformation_field.data
     average_shift = torch.mean(final_data)
     final_data = final_data - average_shift
 
@@ -194,8 +197,8 @@ def _process_patch_batch(
     circle_mask: torch.Tensor,
     b_factor_envelope: torch.Tensor,
     bandpass: torch.Tensor,
-    base_deformation_field: CubicCatmullRomGrid3d | CubicBSplineGrid3d,
-    new_deformation_field: CubicCatmullRomGrid3d | CubicBSplineGrid3d,
+    base_deformation_field: DeformationField,
+    new_deformation_field: DeformationField,
     pixel_spacing: float,
     ph: int,
     pw: int,
@@ -216,9 +219,9 @@ def _process_patch_batch(
         (ph, pw//2+1) rFFT-space B-factor envelope.
     bandpass : torch.Tensor
         (ph, pw//2+1) rFFT-space bandpass filter.
-    base_deformation_field : CubicCatmullRomGrid3d | CubicBSplineGrid3d
+    base_deformation_field : DeformationField
         Frozen initial deformation field.
-    new_deformation_field : CubicCatmullRomGrid3d | CubicBSplineGrid3d
+    new_deformation_field : DeformationField
         Optimisable deformation field increment.
     pixel_spacing : float
         Pixel spacing in Angstroms.
@@ -367,59 +370,9 @@ def _run_standard_step(
     return total_loss / n_batches if n_batches > 0 else 0.0
 
 
-def _initialize_deformation_grids(
-    resolution: tuple[int, int, int],
-    initial_deformation_field: DeformationField | None,
-    grid_type: str,
-    device: torch.device,
-) -> tuple[
-    CubicCatmullRomGrid3d | CubicBSplineGrid3d,
-    CubicCatmullRomGrid3d | CubicBSplineGrid3d,
-]:
-    """Create the new (optimizable) and base (frozen) cubic spline grids.
-
-    Parameters
-    ----------
-    resolution : tuple[int, int, int]
-        (nt, nh, nw) control-point resolution for both grids.
-    initial_deformation_field : DeformationField | None
-        Existing field to use as the frozen base.  When None the base grid
-        starts at zero shifts.
-    grid_type : str
-        "catmull_rom" or "bspline".
-    device : torch.device
-        Device to place both grids on.
-
-    Returns
-    -------
-    new_grid : CubicCatmullRomGrid3d | CubicBSplineGrid3d
-        Zero-initialised, optimisable grid.
-    base_grid : CubicCatmullRomGrid3d | CubicBSplineGrid3d
-        Frozen grid holding the initial (resampled) shifts.
-    """
-    if grid_type not in ["catmull_rom", "bspline"]:
-        raise ValueError(
-            f"Invalid grid type: {grid_type!r}. Must be 'catmull_rom' or 'bspline'."
-        )
-
-    grid_class = CubicBSplineGrid3d if grid_type == "bspline" else CubicCatmullRomGrid3d
-
-    new_grid = grid_class(resolution=resolution, n_channels=2).to(device)
-
-    if initial_deformation_field is None:
-        base_data = torch.zeros(size=(2, *resolution), device=device)
-    else:
-        base_data = initial_deformation_field.resample(resolution).data.to(device)
-        base_data -= torch.mean(base_data)
-
-    base_grid = grid_class.from_grid_data(base_data).to(device)
-
-    return new_grid, base_grid
-
-
 def _compute_shifted_patches_and_shifts(
-    initial_deformation_field: CubicCatmullRomGrid3d,
-    new_deformation_field: CubicCatmullRomGrid3d,
+    initial_deformation_field: DeformationField,
+    new_deformation_field: DeformationField,
     patch_batch: torch.Tensor,
     patch_batch_centers: torch.Tensor,
     pixel_spacing: float,
@@ -432,9 +385,9 @@ def _compute_shifted_patches_and_shifts(
 
     Parameters
     ----------
-    initial_deformation_field : CubicCatmullRomGrid3d
+    initial_deformation_field : DeformationField
         The deformation field model to predict shifts.
-    new_deformation_field : CubicCatmullRomGrid3d
+    new_deformation_field : DeformationField
         The new deformation field model to predict shifts.
     patch_batch : torch.Tensor
         A batch of image patches in Fourier space with shape (b, t, ph, pw).
@@ -464,7 +417,7 @@ def _compute_shifted_patches_and_shifts(
     """
     predicted_shifts = -1 * (
         new_deformation_field(patch_batch_centers)
-        + initial_deformation_field(patch_batch_centers)
+        + initial_deformation_field(patch_batch_centers).detach()
     )
     predicted_shifts = einops.rearrange(predicted_shifts, "b t yx -> t b yx")
     predicted_shifts_px = predicted_shifts / pixel_spacing

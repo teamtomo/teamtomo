@@ -3,13 +3,13 @@
 import pytest
 import torch
 
+from torch_motion_correction.deformation_field import DeformationField
 from torch_motion_correction.estimate_motion_optimizer import estimate_local_motion
 from torch_motion_correction.estimate_motion_xc import (
     estimate_global_motion,
     estimate_motion_cross_correlation_patches,
 )
 from torch_motion_correction.types import (
-    DeformationField,
     FourierFilterConfig,
     OptimizationConfig,
     PatchSamplingConfig,

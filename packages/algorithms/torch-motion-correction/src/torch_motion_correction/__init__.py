@@ -20,6 +20,7 @@ from torch_motion_correction.data_io import (
     read_deformation_field_from_csv,
     write_deformation_field_to_csv,
 )
+from torch_motion_correction.deformation_field import DeformationField
 from torch_motion_correction.deformation_field_utils import (
     evaluate_deformation_field,
 )
@@ -33,7 +34,6 @@ from torch_motion_correction.optimization_state import (
     OptimizationTracker,
 )
 from torch_motion_correction.types import (
-    DeformationField,
     FourierFilterConfig,
     OptimizationConfig,
     PatchSamplingConfig,
