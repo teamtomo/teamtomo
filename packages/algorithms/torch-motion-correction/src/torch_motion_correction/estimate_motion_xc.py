@@ -21,6 +21,7 @@ def estimate_global_motion(
     reference_frame: int | None = None,
     fourier_filter: FourierFilterConfig | None = None,
     device: torch.device | None = None,
+    verbose: bool = False,
 ) -> DeformationField:
     """Estimate motion using cross-correlation for the whole image.
 
@@ -37,6 +38,8 @@ def estimate_global_motion(
         when None.
     device: torch.device, optional
         Device for computation
+    verbose: bool
+        Whether to print progress information. Default is False.
 
     Returns
     -------
@@ -60,7 +63,10 @@ def estimate_global_motion(
     if reference_frame is None:
         reference_frame = t // 2
 
-    print(f"Cross-correlation whole image: using frame {reference_frame} as reference")
+    if verbose:
+        print(
+            f"Cross-correlation whole image: using frame {reference_frame} as reference"
+        )
 
     # Normalize image
     image = normalize_image(image)
@@ -101,11 +107,12 @@ def estimate_global_motion(
 
         shifts[frame_idx] = torch.tensor([shift_y, shift_x], device=device)
 
-    print(
-        f"Estimated shifts range: "
-        f"y=[{shifts[:, 0].min():.1f}, {shifts[:, 0].max():.1f}], "
-        f"x=[{shifts[:, 1].min():.1f}, {shifts[:, 1].max():.1f}]"
-    )
+    if verbose:
+        print(
+            f"Estimated shifts range: "
+            f"y=[{shifts[:, 0].min():.1f}, {shifts[:, 0].max():.1f}], "
+            f"x=[{shifts[:, 1].min():.1f}, {shifts[:, 1].max():.1f}]"
+        )
 
     return DeformationField.from_frame_shifts(
         shifts=shifts, pixel_spacing=pixel_spacing, device=device
@@ -122,6 +129,7 @@ def estimate_motion_cross_correlation_patches(
     refinement: XCRefinementConfig | None = None,
     initial_deformation_field: DeformationField | None = None,
     device: torch.device | None = None,
+    verbose: bool = False,
 ) -> tuple[DeformationField, torch.Tensor]:
     """Estimate motion using cross-correlation for the patches.
 
@@ -154,6 +162,8 @@ def estimate_motion_cross_correlation_patches(
         ``correct_motion``.
     device: torch.device, optional
         Device for computation
+    verbose: bool
+        Whether to print progress information. Default is False.
 
     Returns
     -------
@@ -191,13 +201,16 @@ def estimate_motion_cross_correlation_patches(
 
     image = normalize_image(image)
 
-    if reference_strategy == "middle_frame":
-        print(f"Cross-correlation patches: using frame {reference_frame} as reference")
-    else:
-        print(
-            "Cross-correlation patches: using mean of all frames except "
-            "current frame as reference"
-        )
+    if verbose:
+        if reference_strategy == "middle_frame":
+            print(
+                f"Cross-correlation patches: using frame {reference_frame} as reference"
+            )
+        else:
+            print(
+                "Cross-correlation patches: using mean of all frames except "
+                "current frame as reference"
+            )
 
     # Apply initial deformation field if provided
     if initial_deformation_field is not None:
@@ -205,14 +218,19 @@ def estimate_motion_cross_correlation_patches(
 
         # Check if it's a single patch deformation field (last two dims are 1, 1)
         if initial_deformation_field.data.shape[-2:] == (1, 1):
-            print("Applying single patch deformation field using correct_motion_fast")
+            if verbose:
+                print(
+                    "Applying single patch deformation field using correct_motion_fast"
+                )
             image = correct_motion_fast(
                 image=image,
-                deformation_grid=initial_deformation_field.data,
+                deformation_field=initial_deformation_field,
                 device=device,
+                verbose=verbose,
             )
         else:
-            print("Applying full deformation field using correct_motion")
+            if verbose:
+                print("Applying full deformation field using correct_motion")
             image = correct_motion(
                 image=image,
                 deformation_field=initial_deformation_field,
@@ -228,7 +246,8 @@ def estimate_motion_cross_correlation_patches(
         distribute_patches=patch_sampling.distribute_patches,
     )
     gh, gw = data_patch_positions.shape[1:3]
-    print(f"Number of patches per frame: {gh * gw}")
+    if verbose:
+        print(f"Number of patches per frame: {gh * gw}")
 
     # Prepare filters (only need to do this once)
     mask, b_factor_envelope, bandpass = prepare_patch_filters(
@@ -243,9 +262,11 @@ def estimate_motion_cross_correlation_patches(
         raw_field = torch.zeros((2, t, gh, gw), device=device)
     else:
         raw_field = initial_deformation_field.resample((t, gh, gw)).data
-        print(
-            "Using existing deformation field as base for cumulative motion correction"
-        )
+        if verbose:
+            print(
+                "Using existing deformation field as base for cumulative motion "
+                "correction"
+            )
 
     # Use local variable for the raw tensor during frame processing
     deformation_field_tensor = raw_field
@@ -255,7 +276,8 @@ def estimate_motion_cross_correlation_patches(
         if reference_strategy == "middle_frame" and frame_idx == reference_frame:
             continue  # Reference frame has zero shift
 
-        print(f"Processing frame {frame_idx}/{t - 1}")
+        if verbose:
+            print(f"Processing frame {frame_idx}/{t - 1}")
 
         # Determine reference patches based on strategy
         if reference_strategy == "middle_frame":
@@ -332,7 +354,7 @@ def estimate_motion_cross_correlation_patches(
         # Apply outlier rejection if enabled
         if outlier_rejection:
             shift_y, shift_x = _apply_outlier_rejection(
-                shift_y, shift_x, outlier_threshold, frame_idx
+                shift_y, shift_x, outlier_threshold, frame_idx, verbose=verbose
             )
 
         # Add shifts to existing deformation field (cumulative motion correction)
@@ -344,31 +366,35 @@ def estimate_motion_cross_correlation_patches(
 
     # Apply temporal smoothing if enabled
     if temporal_smoothing:
-        print(f"Applying temporal smoothing with window size {smoothing_window_size}")
+        if verbose:
+            print(
+                f"Applying temporal smoothing with window size {smoothing_window_size}"
+            )
         deformation_field_tensor = _apply_temporal_smoothing(
             deformation_field_tensor, smoothing_window_size, device
         )
+        if verbose:
+            def_min_y = deformation_field_tensor[0].min()
+            def_max_y = deformation_field_tensor[0].max()
+            def_min_x = deformation_field_tensor[1].min()
+            def_max_x = deformation_field_tensor[1].max()
+            print(
+                f"After temporal smoothing - range: "
+                f"y=[{def_min_y:.1f}, {def_max_y:.1f}], "
+                f"x=[{def_min_x:.1f}, {def_max_x:.1f}]"
+            )
+
+    if verbose:
         def_min_y = deformation_field_tensor[0].min()
         def_max_y = deformation_field_tensor[0].max()
         def_min_x = deformation_field_tensor[1].min()
         def_max_x = deformation_field_tensor[1].max()
         print(
-            f"After temporal smoothing - range: "
+            f"Estimated deformation field range: "
             f"y=[{def_min_y:.1f}, {def_max_y:.1f}], "
             f"x=[{def_min_x:.1f}, {def_max_x:.1f}]"
         )
-
-    def_min_y = deformation_field_tensor[0].min()
-    def_max_y = deformation_field_tensor[0].max()
-    def_min_x = deformation_field_tensor[1].min()
-    def_max_x = deformation_field_tensor[1].max()
-    print(
-        f"Estimated deformation field range: "
-        f"y=[{def_min_y:.1f}, {def_max_y:.1f}], "
-        f"x=[{def_min_x:.1f}, {def_max_x:.1f}]"
-    )
-
-    print(f"Estimated deformation field shape: {deformation_field_tensor.shape}")
+        print(f"Estimated deformation field shape: {deformation_field_tensor.shape}")
 
     deformation_field_tensor = deformation_field_tensor - torch.mean(
         deformation_field_tensor
@@ -503,6 +529,7 @@ def _apply_outlier_rejection(
     shift_x: torch.Tensor,  # (gh, gw) x shifts
     outlier_threshold: float,  # standard deviations from median
     frame_idx: int,  # For logging
+    verbose: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply outlier rejection to patch shifts using standard deviation from median.
@@ -520,6 +547,8 @@ def _apply_outlier_rejection(
         Threshold in standard deviations from median for outlier detection
     frame_idx: int
         Frame index for logging purposes
+    verbose: bool
+        Whether to print outlier counts. Default is False.
 
     Returns
     -------
@@ -561,7 +590,7 @@ def _apply_outlier_rejection(
     num_outliers_combined = outliers_combined.sum().item()
     total_patches = shift_y_flat.numel()
 
-    if num_outliers_combined > 0:
+    if verbose and num_outliers_combined > 0:
         print(
             f"Frame {frame_idx}: Found {num_outliers_y} Y outliers, "
             f"{num_outliers_x} X outliers, {num_outliers_combined} patches "
