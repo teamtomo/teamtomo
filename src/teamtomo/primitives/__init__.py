@@ -70,6 +70,11 @@ try:
     import torch_transform_image
 except ImportError:
     torch_transform_image = None
+    
+try:
+    import torch_local_resolution
+except ImportError:
+   torch_local_resolution = None
 
 __all__ = [
     "torch_affine_utils",
@@ -86,4 +91,5 @@ __all__ = [
     "torch_so3",
     "torch_subpixel_crop",
     "torch_transform_image",
+    "torch_local_resolution",
 ]

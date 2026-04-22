@@ -1,0 +1,56 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^torch-local-resolution@v(?P<version>.+)$"
+fallback-version = "0.5.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+tag_regex = "^torch-local-resolution@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-local-resolution@v[0-9]*.[0-9]*.[0-9]*'"
+
+# read more about configuring hatch at:
+# https://hatch.pypa.io/latest/config/build/
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "torch-local-resolution"
+dynamic = ["version"]
+description = "Core functionality for local resolution estimation of cryo-EM half-maps"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "David Kartte", email = "David@kartte.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=2.2.6",
+    "pydantic>=2.0,<3",
+    "torch",
+    "torch-fourier-filter>=0.3.7",
+    "torch-grid-utils>=0.1.2",
+    "mrcfile",
+]
+
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+# https://coverage.readthedocs.io/
+[tool.coverage.run]
+source = ["torch_local_resolution"]

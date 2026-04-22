@@ -31,6 +31,7 @@ dependencies = [
     "torch-refine-tilt-axis-angle",
     "torch-segment-fiducials-2d",
     "torch-tiltxcorr",
+    "torch-local-resolution",
     "teamtomo-basemodel",
 ]
 
@@ -60,6 +61,7 @@ torch-cryoeraser = { workspace = true }
 torch-refine-tilt-axis-angle = { workspace = true }
 torch-segment-fiducials-2d = { workspace = true }
 torch-tiltxcorr = { workspace = true }
+torch-local-resolution = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 
 [tool.uv.workspace]
