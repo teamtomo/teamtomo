@@ -394,7 +394,7 @@ def _correct_frame_slow(
     tyx = F.pad(normalized_pixel_grid, pad=(1, 0), value=t)
 
     # evaluate interpolated shifts at every pixel
-    shifts_px = DeformationField(data=deformation_grid).evaluate_at(tyx)
+    shifts_px = DeformationField(data=deformation_grid)(tyx)
 
     # find pixel positions to sample image data at, accounting for deformations
     deformed_pixel_coords = pixel_grid + shifts_px

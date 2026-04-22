@@ -18,7 +18,7 @@ def evaluate_deformation_field(
         deformation_field = DeformationField(
             data=deformation_field, grid_type=grid_type
         )
-    return deformation_field.evaluate_at(tyx)
+    return deformation_field(tyx)  # Call directly to evaluate at tyx coordinates
 
 
 def evaluate_deformation_field_at_t(

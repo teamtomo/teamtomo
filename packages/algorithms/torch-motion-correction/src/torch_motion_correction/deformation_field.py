@@ -100,21 +100,6 @@ class DeformationField:
             grid_type=self.grid_type,
         )
 
-    def evaluate_at(self, tyx: torch.Tensor) -> torch.Tensor:
-        """Evaluate interpolated shifts at arbitrary (t, y, x) coordinates.
-
-        Parameters
-        ----------
-        tyx : torch.Tensor
-            (..., 3) tensor of normalized (t, y, x) coordinates in [0, 1].
-
-        Returns
-        -------
-        torch.Tensor
-            (..., 2) tensor of (y, x) shifts in Angstroms.
-        """
-        return self(tyx)
-
     def evaluate_at_t(self, t: float, grid_shape: tuple[int, int]) -> torch.Tensor:
         """Evaluate the deformation field at a single timepoint for a spatial grid.
 
@@ -160,7 +145,7 @@ class DeformationField:
         x = torch.linspace(0, 1, steps=nw)
         tt, yy, xx = torch.meshgrid(t, y, x, indexing="ij")
         tyx = einops.rearrange([tt, yy, xx], "tyx nt nh nw -> nt nh nw tyx")
-        new_data = self.evaluate_at(tyx.to(self.device))
+        new_data = self(tyx.to(self.device))
         new_data = einops.rearrange(new_data, "nt nh nw yx -> yx nt nh nw")
         return DeformationField(data=new_data, grid_type=self.grid_type)
 
