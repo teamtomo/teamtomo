@@ -4,7 +4,7 @@ Core functionality for local resolution estimation of cryo-EM half-maps.
 
 ## Overview
 
-`torch-local-resolution` estimates local resolution in by computing the local cosine-similarity between two bandpass-filtered half-maps. For each resolution shell, the correlation is meausred within a sliding spherical window across the map. Statistical significance is assessed by comparing observed correlations against a null distribution built from phase-permuted or voxel-shuffled surrogates.
+`torch-local-resolution` estimates local resolution by computing the local cosine similarity between two bandpass-filtered half-maps. For each resolution shell, the correlation is measured within a sliding spherical window across the map. Statistical significance is assessed by comparing the observed correlations against a null distribution derived from phase-permuted or voxel-shuffled surrogates.
 
 - Supports 2D (single-slice) and 3D half-maps
 - Batched processing of multiple half-map pairs
