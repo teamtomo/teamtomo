@@ -1,34 +1,55 @@
-# localResolution-TeamTomo
+# torch-local-resolution
 
-[![License](https://img.shields.io/pypi/l/localResolution-TeamTomo.svg?color=green)](https://github.com/DavidKart/localResolution-TeamTomo/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/localResolution-TeamTomo.svg?color=green)](https://pypi.org/project/localResolution-TeamTomo)
-[![Python Version](https://img.shields.io/pypi/pyversions/localResolution-TeamTomo.svg?color=green)](https://python.org)
-[![CI](https://github.com/DavidKart/localResolution-TeamTomo/actions/workflows/ci.yml/badge.svg)](https://github.com/DavidKart/localResolution-TeamTomo/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/DavidKart/localResolution-TeamTomo/branch/main/graph/badge.svg)](https://codecov.io/gh/DavidKart/localResolution-TeamTomo)
+Core functionality for local resolution estimation of cryo-EM half-maps.
 
-Core functionality for local resolution estimation of cryo-EM half-maps
+## Overview
 
-## Development
+`torch-local-resolution` estimates local resolution in by computing the local cosine-similarity between two bandpass-filtered half-maps. For each resolution shell, the correlation is meausred within a sliding spherical window across the map. Statistical significance is assessed by comparing observed correlations against a null distribution built from phase-permuted or voxel-shuffled surrogates.
 
-The easiest way to get started is to use the [github cli](https://cli.github.com)
-and [uv](https://docs.astral.sh/uv/getting-started/installation/):
+- Supports 2D (single-slice) and 3D half-maps
+- Batched processing of multiple half-map pairs
+- Configurable resolution shells, window sizes, and step sizes
+- Statistical p-value maps or raw correlation output
 
-```sh
-gh repo fork DavidKart/localResolution-TeamTomo --clone
-# or just
-# gh repo clone DavidKart/localResolution-TeamTomo
-cd localResolution-TeamTomo
-uv sync
-```
+## Installation
 
-Run tests:
+This package is part of the [TeamTomo monorepo](https://github.com/teamtomo/teamtomo). See the main repository README for development setup instructions.
 
-```sh
-uv run pytest
-```
+## Usage
 
-Lint files:
+```python
+import torch
+from torch_local_resolution import estimate_local_resolution
 
-```sh
-uv run pre-commit run --all-files
+# Load your half-maps as (B, Z, Y, X) tensors
+# For 2D maps, set Z=1: (B, 1, Y, X)
+half_map1 = torch.randn(1, 64, 64, 64)
+half_map2 = torch.randn(1, 64, 64, 64)
+
+# Define resolution shells and matching window radii
+resolutions = [10.0, 8.0, 6.0, 4.0]  # in Ångström
+windows_radii = [5.5, 5.0, 4.0, 3.0]  # in voxels, one per shell
+
+# Compute local resolution p-value map
+pvalue_map = estimate_local_resolution(
+    apix=1.0,                    # voxel size in Å/pixel
+    windows_radii=windows_radii,
+    resolutions=resolutions,
+    batch_half_map1=half_map1,
+    batch_half_map2=half_map2,
+    step_size=3,                 # stride between sampling points
+    gpu_id=0,                   # use first CUDA device (None for CPU)
+)
+
+# To get raw correlation values instead of p-values
+correlation_map = estimate_local_resolution(
+    apix=1.0,
+    windows_radii=windows_radii,
+    resolutions=resolutions,
+    batch_half_map1=half_map1,
+    batch_half_map2=half_map2,
+    step_size=3,
+    gpu_id=0,
+    skip_statistics=True,
+)
 ```
