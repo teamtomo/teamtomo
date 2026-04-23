@@ -48,6 +48,14 @@ class DeformationField:
         data: torch.Tensor,
         grid_type: str = "catmull_rom",
     ):
+        """Initialize deformation field object from tesnor data and grid type.
+
+        Note
+        ----
+        Deformation field will exist on the same device as the input data tensor. This
+        also means the underlying CubicSplineGrid will exist on the same device.
+        """
+        device = data.device
         self.data = data
         self.grid_type = grid_type
 
@@ -66,6 +74,10 @@ class DeformationField:
                 f"Unsupported grid type: {grid_type!r}. "
                 "Must be 'catmull_rom' or 'bspline'."
             )
+        # from_grid_data registers the interpolation_matrix buffer on CPU (it's a
+        # module-level constant). Moving the grid here ensures the buffer follows
+        # the data's device when constructed from a non-CPU tensor.
+        self._grid = self._grid.to(device)
 
     # --- Convenience methods for evaluation --------------
 
