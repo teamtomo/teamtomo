@@ -3,6 +3,70 @@
 import torch
 
 
+class EarlyStopping:
+    """Plateau-style early stopping using a moving average of the loss.
+
+    Parameters
+    ----------
+    patience : int
+        Number of steps without significant improvement before stopping. Default is 5.
+    window_size : int
+        Number of recent loss values to average for smoothing. Default is 3.
+    tolerance : float
+        Minimum relative improvement in the smoothed loss to reset the patience
+        counter. Default is 1e-5.
+    """
+
+    def __init__(
+        self,
+        patience: int = 5,
+        window_size: int = 3,
+        tolerance: float = 1e-5,
+    ) -> None:
+        self.patience = patience
+        self.window_size = window_size
+        self.tolerance = tolerance
+
+        self._loss_history: list[float] = []
+        self._wait: int = 0
+        self._best_smoothed_loss: float = float("inf")
+        self.stop: bool = False
+
+    def update(self, loss: float) -> bool:
+        """Update state with the latest loss value and return whether to stop.
+
+        Parameters
+        ----------
+        loss : float
+            Loss value at the current optimization step.
+
+        Returns
+        -------
+        bool
+            True if optimization should stop, False otherwise.
+        """
+        self._loss_history.append(loss)
+
+        if len(self._loss_history) < self.window_size:
+            return False
+
+        smoothed = sum(self._loss_history[-self.window_size :]) / self.window_size
+        improvement = (self._best_smoothed_loss - smoothed) / (
+            abs(self._best_smoothed_loss) + 1e-9
+        )
+
+        if improvement > self.tolerance:
+            self._best_smoothed_loss = smoothed
+            self._wait = 0
+        else:
+            self._wait += 1
+
+        if self._wait >= self.patience:
+            self.stop = True
+
+        return self.stop
+
+
 class OptimizationState:
     """Dataclass storing optimization state at a single iteration.
 

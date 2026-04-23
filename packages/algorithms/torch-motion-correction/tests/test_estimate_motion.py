@@ -3,13 +3,13 @@
 import pytest
 import torch
 
+from torch_motion_correction.deformation_field import DeformationField
 from torch_motion_correction.estimate_motion_optimizer import estimate_local_motion
 from torch_motion_correction.estimate_motion_xc import (
     estimate_global_motion,
     estimate_motion_cross_correlation_patches,
 )
 from torch_motion_correction.types import (
-    DeformationField,
     FourierFilterConfig,
     OptimizationConfig,
     PatchSamplingConfig,
@@ -229,7 +229,7 @@ class TestEstimateLocalMotion:
             pixel_spacing=pixel_spacing,
             deformation_field_resolution=(sample_image.shape[0], 2, 2),
             patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
-            optimization=OptimizationConfig(n_iterations=2),
+            optimization=OptimizationConfig(max_iterations=2),
             device=torch.device("cpu"),
         )
         assert isinstance(result, DeformationField)
@@ -247,7 +247,7 @@ class TestEstimateLocalMotion:
             deformation_field_resolution=(sample_image.shape[0], 2, 2),
             patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
             initial_deformation_field=initial_field,
-            optimization=OptimizationConfig(n_iterations=2),
+            optimization=OptimizationConfig(max_iterations=2),
             device=torch.device("cpu"),
         )
         assert result.shape == (2, sample_image.shape[0], 2, 2)
@@ -261,7 +261,7 @@ class TestEstimateLocalMotion:
                 deformation_field_resolution=(sample_image.shape[0], 2, 2),
                 patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
                 optimization=OptimizationConfig(
-                    n_iterations=2, optimizer_type=optimizer_type
+                    max_iterations=2, optimizer_type=optimizer_type
                 ),
                 device=torch.device("cpu"),
             )
@@ -275,7 +275,7 @@ class TestEstimateLocalMotion:
                 pixel_spacing=pixel_spacing,
                 deformation_field_resolution=(sample_image.shape[0], 2, 2),
                 patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
-                optimization=OptimizationConfig(n_iterations=2, grid_type=grid_type),
+                optimization=OptimizationConfig(max_iterations=2, grid_type=grid_type),
                 device=torch.device("cpu"),
             )
             assert result.shape == (2, sample_image.shape[0], 2, 2)
@@ -289,7 +289,7 @@ class TestEstimateLocalMotion:
                 pixel_spacing=pixel_spacing,
                 deformation_field_resolution=(sample_image.shape[0], 2, 2),
                 patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
-                optimization=OptimizationConfig(n_iterations=2, loss_type=loss_type),
+                optimization=OptimizationConfig(max_iterations=2, loss_type=loss_type),
                 device=torch.device("cpu"),
             )
             assert result.shape == (2, sample_image.shape[0], 2, 2)
@@ -302,7 +302,7 @@ class TestEstimateLocalMotion:
             deformation_field_resolution=(sample_image.shape[0], 2, 2),
             patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
             optimization=OptimizationConfig(
-                n_iterations=2,
+                max_iterations=2,
                 optimizer_type="adam",
                 optimizer_kwargs={"lr": 0.001},
             ),
@@ -318,7 +318,7 @@ class TestEstimateLocalMotion:
             deformation_field_resolution=(sample_image.shape[0], 2, 2),
             patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
             fourier_filter=FourierFilterConfig(b_factor=1000, frequency_range=(200, 5)),
-            optimization=OptimizationConfig(n_iterations=2),
+            optimization=OptimizationConfig(max_iterations=2),
             device=torch.device("cpu"),
         )
         assert result.shape == (2, sample_image.shape[0], 2, 2)
@@ -330,7 +330,7 @@ class TestEstimateLocalMotion:
             pixel_spacing=pixel_spacing,
             deformation_field_resolution=(sample_image.shape[0], 2, 2),
             patch_sampling=PatchSamplingConfig(patch_shape=(32, 32), overlap=0.25),
-            optimization=OptimizationConfig(n_iterations=2),
+            optimization=OptimizationConfig(max_iterations=2),
             device=torch.device("cpu"),
         )
         assert isinstance(result, DeformationField)
