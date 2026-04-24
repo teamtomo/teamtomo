@@ -27,12 +27,13 @@ half_map1 = torch.randn(1, 64, 64, 64)
 half_map2 = torch.randn(1, 64, 64, 64)
 
 # Define resolution shells and matching window radii
+apix=1.0
 resolutions = [10.0, 8.0, 6.0, 4.0]  # in Ångström
-windows_radii = [5.5, 5.0, 4.0, 3.0]  # in voxels, one per shell
+windows_radii = [10.5, 9.1, 7.2, 4.5]  # in voxels, one per shell
 
 # Compute local resolution p-value map
 pvalue_map = estimate_local_resolution(
-    apix=1.0,                    # voxel size in Å/pixel
+    apix=apix,                    # voxel size in Å/pixel
     windows_radii=windows_radii,
     resolutions=resolutions,
     batch_half_map1=half_map1,

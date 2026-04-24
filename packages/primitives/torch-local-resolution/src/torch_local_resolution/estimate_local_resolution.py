@@ -16,6 +16,86 @@ from . import utils, utils_correlations
 from .input_models import ComputeResolutionInput
 
 
+def _bandpass_halfmaps(
+    fft_pairs: list[
+        tuple[torch.Tensor, torch.Tensor, tuple[int, ...], tuple[int, ...]]
+    ],
+    bandpass_filter: torch.Tensor,
+    b: int,
+) -> tuple[torch.Tensor, torch.Tensor, tuple[int, ...], tuple[int, ...]]:
+    """Apply bandpass and invert both half-maps for a single batch element."""
+    fft1, fft2, padded_image_shape_b, fft_crop_b = fft_pairs[b]
+
+    sample1_filtered = utils.apply_bandpass_and_invert(
+        fft1, bandpass_filter, padded_image_shape_b, fft_crop_b
+    )
+    sample2_filtered = utils.apply_bandpass_and_invert(
+        fft2, bandpass_filter, padded_image_shape_b, fft_crop_b
+    )
+
+    return (sample1_filtered, sample2_filtered, padded_image_shape_b, fft_crop_b)
+
+
+def _prepare_fft_pairs(
+    batch_half_map1: torch.Tensor,
+    batch_half_map2: torch.Tensor,
+    n_batch: int,
+    pad: int,
+    device: torch.device,
+    n_random_maps: int = 0,
+    do_phase_permutation: bool = False,
+) -> tuple[
+    list[tuple[torch.Tensor, torch.Tensor, tuple[int, ...], tuple[int, ...]]],
+    list[list[torch.Tensor]],
+]:
+    """Compute FFT pairs for each batch element and, optionally, permutation surrogates."""
+    fft_pairs = []
+    permutation_maps_fft_all = []
+
+    for b in range(n_batch):
+        fft1, fft2, padded_image_shape, fft_crop = utils.prepare_halfmaps_for_fft(
+            utils.spatial_map_bzyx(batch_half_map1, b),
+            utils.spatial_map_bzyx(batch_half_map2, b),
+            pad=pad,
+            device=device,
+        )
+        fft_pairs.append((fft1, fft2, padded_image_shape, fft_crop))
+
+        if n_random_maps <= 0:
+            continue
+
+        perm_ffts = []
+        for _ in range(n_random_maps):
+            # Surrogate half-map 2: phase_permutation on fft2, or real-space shuffle
+            # on the padded grid then rfftn.
+            if do_phase_permutation:
+                perm_ffts.append(
+                    phase_permutation(
+                        fft2,
+                        image_shape=padded_image_shape,
+                        rfft=True,
+                        cuton=0,
+                        fftshift=False,
+                        device=device,
+                    )
+                )
+            else:
+                vol_b = utils.spatial_map_bzyx(batch_half_map2, b)
+                t_flat = vol_b.flatten().float().to(device)
+                idx = (
+                    torch.randperm(int(np.prod(padded_image_shape)), device=device)
+                    % t_flat.numel()
+                )
+                permutation_map = t_flat[idx].reshape(padded_image_shape)
+                fft3 = torch.fft.rfftn(
+                    permutation_map, dim=list(range(len(padded_image_shape)))
+                )
+                perm_ffts.append(fft3)
+        permutation_maps_fft_all.append(perm_ffts)
+
+    return fft_pairs, permutation_maps_fft_all
+
+
 def _prepare_device_and_geometry(
     inp: ComputeResolutionInput,
 ) -> tuple[
@@ -93,16 +173,13 @@ def compute_correlation(inp: ComputeResolutionInput) -> torch.Tensor:
     ) = _prepare_device_and_geometry(inp)
 
     # Per batch element: rFFT both half-maps and build Fourier-domain surrogates.
-    fft_pairs = []
-
-    for b in range(n_batch):
-        fft1, fft2, padded_image_shape, fft_crop = utils.prepare_halfmaps_for_fft(
-            utils.spatial_map_bzyx(batch_half_map1, b),
-            utils.spatial_map_bzyx(batch_half_map2, b),
-            pad=pad,
-            device=device,
-        )
-        fft_pairs.append((fft1, fft2, padded_image_shape, fft_crop))
+    fft_pairs, _ = _prepare_fft_pairs(
+        batch_half_map1,
+        batch_half_map2,
+        n_batch,
+        pad,
+        device,
+    )
 
     # Padded FFT grid shape is the same for every b when input shapes match.
     _, _, padded_image_shape, _ = fft_pairs[0]
@@ -139,13 +216,8 @@ def compute_correlation(inp: ComputeResolutionInput) -> torch.Tensor:
 
         for b in range(n_batch):
             # Band-limit real half-maps and each surrogate; crop off FFT zero-pad.
-            fft1, fft2, padded_image_shape_b, fft_crop_b = fft_pairs[b]
-
-            sample1_filtered = utils.apply_bandpass_and_invert(
-                fft1, bandpass_filter, padded_image_shape_b, fft_crop_b
-            )
-            sample2_filtered = utils.apply_bandpass_and_invert(
-                fft2, bandpass_filter, padded_image_shape_b, fft_crop_b
+            sample1_filtered, sample2_filtered, _, _ = _bandpass_halfmaps(
+                fft_pairs, bandpass_filter, b
             )
 
             # Local window mask, permutation null, grid scan -> correlation values.
@@ -202,48 +274,15 @@ def compute_resolution(inp: ComputeResolutionInput) -> torch.Tensor:
         )
 
     # Per batch element: rFFT both half-maps and build Fourier-domain surrogates.
-    fft_pairs = []
-    permutation_maps_fft_all = []
-
-    for b in range(n_batch):
-        fft1, fft2, padded_image_shape, fft_crop = utils.prepare_halfmaps_for_fft(
-            utils.spatial_map_bzyx(batch_half_map1, b),
-            utils.spatial_map_bzyx(batch_half_map2, b),
-            pad=pad,
-            device=device,
-        )
-        fft_pairs.append((fft1, fft2, padded_image_shape, fft_crop))
-
-        perm_ffts = []
-
-        for _ in range(inp.n_random_maps):
-            # Surrogate half-map 2: phase_permutation on fft2, or real-space shuffle
-            # on the padded grid then rfftn.
-            if inp.do_phase_permutation:
-                perm_ffts.append(
-                    phase_permutation(
-                        fft2,
-                        image_shape=padded_image_shape,
-                        rfft=True,
-                        cuton=0,
-                        fftshift=False,
-                        device=device,
-                    )
-                )
-            else:
-                vol_b = utils.spatial_map_bzyx(batch_half_map2, b)
-                t_flat = vol_b.flatten().float().to(device)
-                idx = (
-                    torch.randperm(int(np.prod(padded_image_shape)), device=device)
-                    % t_flat.numel()
-                )
-                permutation_map = t_flat[idx].reshape(padded_image_shape)
-                fft3 = torch.fft.rfftn(
-                    permutation_map, dim=list(range(len(padded_image_shape)))
-                )
-                perm_ffts.append(fft3)
-
-        permutation_maps_fft_all.append(perm_ffts)
+    fft_pairs, permutation_maps_fft_all = _prepare_fft_pairs(
+        batch_half_map1,
+        batch_half_map2,
+        n_batch,
+        pad,
+        device,
+        n_random_maps=inp.n_random_maps,
+        do_phase_permutation=inp.do_phase_permutation,
+    )
 
     # Padded FFT grid shape is the same for every b when input shapes match.
     _, _, padded_image_shape, _ = fft_pairs[0]
@@ -279,13 +318,8 @@ def compute_resolution(inp: ComputeResolutionInput) -> torch.Tensor:
 
         for b in range(n_batch):
             # Band-limit real half-maps and each surrogate; crop off FFT zero-pad.
-            fft1, fft2, padded_image_shape_b, fft_crop_b = fft_pairs[b]
-
-            sample1_filtered = utils.apply_bandpass_and_invert(
-                fft1, bandpass_filter, padded_image_shape_b, fft_crop_b
-            )
-            sample2_filtered = utils.apply_bandpass_and_invert(
-                fft2, bandpass_filter, padded_image_shape_b, fft_crop_b
+            sample1_filtered, sample2_filtered, padded_image_shape_b, fft_crop_b = (
+                _bandpass_halfmaps(fft_pairs, bandpass_filter, b)
             )
 
             permutated_sample2_filtered = []
