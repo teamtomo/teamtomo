@@ -3757,7 +3757,7 @@ requires-dist = [
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
-    { name = "torch-local-resolution", editable = "packages/primitives/torch-local-resolution" },
+    { name = "torch-local-resolution", editable = "packages/algorithms/torch-local-resolution" },
     { name = "torch-motion-correction", editable = "packages/algorithms/torch-motion-correction" },
     { name = "torch-refine-tilt-axis-angle", editable = "packages/algorithms/torch-refine-tilt-axis-angle" },
     { name = "torch-segment-fiducials-2d", editable = "packages/algorithms/torch-segment-fiducials-2d" },
@@ -4638,7 +4638,7 @@ test = [
 
 [[package]]
 name = "torch-local-resolution"
-source = { editable = "packages/primitives/torch-local-resolution" }
+source = { editable = "packages/algorithms/torch-local-resolution" }
 dependencies = [
     { name = "mrcfile" },
     { name = "numpy" },
