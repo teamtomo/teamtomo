@@ -88,6 +88,59 @@ def test_fourier_rescale_3d_mean(sphere, spacing):
     assert rescaled.mean() != pytest.approx(sphere.mean())
 
 
+# Cover every parity combination of source / target / direction. Pre-fix, the
+# 2D fast path collapsed the mean to ~0 when source and target had different
+# parity (e.g. even source, odd target — the common case when rescaling a
+# 4096^2 image to a non-power-of-two spacing). Regression test ensures the
+# fast path keeps the DC component in the correct frequency bin for every
+# parity combination.
+@pytest.mark.parametrize(
+    "source_shape,target_shape",
+    [
+        # 2D downscale: even -> even (works pre-fix)
+        ((16, 16), (8, 8)),
+        # 2D downscale: even -> odd (BROKEN pre-fix)
+        ((16, 16), (7, 7)),
+        # 2D downscale: odd -> even
+        ((15, 15), (8, 8)),
+        # 2D downscale: odd -> odd
+        ((15, 15), (7, 7)),
+        # 2D upscale: even -> odd
+        ((8, 8), (15, 15)),
+        # 2D upscale: odd -> even
+        ((7, 7), (16, 16)),
+        # Asymmetric source/target (cryo-EM tilt-stack-like aspect ratio)
+        ((4096, 4096), (609, 609)),
+    ],
+)
+def test_fourier_rescale_2d_preserves_mean_for_all_parities(source_shape, target_shape):
+    torch.manual_seed(0)
+    image = torch.full(source_shape, 5.0) + 0.01 * torch.randn(source_shape)
+    rescaled, _ = fourier_rescale_2d(
+        image=image, target_shape=target_shape, preserve_mean=True
+    )
+    assert tuple(rescaled.shape) == target_shape
+    assert rescaled.mean().item() == pytest.approx(image.mean().item(), abs=1e-3)
+
+
+@pytest.mark.parametrize(
+    "source_shape,target_shape",
+    [
+        ((16, 16, 16), (7, 7, 7)),
+        ((15, 15, 15), (8, 8, 8)),
+        ((7, 7, 7), (16, 16, 16)),
+    ],
+)
+def test_fourier_rescale_3d_preserves_mean_for_all_parities(source_shape, target_shape):
+    torch.manual_seed(0)
+    image = torch.full(source_shape, 5.0) + 0.01 * torch.randn(source_shape)
+    rescaled, _ = fourier_rescale_3d(
+        image=image, target_shape=target_shape, preserve_mean=True
+    )
+    assert tuple(rescaled.shape) == target_shape
+    assert rescaled.mean().item() == pytest.approx(image.mean().item(), abs=1e-3)
+
+
 @pytest.mark.parametrize(
     "dtype", [int, float, np.float32, np.float64, torch.float32, torch.float64]
 )
