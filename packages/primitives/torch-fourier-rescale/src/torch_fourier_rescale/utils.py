@@ -1,3 +1,5 @@
+"""Utility functions for Fourier rescaling operations."""
+
 import numbers
 
 import numpy as np
@@ -88,16 +90,12 @@ def fourier_rescale_dimension(
             pad_spec = [0, 0] * (dft.ndim - dim - 1) + [0, pad_size] + [0, 0] * dim
             return F.pad(dft, pad_spec, mode="constant", value=0)
     else:
-        # For regular FFT dimensions (full frequency spectrum), the DC bin of
-        # an fftshift'd array of size N is at index `N // 2` and the upstream
-        # `torch.fft.ifftshift` expects it there too. The crop / pad must
-        # therefore leave the DC at position `target // 2` of the new array,
-        # not at `(source - target) // 2` from the start — those differ when
-        # source and target have different parity (e.g. even source, odd
-        # target). Using `total_crop // 2` (or `total_pad // 2`) silently
-        # placed the DC at the wrong index in those cases, sending it to a
-        # high-frequency bin after ifftshift and zeroing the mean of the
-        # reconstructed image.
+        # For regular FFT dimensions (full frequency spectrum)
+        # NOTE: DC bin for fftshift'd array expected at index `N // 2`. Cropping and
+        #       padding must preserve position in new array (position `target // 2`).
+        #       New code here fixes previous bug where DC was placed at
+        #       `(source - target) // 2` from start which is wrong when source and
+        #       target have different parity.
         if target_dim_length < source_dim_length:
             # Crop: keep central target_dim_length samples around the DC.
             crop_start = current_dft_size // 2 - target_dim_length // 2
