@@ -12,6 +12,7 @@ members = [
     "teamtomo-basemodel",
     "torch-2dtm",
     "torch-affine-utils",
+    "torch-align-volumes",
     "torch-cryoeraser",
     "torch-ctf",
     "torch-cubic-spline-grids",
@@ -3742,6 +3743,7 @@ dependencies = [
     { name = "teamtomo-basemodel" },
     { name = "torch-2dtm" },
     { name = "torch-affine-utils" },
+    { name = "torch-align-volumes" },
     { name = "torch-cryoeraser" },
     { name = "torch-ctf" },
     { name = "torch-cubic-spline-grids" },
@@ -3789,6 +3791,7 @@ requires-dist = [
     { name = "teamtomo-basemodel", editable = "packages/utils/teamtomo-basemodel" },
     { name = "torch-2dtm", editable = "packages/algorithms/torch-2dtm" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-align-volumes", editable = "packages/algorithms/torch-align-volumes" },
     { name = "torch-cryoeraser", editable = "packages/algorithms/torch-cryoeraser" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
@@ -4085,6 +4088,96 @@ dev = [
 test = [
     { name = "pytest" },
     { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-align-volumes"
+source = { editable = "packages/algorithms/torch-align-volumes" }
+dependencies = [
+    { name = "gemmi" },
+    { name = "mrcfile" },
+    { name = "pydantic" },
+    { name = "torch" },
+    { name = "torch-affine-utils" },
+    { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-fourier-rescale" },
+    { name = "torch-fourier-shell-correlation" },
+    { name = "torch-fourier-slice" },
+    { name = "torch-grid-utils" },
+    { name = "torch-image-interpolation" },
+    { name = "torch-so3" },
+    { name = "torch-transform-image" },
+    { name = "tqdm" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "scipy" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "scipy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gemmi" },
+    { name = "mrcfile" },
+    { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "torch" },
+    { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-calculate-electrostatic-potential", git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
+    { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+    { name = "torch-so3", editable = "packages/primitives/torch-so3" },
+    { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
+    { name = "tqdm" },
+    { name = "typer" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "scipy" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "scipy" },
+]
+
+[[package]]
+name = "torch-calculate-electrostatic-potential"
+version = "0.1.0"
+source = { git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git#225eac4c5de4bb4067e72cfc92b8d8d1a51f35d0" }
+dependencies = [
+    { name = "gemmi" },
+    { name = "numpy" },
+    { name = "setuptools" },
+    { name = "torch" },
+    { name = "tqdm" },
 ]
 
 [[package]]
