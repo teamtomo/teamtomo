@@ -1,4 +1,4 @@
-"""Command-line interfaces for torch-align-volumes."""
+"""Command-line interfaces for torch-fit-in-map."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ _PDB_SUFFIXES = {".pdb", ".cif", ".mmcif", ".ent"}
 _MRC_SUFFIXES = {".mrc", ".map", ".rec"}
 
 align_app = typer.Typer(
-    name="torch-align-volumes",
+    name="torch-fit-in-map",
     help="Rigid-body volume alignment for cryo-EM density maps.",
     add_completion=False,
 )

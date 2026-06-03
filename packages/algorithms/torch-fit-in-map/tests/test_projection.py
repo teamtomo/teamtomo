@@ -2,7 +2,7 @@
 
 import torch
 
-from torch_align_volumes import ProjectionAlignmentConfig, projection_align
+from torch_fit_in_map import ProjectionAlignmentConfig, projection_align
 
 
 def test_projection_align_identity():

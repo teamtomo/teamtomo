@@ -10,8 +10,8 @@ fallback-version = "0.1.0"
 
 [tool.hatch.version.raw-options]
 search_parent_directories = true
-tag_regex = "^torch-align-volumes@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
-git_describe_command = "git describe --dirty --tags --long --match 'torch-align-volumes@v[0-9]*.[0-9]*.[0-9]*'"
+tag_regex = "^torch-fit-in-map@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-fit-in-map@v[0-9]*.[0-9]*.[0-9]*'"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -22,7 +22,7 @@ sources = ["src"]
 
 # https://peps.python.org/pep-0621/
 [project]
-name = "torch-align-volumes"
+name = "torch-fit-in-map"
 dynamic = ["version"]
 description = "Map-to-map volume alignment for cryo-EM in PyTorch"
 readme = "README.md"
@@ -62,8 +62,8 @@ homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
 
 [project.scripts]
-torch-align-volumes = "torch_align_volumes._cli:align_app"
-torch-simulate-density = "torch_align_volumes._cli:simulate_app"
+torch-fit-in-map = "torch_fit_in_map._cli:align_app"
+torch-simulate-density = "torch_fit_in_map._cli:simulate_app"
 
 # https://peps.python.org/pep-0735/
 [dependency-groups]
@@ -138,4 +138,4 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["torch_align_volumes"]
+source = ["torch_fit_in_map"]

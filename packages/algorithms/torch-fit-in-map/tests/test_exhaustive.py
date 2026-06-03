@@ -3,8 +3,8 @@
 import torch
 import pytest
 
-from torch_align_volumes import ExhaustiveSearchConfig, exhaustive_search
-from torch_align_volumes._exhaustive import (
+from torch_fit_in_map import ExhaustiveSearchConfig, exhaustive_search
+from torch_fit_in_map._exhaustive import (
     _euler_zyz_to_4x4_zyx,
     _argmax_to_shift,
     _parse_symmetry,
@@ -106,7 +106,7 @@ def test_exhaustive_search_with_symmetry():
 
 def test_exhaustive_topk_returns_k_results():
     """_exhaustive_topk with n_start=3 should return 3 results sorted best-first."""
-    from torch_align_volumes._exhaustive import _exhaustive_topk
+    from torch_fit_in_map._exhaustive import _exhaustive_topk
 
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)
@@ -118,7 +118,7 @@ def test_exhaustive_topk_returns_k_results():
 
 def test_align_volumes_multistart():
     """align_volumes with n_start=3 should return the best NCC-scored refined result."""
-    from torch_align_volumes import align_volumes, GradientRefinementConfig
+    from torch_fit_in_map import align_volumes, GradientRefinementConfig
 
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)

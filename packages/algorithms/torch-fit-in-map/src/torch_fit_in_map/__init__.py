@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("torch-align-volumes")
+    __version__ = version("torch-fit-in-map")
 except PackageNotFoundError:
     __version__ = "uninstalled"
 
@@ -40,7 +40,7 @@ def align_volumes(
     """Align *mobile* onto *reference* via exhaustive SO(3) search + refinement.
 
     Both volumes must share the same voxel size.  Call
-    :func:`~torch_align_volumes._preprocess.normalise_voxel_sizes` first if
+    :func:`~torch_fit_in_map._preprocess.normalise_voxel_sizes` first if
     they differ, or use :func:`align_volumes_from_files` which handles this
     automatically.
 
@@ -234,7 +234,7 @@ def align_map_to_pdb(
     box_size : int
         Cubic box size for the simulated density (voxels).
     simulator : DensitySimulator or None
-        Density simulator.  See :class:`~torch_align_volumes.DensitySimulator`.
+        Density simulator.  See :class:`~torch_fit_in_map.DensitySimulator`.
         When ``None``, a placeholder is used that raises ``NotImplementedError``
         with guidance until ``torch-calculate-electrostatic-potential`` is
         available.

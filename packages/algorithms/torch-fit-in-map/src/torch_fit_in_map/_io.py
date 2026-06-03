@@ -323,7 +323,7 @@ def align_map_to_pdb_from_files(
         If given, the simulated MRC is saved to this path.
     simulator : DensitySimulator or None
         Density simulator.  Defaults to
-        :data:`~torch_align_volumes._simulate.DEFAULT_SIMULATOR` which raises
+        :data:`~torch_fit_in_map._simulate.DEFAULT_SIMULATOR` which raises
         ``NotImplementedError`` with guidance until
         ``torch-calculate-electrostatic-potential`` is available.
     exhaustive_config : ExhaustiveSearchConfig or None

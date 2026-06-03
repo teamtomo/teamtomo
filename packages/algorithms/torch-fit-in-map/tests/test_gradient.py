@@ -2,8 +2,8 @@
 
 import torch
 
-from torch_align_volumes import GradientRefinementConfig, gradient_refine
-from torch_align_volumes._gradient import (
+from torch_fit_in_map import GradientRefinementConfig, gradient_refine
+from torch_fit_in_map._gradient import (
     _axis_angle_to_rotation_matrix_xyz,
     _rotation_matrix_xyz_to_axis_angle,
     _flip_3x3,

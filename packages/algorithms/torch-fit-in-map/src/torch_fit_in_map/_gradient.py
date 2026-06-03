@@ -72,7 +72,7 @@ def _transform_volume(
     Implements: ``output[p] = volume[R_zyx @ (p - t - c) + c]``, i.e. first
     shift the sampling grid by *t*, then rotate around box-centre *c*.  This
     matches the convention used by the exhaustive search and
-    :func:`~torch_align_volumes.apply_alignment`.
+    :func:`~torch_fit_in_map.apply_alignment`.
 
     Parameters
     ----------

@@ -18,7 +18,7 @@ def _write_test_mrc(path: Path, data: np.ndarray, voxel_size: float = 1.0) -> No
 
 def test_align_volumes_from_files_same_map(tmp_path):
     """Aligning identical maps from files should recover near-identity rotation."""
-    from torch_align_volumes import ExhaustiveSearchConfig, align_volumes_from_files
+    from torch_fit_in_map import ExhaustiveSearchConfig, align_volumes_from_files
     import torch
 
     data = np.random.rand(20, 20, 20).astype(np.float32)
@@ -39,7 +39,7 @@ def test_align_volumes_from_files_same_map(tmp_path):
 
 def test_align_volumes_from_files_voxel_size_mismatch(tmp_path):
     """Files with different voxel sizes should be rescaled and still align."""
-    from torch_align_volumes import ExhaustiveSearchConfig, align_volumes_from_files
+    from torch_fit_in_map import ExhaustiveSearchConfig, align_volumes_from_files
 
     data = np.random.rand(20, 20, 20).astype(np.float32)
     ref_path = tmp_path / "ref.mrc"
@@ -59,7 +59,7 @@ def test_align_volumes_from_files_voxel_size_mismatch(tmp_path):
 
 def test_crop_or_pad_larger(tmp_path):
     """crop_or_pad_to_shape should center-crop a larger volume."""
-    from torch_align_volumes import crop_or_pad_to_shape
+    from torch_fit_in_map import crop_or_pad_to_shape
 
     vol = torch.ones(30, 30, 30)
     out = crop_or_pad_to_shape(vol, (20, 20, 20))
@@ -68,7 +68,7 @@ def test_crop_or_pad_larger(tmp_path):
 
 def test_crop_or_pad_smaller(tmp_path):
     """crop_or_pad_to_shape should zero-pad a smaller volume."""
-    from torch_align_volumes import crop_or_pad_to_shape
+    from torch_fit_in_map import crop_or_pad_to_shape
 
     vol = torch.ones(10, 10, 10)
     out = crop_or_pad_to_shape(vol, (20, 20, 20))
@@ -80,7 +80,7 @@ def test_crop_or_pad_smaller(tmp_path):
 
 def test_crop_or_pad_non_cubic(tmp_path):
     """crop_or_pad_to_shape should handle non-cubic targets."""
-    from torch_align_volumes import crop_or_pad_to_shape
+    from torch_fit_in_map import crop_or_pad_to_shape
 
     vol = torch.ones(40, 20, 10)
     out = crop_or_pad_to_shape(vol, (30, 25, 15))
@@ -92,7 +92,7 @@ def test_align_map_to_pdb_raises_without_espcalculator(tmp_path, monkeypatch):
     import sys
     import numpy as np
 
-    from torch_align_volumes import align_map_to_pdb_from_files
+    from torch_fit_in_map import align_map_to_pdb_from_files
 
     data = np.random.rand(20, 20, 20).astype(np.float32)
     map_path = tmp_path / "map.mrc"

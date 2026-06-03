@@ -277,7 +277,7 @@ def exhaustive_search(
     optimal translation is found as the ``argmax`` of the 3-D normalised
     cross-correlation map, computed via a single FFT pair.  Both volumes must
     already share the same voxel size; call
-    :func:`~torch_align_volumes._preprocess.normalise_voxel_sizes` first if
+    :func:`~torch_fit_in_map._preprocess.normalise_voxel_sizes` first if
     needed.
 
     Parameters
