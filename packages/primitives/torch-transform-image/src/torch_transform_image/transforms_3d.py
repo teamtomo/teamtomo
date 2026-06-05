@@ -44,8 +44,8 @@ def affine_transform_image_3d(
 
 def rotate_then_shift_image_3d(
     image: torch.Tensor,
-    rotate_zyx: list[float] | tuple[float, float, float] = (0, 0, 0),
-    shifts_zyx: list[float] | tuple[float, float, float] = (0, 0, 0),
+    rotate_zyx: list[float | int] | tuple[float | int, ...] = (0, 0, 0),
+    shift_zyx: list[float | int] | tuple[float | int, ...] = (0, 0, 0),
     interpolation: Literal["trilinear", "nearest"] = "trilinear",
 ) -> torch.Tensor:
     """
@@ -60,13 +60,13 @@ def rotate_then_shift_image_3d(
     ----------
     image : torch.Tensor
         The image to be shifted/rotated.
-    rotate_zyx : list[float] | tuple[float, float, float], optional
+    rotate_zyx : list[float] | tuple[float, ...], optional
         The angles in degrees by which to rotate the image according to
         the right hand rule. Positive values rotate the image CCW. Must
         be a list or tuple of length 3 in the order (z, y, x). If
         multiple angles are provided, rotations will be performed in z,
         y, x order.
-    shifts_zyx : list[float] | tuple[float, float, float], optional
+    shift_zyx : list[float] | tuple[float, ...], optional
         The number of pixels by which to shift the image. Positive
         values shift up/right. Must be a list or tuple of length 3 in
         the form (z, y, x).
@@ -99,25 +99,7 @@ def rotate_then_shift_image_3d(
             image_shape=(d, h, w), device=image.device, fftshift=True, rfft=False
         )
 
-    if (num_angles := len(rotate_zyx)) != 3:
-        e = f"3 angles (zyx) are required but {num_angles} were supplied: {rotate_zyx}."
-        raise ValueError(e)
-    if (num_shifts := len(shifts_zyx)) != 3:
-        e = f"3 shifts (zyx) are required but {num_shifts} were supplied: {shifts_zyx}."
-        raise ValueError(e)
-
-    matrix = (
-        T(image_center)
-        @ T(shifts_zyx)
-        @ Rx(rotate_zyx[2], zyx=True)
-        @ Ry(rotate_zyx[1], zyx=True)
-        @ Rz(rotate_zyx[0], zyx=True)
-        @ T(-image_center)
-    )
-    # Matrix is inverted because it is applied to the coordinate grid,
-    # not the image directly.
-    matrix = torch.inverse(matrix)
-
+    matrix = _build_rotate_shift_matrix_3d(rotate_zyx, shift_zyx, image_center, rotate_first=True)
     return affine_transform_image_3d(
         image=image,
         matrices=matrix,
@@ -128,8 +110,8 @@ def rotate_then_shift_image_3d(
 
 def shift_then_rotate_image_3d(
     image: torch.Tensor,
-    rotate_zyx: list[float] | tuple[float, float, float] = (0, 0, 0),
-    shifts_zyx: list[float] | tuple[float, float, float] = (0, 0, 0),
+    rotate_zyx: list[float | int] | tuple[float | int, ...] = (0, 0, 0),
+    shift_zyx: list[float | int] | tuple[float | int, ...] = (0, 0, 0),
     interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> torch.Tensor:
     """
@@ -144,13 +126,13 @@ def shift_then_rotate_image_3d(
     ----------
     image : torch.Tensor
         The image to be shifted/rotated.
-    rotate_zyx : list[float] | tuple[float, float, float], optional
+    rotate_zyx : list[float] | tuple[float, ...], optional
         The angles in degrees by which to rotate the image according to the
         right hand rule. Positive values rotate the image CCW. Must be a
         list or tuple of length 3 in the order (z, y, x). If
         multiple angles are provided, rotations will be performed in z,
         y, x order.
-    shifts_zyx : list[float] | tuple[float, float, float], optional
+    shift_zyx : list[float] | tuple[float, ...], optional
         The number of pixels by which to shift the image. Positive values
         shift up/right. Must be a list or tuple of length 3 in the form (z,
         y, x).
@@ -184,28 +166,39 @@ def shift_then_rotate_image_3d(
             image_shape=(d, h, w), device=image.device, fftshift=True, rfft=False
         )
 
-    if (num_angles := len(rotate_zyx)) != 3:
-        e = f"3 angles (zyx) are required but {num_angles} were supplied: {rotate_zyx}."
-        raise ValueError(e)
-    if (num_shifts := len(shifts_zyx)) != 3:
-        e = f"3 shifts (zyx) are required but {num_shifts} were supplied: {shifts_zyx}."
-        raise ValueError(e)
-
-    matrix = (
-        T(image_center)
-        @ Rx(rotate_zyx[2], zyx=True)
-        @ Ry(rotate_zyx[1], zyx=True)
-        @ Rz(rotate_zyx[0], zyx=True)
-        @ T(shifts_zyx)
-        @ T(-image_center)
-    )
-    # Matrix is inverted because it is applied to the coordinate grid,
-    # not the image directly.
-    matrix = torch.inverse(matrix)
-
+    matrix = _build_rotate_shift_matrix_3d(rotate_zyx, shift_zyx, image_center, rotate_first=False)
     return affine_transform_image_3d(
         image=image,
         matrices=matrix,
         interpolation=interpolation,
         zyx_matrices=True,
     )
+
+def _build_rotate_shift_matrix_3d(
+        rotate_zyx: list[float | int] | tuple[float | int, ...],
+        shift_zyx: list[float | int] | tuple[float | int, ...],
+        image_center: torch.Tensor,
+        rotate_first: bool,
+) -> torch.Tensor:
+    if (num_angles := len(rotate_zyx)) != 3:
+        e = f"3 angles (zyx) are required but {num_angles} were supplied: {rotate_zyx}."
+        raise ValueError(e)
+    if (num_shifts := len(shift_zyx)) != 3:
+        e = f"3 shifts (zyx) are required but {num_shifts} were supplied: {shift_zyx}."
+        raise ValueError(e)
+
+    rotation_matrix = (
+            Rx(rotate_zyx[2], zyx=True)
+            @ Ry(rotate_zyx[1], zyx=True)
+            @ Rz(rotate_zyx[0], zyx=True)
+        )
+    translation_matrix = T(shift_zyx)
+
+    if rotate_first:
+        inner_matrix = translation_matrix @ rotation_matrix
+    else:
+        inner_matrix = rotation_matrix @ translation_matrix
+    matrix = T(image_center) @ inner_matrix @ T(-image_center)
+    # Matrix is inverted because it is applied to the coordinate grid,
+    # not the image directly.
+    return torch.inverse(matrix)

@@ -151,7 +151,7 @@ def test_rotate_shift_image_3d():
     result = rotate_then_shift_image_3d(
         image=image,
         rotate_zyx=[90, 0, 0],
-        shifts_zyx=[0, 0, 5],
+        shift_zyx=[0, 0, 5],
         interpolation="trilinear",
     )
     assert image[14, 14, 26] == 0
@@ -167,7 +167,7 @@ def test_shift_rotate_image_3d():
     result = shift_then_rotate_image_3d(
         image=image,
         rotate_zyx=[90, 0, 0],
-        shifts_zyx=[0, 0, 5],
+        shift_zyx=[0, 0, 5],
         interpolation="trilinear",
     )
 
