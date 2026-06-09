@@ -160,8 +160,8 @@ def _build_rotate_shift_matrix_2d(
         rotate_first: bool,
 ) -> torch.Tensor:
 
-    if (num_shifts := len(shift)) > 2:
-        e = f"2 shifts are required but {num_shifts} were supplied: {shift}"
+    if (num_shifts := len(shift_yx)) > 2:
+        e = f"2 shifts are required but {num_shifts} were supplied: {shift_yx}"
         raise ValueError(e)
 
     rotation_matrix = R([rotate], yx=True)
