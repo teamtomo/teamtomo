@@ -65,7 +65,7 @@ def test_rotate_shift_image_2d():
     result = rotate_then_shift_image_2d(
         image=image,
         rotate=90,
-        shift=[2, 0],
+        shift_yx=[2, 0],
         interpolation="bicubic",
     )
 
@@ -83,7 +83,7 @@ def test_shift_rotate_image_2d():
     result = shift_then_rotate_image_2d(
         image=image,
         rotate=90,
-        shift=[2, 0],
+        shift_yx=[2, 0],
         interpolation="bicubic",
     )
 
