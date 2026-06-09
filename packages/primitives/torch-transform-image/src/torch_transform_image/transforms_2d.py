@@ -164,13 +164,14 @@ def _build_rotate_shift_matrix_2d(
         e = f"2 shifts are required but {num_shifts} were supplied: {shift}"
         raise ValueError(e)
 
-    rotation_matrix = R([rotate])
-    # Because shift is applied to the coordinate grid, it must be
-    # negated to produce a positive (up/right) shift on the image.
-    translation_matrix = T(-torch.as_tensor(shift, dtype=torch.float32))
+    rotation_matrix = R([rotate], yx=True)
+    translation_matrix = T(shift)
 
     if rotate_first:
         inner_matrix = rotation_matrix @ translation_matrix
     else:
         inner_matrix = translation_matrix @ rotation_matrix
-    return T(center_tensor) @ inner_matrix @ T(-center_tensor)
+    T(center_tensor) @ inner_matrix @ T(-center_tensor)
+    # Matrix is inverted because it is applied to the coordinate grid,
+    # not the image directly.
+    return torch.inverse(matrix)
