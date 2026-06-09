@@ -168,9 +168,9 @@ def _build_rotate_shift_matrix_2d(
     translation_matrix = T(shift_yx)
 
     if rotate_first:
-        inner_matrix = rotation_matrix @ translation_matrix
-    else:
         inner_matrix = translation_matrix @ rotation_matrix
+    else:
+        inner_matrix = rotation_matrix @ translation_matrix
     matrix = T(center_tensor) @ inner_matrix @ T(-center_tensor)
     # Matrix is inverted because it is applied to the coordinate grid,
     # not the image directly.
