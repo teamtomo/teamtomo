@@ -45,7 +45,7 @@ def affine_transform_image_2d(
 def rotate_then_shift_image_2d(
     image: torch.Tensor,
     rotate: int | float = 0,
-    shift: list[float | int] | tuple[float | int, float | int] = (0, 0),
+    shift_yx: list[float | int] | tuple[float | int, float | int] = (0, 0),
     interpolation: Literal["nearest", "bilinear", "bicubic"] = "bicubic",
 ) -> torch.Tensor:
     """This is a wrapper function to easily rotate and shift a 2D image.
@@ -61,7 +61,7 @@ def rotate_then_shift_image_2d(
         The image to be shifted/rotated.
     rotate : int | float, optional
         The angle in degrees by which to rotate the image.
-    shift : list[float | int] | tuple[float | int, float | int], optional
+    shift_yx : list[float | int] | tuple[float | int, float | int], optional
         The number of pixels by which to shift the image. Positive
         values shift up/right. Must be a list or tuple of length 2 in
         the form (y, x).
@@ -89,7 +89,7 @@ def rotate_then_shift_image_2d(
             image_shape=(h, w), device=image.device, fftshift=True, rfft=False
             )
 
-    matrix = _build_rotate_shift_matrix_2d(rotate, shift, image_center, rotate_first=True)
+    matrix = _build_rotate_shift_matrix_2d(rotate, shift_yx, image_center, rotate_first=True)
     return affine_transform_image_2d(
         image=image,
         matrices=matrix,
@@ -101,7 +101,7 @@ def rotate_then_shift_image_2d(
 def shift_then_rotate_image_2d(
     image: torch.Tensor,
     rotate: int | float = 0,
-    shift: list[float | int] | tuple[float | int, float | int] = (0, 0),
+    shift_yx: list[float | int] | tuple[float | int, float | int] = (0, 0),
     interpolation: Literal["nearest", "bilinear", "bicubic"] = "bicubic",
 ):
     """This is a wrapper function to easily shift and rotate a 2D image.
@@ -117,7 +117,7 @@ def shift_then_rotate_image_2d(
         The image to be shifted/rotated.
     rotate : int | float, optional
         The angle in degrees by which to rotate the image.
-    shift : list[float | int] | tuple[float | int, float | int], optional
+    shift_yx : list[float | int] | tuple[float | int, float | int], optional
         The number of pixels by which to shift the image. Positive
         values shift up/right. Must be a list or tuple of length 2 in
         the form (y, x).
@@ -145,7 +145,7 @@ def shift_then_rotate_image_2d(
             image_shape=(h, w), device=image.device, fftshift=True, rfft=False
             )
 
-    matrix = _build_rotate_shift_matrix_2d(rotate, shift, image_center, rotate_first=False)
+    matrix = _build_rotate_shift_matrix_2d(rotate, shift_yx, image_center, rotate_first=False)
     return affine_transform_image_2d(
         image=image,
         matrices=matrix,
@@ -155,7 +155,7 @@ def shift_then_rotate_image_2d(
 
 def _build_rotate_shift_matrix_2d(
         rotate: int | float,
-        shift: list[float | int] | tuple[float | int, ...],
+        shift_yx: list[float | int] | tuple[float | int, ...],
         center_tensor: torch.Tensor,
         rotate_first: bool,
 ) -> torch.Tensor:
@@ -165,13 +165,13 @@ def _build_rotate_shift_matrix_2d(
         raise ValueError(e)
 
     rotation_matrix = R([rotate], yx=True)
-    translation_matrix = T(shift)
+    translation_matrix = T(shift_yx)
 
     if rotate_first:
         inner_matrix = rotation_matrix @ translation_matrix
     else:
         inner_matrix = translation_matrix @ rotation_matrix
-    T(center_tensor) @ inner_matrix @ T(-center_tensor)
+    matrix = T(center_tensor) @ inner_matrix @ T(-center_tensor)
     # Matrix is inverted because it is applied to the coordinate grid,
     # not the image directly.
     return torch.inverse(matrix)
