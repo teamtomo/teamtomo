@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 try:
     __version__ = version("torch-fit-in-map")
@@ -10,6 +12,7 @@ except PackageNotFoundError:
     __version__ = "uninstalled"
 
 import torch
+from torch_transform_image import affine_transform_image_3d
 
 from ._config import (
     ExhaustiveSearchConfig,
@@ -17,9 +20,9 @@ from ._config import (
     ProjectionAlignmentConfig,
 )
 from ._exhaustive import _exhaustive_topk, exhaustive_search
-from ._preprocess import crop_or_pad_to_shape
+from ._preprocess import crop_or_pad_to_shape, normalise_voxel_sizes
 from ._gradient import gradient_refine
-from ._io import align_map_to_pdb_from_files, align_volumes_from_files
+from ._io import fit_map_in_map_from_files, fit_pdb_in_map_from_files
 from ._projection import projection_align
 from ._result import AlignmentResult
 from ._simulate import DEFAULT_SIMULATOR, DensitySimulator
@@ -28,28 +31,28 @@ from ._simulate import DEFAULT_SIMULATOR, DensitySimulator
 _GRADIENT_UNSET: object = object()
 
 
-def align_volumes(
-    reference: torch.Tensor,
-    mobile: torch.Tensor,
+def fit_map_in_map(
+    mobile_map: torch.Tensor,
+    reference_map: torch.Tensor,
     exhaustive_config: ExhaustiveSearchConfig | None = None,
     gradient_config: GradientRefinementConfig | None | object = _GRADIENT_UNSET,
     mask: torch.Tensor | None = None,
     pixel_size_angstroms: float | None = None,
     verbose: bool = True,
 ) -> AlignmentResult:
-    """Align *mobile* onto *reference* via exhaustive SO(3) search + refinement.
+    """Fit *mobile_map* into *reference_map* via exhaustive SO(3) search + refinement.
 
     Both volumes must share the same voxel size.  Call
     :func:`~torch_fit_in_map._preprocess.normalise_voxel_sizes` first if
-    they differ, or use :func:`align_volumes_from_files` which handles this
+    they differ, or use :func:`fit_map_in_map_from_files` which handles this
     automatically.
 
     Parameters
     ----------
-    reference : torch.Tensor
+    mobile_map : torch.Tensor
+        ``(d, h, w)`` mobile volume to be fitted.
+    reference_map : torch.Tensor
         ``(d, h, w)`` reference volume.
-    mobile : torch.Tensor
-        ``(d, h, w)`` mobile volume.
     exhaustive_config : ExhaustiveSearchConfig or None
         Parameters for the exhaustive SO(3) grid search.
     gradient_config : GradientRefinementConfig or None
@@ -79,7 +82,7 @@ def align_volumes(
         resolved_gradient = gradient_config  # type: ignore[assignment]
 
     candidates = _exhaustive_topk(
-        reference, mobile, config=exhaustive_config, mask=mask, verbose=verbose
+        reference_map, mobile_map, config=exhaustive_config, mask=mask, verbose=verbose
     )
     result = candidates[0]
 
@@ -91,10 +94,9 @@ def align_volumes(
 
         devices = resolved_gradient.devices
         if devices is None:
-            devices = [str(reference.device)]
+            devices = [str(reference_map.device)]
 
         n_start = len(candidates)
-        from concurrent.futures import ThreadPoolExecutor
 
         def _refine_worker(i, candidate, device_str):
             dev = torch.device(device_str)
@@ -102,9 +104,8 @@ def align_volumes(
                 from tqdm import tqdm as _tqdm
                 _tqdm.write(f"Gradient refinement: start {i + 1}/{n_start}")
 
-            # Ensure volumes are on the target device for this worker
-            ref_dev = reference.to(dev)
-            mob_dev = mobile.to(dev)
+            ref_dev = reference_map.to(dev)
+            mob_dev = mobile_map.to(dev)
             mask_dev = mask.to(dev) if mask is not None else None
 
             r = gradient_refine(
@@ -114,13 +115,12 @@ def align_volumes(
                 initial_translation=candidate.translation_pixels.to(dev),
                 config=resolved_gradient,
                 mask=mask_dev,
-                verbose=verbose and len(devices) == 1,  # Only show pbar if sequential
+                verbose=verbose and len(devices) == 1,
             )
-            # Move result back to reference device
-            r.rotation_matrix = r.rotation_matrix.to(reference.device)
-            r.translation_pixels = r.translation_pixels.to(reference.device)
+            r.rotation_matrix = r.rotation_matrix.to(reference_map.device)
+            r.translation_pixels = r.translation_pixels.to(reference_map.device)
             if r.translation_angstroms is not None:
-                r.translation_angstroms = r.translation_angstroms.to(reference.device)
+                r.translation_angstroms = r.translation_angstroms.to(reference_map.device)
             return r
 
         refined: list = []
@@ -173,7 +173,7 @@ def apply_alignment(
     mobile : torch.Tensor
         ``(d, h, w)`` mobile volume.
     result : AlignmentResult
-        Alignment result from :func:`align_volumes` or :func:`exhaustive_search`.
+        Alignment result from :func:`fit_map_in_map` or :func:`exhaustive_search`.
     interpolation : {"trilinear", "nearest"}
         Interpolation mode.
 
@@ -182,8 +182,6 @@ def apply_alignment(
     aligned : torch.Tensor
         ``(d, h, w)`` mobile volume transformed to match the reference frame.
     """
-    from torch_transform_image import affine_transform_image_3d
-
     device = mobile.device
     d, h, w = mobile.shape[-3:]
     R_3x3 = result.rotation_matrix.to(device=device, dtype=torch.float32)
@@ -210,9 +208,9 @@ def apply_alignment(
     )
 
 
-def align_map_to_pdb(
-    density_map: torch.Tensor,
-    pdb_path: str,
+def fit_map_in_pdb(
+    mobile_map: torch.Tensor,
+    reference_pdb: str,
     pixel_size_angstroms: float,
     box_size: int,
     simulator: DensitySimulator | None = None,
@@ -221,23 +219,99 @@ def align_map_to_pdb(
     gradient_config: GradientRefinementConfig | None = None,
     mask: torch.Tensor | None = None,
 ) -> AlignmentResult:
-    """Simulate a density from a PDB and align it to *density_map*.
+    """Fit *mobile_map* into the coordinate frame defined by a PDB atomic model.
+
+    The PDB is simulated as a density map, which serves as the **reference**.
+    The experimental density *mobile_map* is the **mobile** being fitted.
+    For the inverse (fit PDB into a density map), use :func:`fit_pdb_in_map`.
 
     Parameters
     ----------
-    density_map : torch.Tensor
-        ``(d, h, w)`` experimental density map.
-    pdb_path : str
-        Path to the atomic model (PDB or mmCIF).
+    mobile_map : torch.Tensor
+        ``(d, h, w)`` experimental density map to be fitted.
+    reference_pdb : str
+        Path to the atomic model (PDB or mmCIF) that serves as reference.
+    pixel_size_angstroms : float
+        Voxel size for the simulated reference density (Angstroms).
+    box_size : int
+        Cubic box size for the simulated reference density (voxels).
+    simulator : DensitySimulator or None
+        Density simulator.  See :class:`~torch_fit_in_map.DensitySimulator`.
+        When ``None``, a placeholder is used that raises ``NotImplementedError``
+        with guidance until ``torch-calculate-electrostatic-potential`` is
+        available.
+    save_simulated : bool
+        Store the simulated reference density in ``AlignmentResult.simulated_volume``.
+    exhaustive_config : ExhaustiveSearchConfig or None
+        Search parameters.
+    gradient_config : GradientRefinementConfig or None
+        Refinement parameters.
+    mask : torch.Tensor or None
+        Optional ``(d, h, w)`` soft mask.
+
+    Returns
+    -------
+    AlignmentResult
+    """
+    if simulator is None:
+        simulator = DEFAULT_SIMULATOR
+
+    device = mobile_map.device
+    simulated = simulator.simulate(
+        pdb_path=Path(reference_pdb),
+        pixel_size=pixel_size_angstroms,
+        box_size=box_size,
+        device=device,
+    )
+
+    mobile_map, simulated, common_px = normalise_voxel_sizes(
+        simulated, mobile_map, pixel_size_angstroms, pixel_size_angstroms
+    )
+
+    result = fit_map_in_map(
+        mobile_map,
+        simulated,
+        exhaustive_config=exhaustive_config,
+        gradient_config=gradient_config,
+        mask=mask,
+        pixel_size_angstroms=common_px,
+    )
+
+    if save_simulated:
+        result.simulated_volume = simulated.cpu()
+
+    return result
+
+
+def fit_pdb_in_map(
+    mobile_pdb: str,
+    reference_map: torch.Tensor,
+    pixel_size_angstroms: float,
+    box_size: int,
+    simulator: DensitySimulator | None = None,
+    save_simulated: bool = False,
+    exhaustive_config: ExhaustiveSearchConfig | None = None,
+    gradient_config: GradientRefinementConfig | None = None,
+    mask: torch.Tensor | None = None,
+) -> AlignmentResult:
+    """Fit an atomic model (PDB) into a density map.
+
+    The PDB is simulated as a density map, which is the **mobile** being fitted
+    into *reference_map*.  For the inverse (fit a density map into a PDB frame),
+    use :func:`fit_map_in_pdb`.
+
+    Parameters
+    ----------
+    mobile_pdb : str
+        Path to the atomic model (PDB or mmCIF) to be fitted.
+    reference_map : torch.Tensor
+        ``(d, h, w)`` experimental density map that serves as reference.
     pixel_size_angstroms : float
         Voxel size for the simulated density (Angstroms).
     box_size : int
         Cubic box size for the simulated density (voxels).
     simulator : DensitySimulator or None
         Density simulator.  See :class:`~torch_fit_in_map.DensitySimulator`.
-        When ``None``, a placeholder is used that raises ``NotImplementedError``
-        with guidance until ``torch-calculate-electrostatic-potential`` is
-        available.
     save_simulated : bool
         Store the simulated density in ``AlignmentResult.simulated_volume``.
     exhaustive_config : ExhaustiveSearchConfig or None
@@ -251,28 +325,25 @@ def align_map_to_pdb(
     -------
     AlignmentResult
     """
-    from pathlib import Path
-
-    from ._preprocess import normalise_voxel_sizes
-
     if simulator is None:
         simulator = DEFAULT_SIMULATOR
 
-    device = density_map.device
+    device = reference_map.device
     simulated = simulator.simulate(
-        pdb_path=Path(pdb_path),
+        pdb_path=Path(mobile_pdb),
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
         device=device,
     )
 
-    density_map, simulated, common_px = normalise_voxel_sizes(
-        density_map, simulated, pixel_size_angstroms, pixel_size_angstroms
+    reference_map, simulated, common_px = normalise_voxel_sizes(
+        reference_map, simulated, pixel_size_angstroms, pixel_size_angstroms
     )
+    simulated = crop_or_pad_to_shape(simulated, tuple(reference_map.shape[-3:]))  # type: ignore[arg-type]
 
-    result = align_volumes(
-        density_map,
+    result = fit_map_in_map(
         simulated,
+        reference_map,
         exhaustive_config=exhaustive_config,
         gradient_config=gradient_config,
         mask=mask,
@@ -291,13 +362,14 @@ __all__ = [
     "ExhaustiveSearchConfig",
     "GradientRefinementConfig",
     "ProjectionAlignmentConfig",
-    "align_map_to_pdb",
-    "align_map_to_pdb_from_files",
-    "align_volumes",
-    "align_volumes_from_files",
     "apply_alignment",
     "crop_or_pad_to_shape",
     "exhaustive_search",
+    "fit_map_in_map",
+    "fit_map_in_map_from_files",
+    "fit_map_in_pdb",
+    "fit_pdb_in_map",
+    "fit_pdb_in_map_from_files",
     "gradient_refine",
     "projection_align",
 ]

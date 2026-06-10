@@ -28,7 +28,7 @@ class AlignmentResult:
         identical volumes).
     simulated_volume : torch.Tensor or None
         ``(d, h, w)`` simulated density volume generated during
-        ``align_map_to_pdb``; ``None`` unless ``save_simulated=True`` was set.
+        ``fit_map_in_pdb`` / ``fit_pdb_in_map``; ``None`` unless ``save_simulated=True`` was set.
     translation_angstroms : torch.Tensor or None
         ``(3,)`` translation in Angstroms.  Populated only when
         ``pixel_size_angstroms`` is supplied to the alignment function.

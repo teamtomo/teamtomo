@@ -116,13 +116,13 @@ def test_exhaustive_topk_returns_k_results():
     assert scores == sorted(scores, reverse=True)
 
 
-def test_align_volumes_multistart():
-    """align_volumes with n_start=3 should return the best NCC-scored refined result."""
-    from torch_fit_in_map import align_volumes, GradientRefinementConfig
+def test_fit_map_in_map_multistart():
+    """fit_map_in_map with n_start=3 should return the best NCC-scored refined result."""
+    from torch_fit_in_map import fit_map_in_map, GradientRefinementConfig
 
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)
-    result = align_volumes(
+    result = fit_map_in_map(
         ref, ref,
         exhaustive_config=cfg,
         gradient_config=GradientRefinementConfig(n_iterations=5),

@@ -210,26 +210,26 @@ def transform_atomic_model(
         structure.write_pdb(str(out))
 
 
-def align_volumes_from_files(
-    reference_path: str | os.PathLike[str],
+def fit_map_in_map_from_files(
     mobile_path: str | os.PathLike[str],
+    reference_path: str | os.PathLike[str],
     exhaustive_config: ExhaustiveSearchConfig | None = None,
     gradient_config: GradientRefinementConfig | None = None,
     mask_path: str | os.PathLike[str] | None = None,
     device: torch.device | None = None,
     verbose: bool = True,
 ) -> AlignmentResult:
-    """Load MRC files and align the mobile volume onto the reference.
+    """Load MRC files and fit the mobile volume into the reference.
 
     Voxel sizes are read from MRC headers; if they differ, the mobile is
     automatically resampled to match the reference via Fourier rescaling.
 
     Parameters
     ----------
-    reference_path : str or Path
-        Path to the reference MRC map.
     mobile_path : str or Path
         Path to the mobile MRC map.
+    reference_path : str or Path
+        Path to the reference MRC map.
     exhaustive_config : ExhaustiveSearchConfig or None
         Parameters for the exhaustive SO(3) search.
     gradient_config : GradientRefinementConfig or None
@@ -243,7 +243,7 @@ def align_volumes_from_files(
     -------
     AlignmentResult
     """
-    from . import align_volumes
+    from . import fit_map_in_map
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -267,9 +267,9 @@ def align_volumes_from_files(
             pixel_size_angstroms=exhaustive_config.pixel_size_angstroms
         )
 
-    return align_volumes(
-        ref,
+    return fit_map_in_map(
         mob,
+        ref,
         exhaustive_config=exhaustive_config,
         gradient_config=gradient_config,
         mask=mask,
@@ -278,9 +278,9 @@ def align_volumes_from_files(
     )
 
 
-def align_map_to_pdb_from_files(
-    map_path: str | os.PathLike[str],
-    pdb_path: str | os.PathLike[str],
+def fit_pdb_in_map_from_files(
+    mobile_pdb_path: str | os.PathLike[str],
+    reference_map_path: str | os.PathLike[str],
     pixel_size_angstroms: float | None = None,
     box_size: int | None = None,
     *,
@@ -294,22 +294,21 @@ def align_map_to_pdb_from_files(
     device: torch.device | None = None,
     verbose: bool = True,
 ) -> AlignmentResult:
-    """Simulate a density from a PDB and align it to the target map.
+    """Simulate a density from a PDB and fit it into the target density map.
 
-    The PDB is converted to a density map via *simulator*, then
-    :func:`align_volumes_from_files` logic is applied.
+    The PDB-derived simulation is the **mobile**; the density map is the **reference**.
 
     Parameters
     ----------
-    map_path : str or Path
+    mobile_pdb_path : str or Path
+        Path to the atomic model (PDB or mmCIF) to be fitted.
+    reference_map_path : str or Path
         Path to the experimental MRC density map.
-    pdb_path : str or Path
-        Path to the atomic model (PDB or mmCIF).
     pixel_size_angstroms : float or None
         Voxel size for the simulated density in Angstroms.  When ``None``
-        (default), the pixel size is read from the MRC header of *map_path*
-        so that the simulated density is directly comparable to the
-        experimental map.
+        (default), the pixel size is read from the MRC header of
+        *reference_map_path* so that the simulated density is directly
+        comparable to the experimental map.
     box_size : int or None
         Cubic box size for the simulated density in voxels.  When ``None``
         (default), the largest dimension of the reference map is used.
@@ -340,7 +339,7 @@ def align_map_to_pdb_from_files(
     AlignmentResult
         Includes ``simulated_volume`` when *save_simulated* is ``True``.
     """
-    from . import align_volumes
+    from . import fit_map_in_map
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -348,7 +347,7 @@ def align_map_to_pdb_from_files(
     if simulator is None:
         simulator = DEFAULT_SIMULATOR
 
-    density_map, map_px = _load_mrc(map_path)
+    density_map, map_px = _load_mrc(reference_map_path)
     density_map = density_map.to(device)
 
     if pixel_size_angstroms is None:
@@ -363,7 +362,7 @@ def align_map_to_pdb_from_files(
         )
 
     simulated = simulator.simulate(
-        pdb_path=Path(pdb_path),
+        pdb_path=Path(mobile_pdb_path),
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
         device=device,
@@ -400,9 +399,9 @@ def align_map_to_pdb_from_files(
     if exhaustive_config is None:
         exhaustive_config = ExhaustiveSearchConfig(pixel_size_angstroms=common_px)
 
-    result = align_volumes(
-        density_map,
+    result = fit_map_in_map(
         simulated,
+        density_map,
         exhaustive_config=exhaustive_config,
         gradient_config=gradient_config,
         mask=mask,

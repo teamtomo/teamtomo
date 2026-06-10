@@ -18,7 +18,8 @@ class DensitySimulator(Protocol):
         pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
 
     A custom simulator can be injected by implementing this protocol and passing
-    it to :func:`align_map_to_pdb` or :func:`align_map_to_pdb_from_files`.
+    it to :func:`fit_map_in_pdb`, :func:`fit_pdb_in_map`, or their
+    ``_from_files`` variants.
 
     Example
     -------
@@ -28,8 +29,8 @@ class DensitySimulator(Protocol):
             def simulate(self, pdb_path, pixel_size, box_size, device=None):
                 ...
 
-        result = align_map_to_pdb(density, "model.pdb", 1.5, 128,
-                                   simulator=MySimulator())
+        result = fit_pdb_in_map("model.pdb", density, 1.5, 128,
+                                simulator=MySimulator())
     """
 
     def simulate(
@@ -84,7 +85,7 @@ class _ESPSimulator:
                 "The default DensitySimulator requires 'espcalculator'.\n"
                 "Install it with:\n"
                 "  pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git\n"
-                "or pass a custom simulator= to align_map_to_pdb / align_map_to_pdb_from_files."
+                "or pass a custom simulator= to fit_map_in_pdb / fit_pdb_in_map / their _from_files variants."
             ) from exc
 
         if device is None:

@@ -16,9 +16,9 @@ def _write_test_mrc(path: Path, data: np.ndarray, voxel_size: float = 1.0) -> No
         mrc.voxel_size = voxel_size
 
 
-def test_align_volumes_from_files_same_map(tmp_path):
-    """Aligning identical maps from files should recover near-identity rotation."""
-    from torch_fit_in_map import ExhaustiveSearchConfig, align_volumes_from_files
+def test_fit_map_in_map_from_files_same_map(tmp_path):
+    """Fitting identical maps from files should recover near-identity rotation."""
+    from torch_fit_in_map import ExhaustiveSearchConfig, fit_map_in_map_from_files
     import torch
 
     data = np.random.rand(20, 20, 20).astype(np.float32)
@@ -27,9 +27,9 @@ def test_align_volumes_from_files_same_map(tmp_path):
     _write_test_mrc(ref_path, data, voxel_size=1.0)
     _write_test_mrc(mob_path, data, voxel_size=1.0)
 
-    result = align_volumes_from_files(
-        ref_path,
+    result = fit_map_in_map_from_files(
         mob_path,
+        ref_path,
         exhaustive_config=ExhaustiveSearchConfig(angular_step_degrees=30.0),
         gradient_config=None,
         verbose=False,
@@ -37,9 +37,9 @@ def test_align_volumes_from_files_same_map(tmp_path):
     assert torch.allclose(result.rotation_matrix.cpu(), torch.eye(3), atol=0.15)
 
 
-def test_align_volumes_from_files_voxel_size_mismatch(tmp_path):
+def test_fit_map_in_map_from_files_voxel_size_mismatch(tmp_path):
     """Files with different voxel sizes should be rescaled and still align."""
-    from torch_fit_in_map import ExhaustiveSearchConfig, align_volumes_from_files
+    from torch_fit_in_map import ExhaustiveSearchConfig, fit_map_in_map_from_files
 
     data = np.random.rand(20, 20, 20).astype(np.float32)
     ref_path = tmp_path / "ref.mrc"
@@ -47,9 +47,9 @@ def test_align_volumes_from_files_voxel_size_mismatch(tmp_path):
     _write_test_mrc(ref_path, data, voxel_size=1.0)
     _write_test_mrc(mob_path, data, voxel_size=2.0)  # different pixel size
 
-    result = align_volumes_from_files(
-        ref_path,
+    result = fit_map_in_map_from_files(
         mob_path,
+        ref_path,
         exhaustive_config=ExhaustiveSearchConfig(angular_step_degrees=30.0),
         gradient_config=None,
     )
@@ -87,12 +87,12 @@ def test_crop_or_pad_non_cubic(tmp_path):
     assert out.shape == (30, 25, 15)
 
 
-def test_align_map_to_pdb_raises_without_espcalculator(tmp_path, monkeypatch):
-    """align_map_to_pdb_from_files should raise ImportError when espcalculator is missing."""
+def test_fit_pdb_in_map_from_files_raises_without_espcalculator(tmp_path, monkeypatch):
+    """fit_pdb_in_map_from_files should raise ImportError when espcalculator is missing."""
     import sys
     import numpy as np
 
-    from torch_fit_in_map import align_map_to_pdb_from_files
+    from torch_fit_in_map import fit_pdb_in_map_from_files
 
     data = np.random.rand(20, 20, 20).astype(np.float32)
     map_path = tmp_path / "map.mrc"
@@ -104,9 +104,9 @@ def test_align_map_to_pdb_raises_without_espcalculator(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "espcalculator", None)  # type: ignore[arg-type]
 
     with pytest.raises((ImportError, Exception), match="espcalculator|torch-calculate"):
-        align_map_to_pdb_from_files(
-            map_path=map_path,
-            pdb_path=pdb_path,
+        fit_pdb_in_map_from_files(
+            mobile_pdb_path=pdb_path,
+            reference_map_path=map_path,
             pixel_size_angstroms=1.0,
             box_size=20,
         )

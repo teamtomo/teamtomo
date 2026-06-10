@@ -280,8 +280,8 @@ def align(
         _load_mrc,
         _read_mrc_header,
         _save_mrc,
-        align_map_to_pdb_from_files,
-        align_volumes_from_files,
+        fit_pdb_in_map_from_files,
+        fit_map_in_map_from_files,
         transform_atomic_model,
     )
     from . import apply_alignment as _apply_alignment
@@ -360,9 +360,9 @@ def align(
     is_pdb = mobile.suffix.lower() in _PDB_SUFFIXES
 
     if is_pdb:
-        result = align_map_to_pdb_from_files(
-            map_path=reference,
-            pdb_path=mobile,
+        result = fit_pdb_in_map_from_files(
+            mobile_pdb_path=mobile,
+            reference_map_path=reference,
             pixel_size_angstroms=pixel_size,
             box_size=box_size,
             desired_resolution_angstroms=desired_resolution,
@@ -385,9 +385,9 @@ def align(
             _save_mrc(save_simulated, aligned_sim, pixel_size=ref_px, origin_xyz=ref_origin)
             typer.echo(f"Aligned simulated density saved to {save_simulated}", err=True)
     else:
-        result = align_volumes_from_files(
-            reference_path=reference,
+        result = fit_map_in_map_from_files(
             mobile_path=mobile,
+            reference_path=reference,
             exhaustive_config=exhaustive_cfg,
             gradient_config=gradient_cfg,
             mask_path=mask,
