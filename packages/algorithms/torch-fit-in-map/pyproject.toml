@@ -124,6 +124,8 @@ pretty = true
 minversion = "7.0"
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+addopts = "-m 'not slow'"
 
 [tool.coverage.report]
 show_missing = true

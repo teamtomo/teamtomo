@@ -218,6 +218,7 @@ def fit_map_in_pdb(
     exhaustive_config: ExhaustiveSearchConfig | None = None,
     gradient_config: GradientRefinementConfig | None = None,
     mask: torch.Tensor | None = None,
+    verbose: bool = True,
 ) -> AlignmentResult:
     """Fit *mobile_map* into the coordinate frame defined by a PDB atomic model.
 
@@ -275,6 +276,7 @@ def fit_map_in_pdb(
         gradient_config=gradient_config,
         mask=mask,
         pixel_size_angstroms=common_px,
+        verbose=verbose,
     )
 
     if save_simulated:
@@ -293,6 +295,7 @@ def fit_pdb_in_map(
     exhaustive_config: ExhaustiveSearchConfig | None = None,
     gradient_config: GradientRefinementConfig | None = None,
     mask: torch.Tensor | None = None,
+    verbose: bool = True,
 ) -> AlignmentResult:
     """Fit an atomic model (PDB) into a density map.
 
@@ -348,6 +351,7 @@ def fit_pdb_in_map(
         gradient_config=gradient_config,
         mask=mask,
         pixel_size_angstroms=common_px,
+        verbose=verbose,
     )
 
     if save_simulated:
