@@ -430,8 +430,9 @@ def align(
             if mobile_tensor is None:
                 mobile_tensor, mob_px = _load_mrc(mobile)
                 mobile_pixel_size = mob_px
+            ref_shape, ref_px, ref_origin = _read_mrc_header(reference)
             aligned = _apply_alignment(mobile_tensor.to(primary_device), result)
-            _save_mrc(output, aligned, pixel_size=mobile_pixel_size or 1.0)
+            _save_mrc(output, aligned, pixel_size=ref_px, origin_xyz=ref_origin)
             typer.echo(f"Aligned volume saved to {output}", err=True)
 
 
@@ -648,12 +649,28 @@ def fit_in_atomic_model(
         verbose=not quiet,
     )
 
+    # Compute the origin of the simulated reference density so that output
+    # maps co-localise with the reference PDB in ChimeraX.  The simulator
+    # centres atoms at box_centre_A; voxel [0,0,0] is therefore at
+    # centroid - box_centre_A in each Cartesian axis.
+    from ._io import _load_mrc as _load_mrc_io, _pdb_centroid_xyz
+    mob_map, mob_px = _load_mrc_io(mobile)
+    sim_px = pixel_size or mob_px
+    sim_bs = box_size or max(mob_map.shape[-3:])
+    centroid_xyz = _pdb_centroid_xyz(reference)
+    box_centre_a = (sim_bs - 1) / 2.0 * sim_px
+    sim_origin_xyz = (
+        centroid_xyz[0] - box_centre_a,
+        centroid_xyz[1] - box_centre_a,
+        centroid_xyz[2] - box_centre_a,
+    )
+
     if save_simulated is not None and result.simulated_volume is not None:
-        mob_map, mob_px = _load_mrc(mobile)
         _save_mrc(
             save_simulated,
             result.simulated_volume,
-            pixel_size=pixel_size or mob_px,
+            pixel_size=sim_px,
+            origin_xyz=sim_origin_xyz,
         )
         typer.echo(f"Simulated reference density saved to {save_simulated}", err=True)
 
@@ -666,7 +683,6 @@ def fit_in_atomic_model(
         typer.echo(f"Result written to {output_json}", err=True)
 
     if output is not None:
-        mob_map, mob_px = _load_mrc(mobile)
         aligned = _apply_alignment(mob_map.to(primary_device), result)
-        _save_mrc(output, aligned, pixel_size=mob_px)
+        _save_mrc(output, aligned, pixel_size=sim_px, origin_xyz=sim_origin_xyz)
         typer.echo(f"Aligned density map saved to {output}", err=True)
