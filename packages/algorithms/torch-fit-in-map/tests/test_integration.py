@@ -149,17 +149,20 @@ def pdb_8yrq(tmp_path_factory):
 
 # ── tests ─────────────────────────────────────────────────────────────────────
 
-@pytest.mark.slow
-def test_map_alignment_recovery(emdb_map):
-    """Perturb EMD-39549 with a known rigid transform and recover within 0.5 Å / 0.5°.
+def _run_map_alignment_recovery(
+    emdb_map: Path,
+    angle_deg: float,
+    shift_A: float,
+    angular_step_degrees: float = 5.0,
+    n_iterations: int = 200,
+) -> None:
+    """Shared logic for map-to-map alignment recovery tests.
 
-    Perturbation applied via ``apply_alignment``:
-        R_perturb = 5° around Z (ZYX convention)
-        t_perturb = [t_px, 0, 0]  (2 Å along Z in pixel units)
+    Perturbs EMD-39549 with ``angle_deg`` (Z-axis rotation) and ``shift_A``
+    (Å along Z), runs ``fit_map_in_map``, and asserts recovery within 0.5°/0.5Å.
 
-    Expected result from ``fit_map_in_map``:
-        R_pred  ≈  R_perturb^T   (pull-convention inverse)
-        t_pred  ≈  -R_perturb @ t_perturb  (= [-t_px, 0, 0] since R_perturb leaves Z unchanged)
+    Under the pull convention ``apply_alignment(ref, (R_p, t_p))`` produces
+    a mobile whose true inverse is R_p^T / −R_p@t_p.
     """
     from torch_fit_in_map import (
         AlignmentResult,
@@ -173,41 +176,36 @@ def test_map_alignment_recovery(emdb_map):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ref, pixel_size = _load_mrc(emdb_map)
 
-    # Crop to _MAX_BOX for test speed
     if max(ref.shape) > _MAX_BOX:
         target = tuple(min(s, _MAX_BOX) for s in ref.shape[-3:])
         ref = crop_or_pad_to_shape(ref, target)  # type: ignore[arg-type]
 
     ref = ref.to(device)
 
-    # ── perturbation ──────────────────────────────────────────────────────────
-    R_perturb = _rotation_z_zyx(5.0).to(device)
-    t_px = 2.0 / pixel_size          # 2 Å expressed in voxels
+    R_perturb = _rotation_z_zyx(angle_deg).to(device)
+    t_px = shift_A / pixel_size
     t_perturb = torch.tensor([t_px, 0.0, 0.0], dtype=torch.float32, device=device)
 
     mobile = apply_alignment(ref, AlignmentResult(R_perturb, t_perturb, score=1.0))
 
-    # ── alignment ─────────────────────────────────────────────────────────────
     result = fit_map_in_map(
         mobile,
         ref,
         exhaustive_config=ExhaustiveSearchConfig(
-            angular_step_degrees=5.0,
+            angular_step_degrees=angular_step_degrees,
             pixel_size_angstroms=pixel_size,
         ),
         gradient_config=GradientRefinementConfig(
-            n_iterations=200,
+            n_iterations=n_iterations,
             pixel_size_angstroms=pixel_size,
         ),
         pixel_size_angstroms=pixel_size,
         verbose=False,
     )
 
-    # ── expected inverse transform (pull convention) ──────────────────────────
-    R_expected = R_perturb.T                          # R_perturb^{-1}
-    t_expected = -(R_perturb @ t_perturb)             # = [-t_px, 0, 0]
+    R_expected = R_perturb.T
+    t_expected = -(R_perturb @ t_perturb)
 
-    # ── verify ────────────────────────────────────────────────────────────────
     R_pred = result.rotation_matrix.cpu()
     t_pred = result.translation_pixels.cpu()
 
@@ -216,6 +214,49 @@ def test_map_alignment_recovery(emdb_map):
 
     assert angle_err < 0.5, f"Rotation error {angle_err:.3f}° > 0.5°"
     assert t_err_A < 0.5, f"Translation error {t_err_A:.3f} Å > 0.5 Å"
+
+
+def test_map_alignment_translation_only(emdb_map):
+    """CI-fast: pure translation (4 Å), 90° angular step (~24 orientations)."""
+    _run_map_alignment_recovery(
+        emdb_map,
+        angle_deg=0.0,
+        shift_A=4.0,
+        angular_step_degrees=90.0,
+        n_iterations=50,
+    )
+
+
+def test_map_alignment_90deg_rotation(emdb_map):
+    """CI-fast: 90° Z-rotation + 2 Å shift, 90° angular step (rotation on grid)."""
+    _run_map_alignment_recovery(
+        emdb_map,
+        angle_deg=90.0,
+        shift_A=2.0,
+        angular_step_degrees=90.0,
+        n_iterations=50,
+    )
+
+
+@pytest.mark.slow
+def test_map_alignment_recovery(emdb_map):
+    """Perturb EMD-39549 with a known rigid transform and recover within 0.5 Å / 0.5°.
+
+    Perturbation: 5° rotation around Z, 2 Å translation along Z.
+    """
+    _run_map_alignment_recovery(emdb_map, angle_deg=5.0, shift_A=2.0)
+
+
+@pytest.mark.slow
+def test_map_alignment_large_rotation(emdb_map):
+    """Recover a large rotation (25°) with a moderate shift (4 Å) within 0.5°/0.5 Å."""
+    _run_map_alignment_recovery(emdb_map, angle_deg=25.0, shift_A=4.0)
+
+
+@pytest.mark.slow
+def test_map_alignment_large_shift(emdb_map):
+    """Recover a small rotation (8°) with a large shift (12 Å) within 0.5°/0.5 Å."""
+    _run_map_alignment_recovery(emdb_map, angle_deg=8.0, shift_A=12.0)
 
 
 @pytest.mark.slow
