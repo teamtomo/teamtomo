@@ -379,7 +379,7 @@ def fit_map_in_pdb_from_files(
         ft = torch.fft.rfftn(simulated, norm="ortho")
         simulated = torch.fft.irfftn(ft * lp, s=simulated.shape, norm="ortho")
 
-    mobile_map, simulated, common_px = normalise_voxel_sizes(
+    simulated, mobile_map, common_px = normalise_voxel_sizes(
         simulated, mobile_map, pixel_size_angstroms, mob_px
     )
     simulated = crop_or_pad_to_shape(simulated, tuple(mobile_map.shape[-3:]))  # type: ignore[arg-type]
