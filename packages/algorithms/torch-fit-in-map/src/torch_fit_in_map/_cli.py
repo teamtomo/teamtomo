@@ -25,6 +25,12 @@ simulate_app = typer.Typer(
     add_completion=False,
 )
 
+fit_in_atomic_model_app = typer.Typer(
+    name="torch-fit-in-atomic-model",
+    help="Fit an experimental density map into the coordinate frame of an atomic model.",
+    add_completion=False,
+)
+
 
 def _result_to_dict(result: object) -> dict[str, object]:
     """Serialise an AlignmentResult to a JSON-safe dict."""
@@ -427,3 +433,240 @@ def align(
             aligned = _apply_alignment(mobile_tensor.to(primary_device), result)
             _save_mrc(output, aligned, pixel_size=mobile_pixel_size or 1.0)
             typer.echo(f"Aligned volume saved to {output}", err=True)
+
+
+@fit_in_atomic_model_app.command()
+def fit_in_atomic_model(
+    reference: Annotated[
+        Path,
+        typer.Argument(help="Reference atomic model (.pdb / .cif / .mmcif)."),
+    ],
+    mobile: Annotated[
+        Path,
+        typer.Argument(help="Mobile MRC density map to fit into the atomic model frame."),
+    ],
+    angular_step: Annotated[
+        float, typer.Option("--angular-step", help="Angular search step in degrees.")
+    ] = 15.0,
+    symmetry: Annotated[
+        str,
+        typer.Option(
+            "--symmetry",
+            help=(
+                "Point-group symmetry of the reference model, e.g. C1, C4, D2. "
+                "Restricts the SO(3) search to the asymmetric unit."
+            ),
+        ),
+    ] = "C1",
+    n_iter: Annotated[
+        int,
+        typer.Option("--n-iter", help="Gradient refinement iterations (0 = skip)."),
+    ] = 100,
+    optimizer: Annotated[
+        str,
+        typer.Option("--optimizer", help="Refinement optimizer ('lbfgs' or 'adam')."),
+    ] = "lbfgs",
+    learning_rate: Annotated[
+        Optional[float],
+        typer.Option("--lr", help="Refinement learning rate (defaults: lbfgs=1.0, adam=0.01)."),
+    ] = None,
+    n_start: Annotated[
+        int,
+        typer.Option(
+            "--n-start",
+            help=(
+                "Number of top exhaustive-search poses to refine independently. "
+                "The best result is returned."
+            ),
+        ),
+    ] = 1,
+    mask: Annotated[
+        Optional[Path], typer.Option("--mask", help="Optional MRC soft-mask.")
+    ] = None,
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output",
+            help="Save the aligned density map as MRC.",
+        ),
+    ] = None,
+    pixel_size: Annotated[
+        Optional[float],
+        typer.Option(
+            "--pixel-size",
+            help=(
+                "Pixel size in Å for PDB simulation. "
+                "Defaults to the pixel size read from the mobile MRC header."
+            ),
+        ),
+    ] = None,
+    box_size: Annotated[
+        Optional[int],
+        typer.Option(
+            "--box-size",
+            help=(
+                "Box size in voxels for PDB simulation. "
+                "Defaults to the largest dimension of the mobile map."
+            ),
+        ),
+    ] = None,
+    desired_resolution: Annotated[
+        Optional[float],
+        typer.Option(
+            "--desired-resolution",
+            help=(
+                "Low-pass filter the simulated reference density to this resolution in Å "
+                "before alignment.  Must be >= 2 × pixel_size."
+            ),
+        ),
+    ] = None,
+    save_simulated: Annotated[
+        Optional[Path],
+        typer.Option("--save-simulated", help="Save simulated reference density MRC here."),
+    ] = None,
+    output_json: Annotated[
+        Optional[Path],
+        typer.Option("--output-json", help="Write result JSON to this path."),
+    ] = None,
+    quiet: Annotated[
+        bool,
+        typer.Option(
+            "--quiet/--no-quiet",
+            "-q/-Q",
+            help="Suppress progress output.  Requires --output or --output-json.",
+        ),
+    ] = False,
+    device: Annotated[
+        str,
+        typer.Option(
+            "--device",
+            help="Torch device(s), e.g. 'cpu', 'cuda', 'all', or '0,1' for multi-GPU.",
+        ),
+    ] = "auto",
+) -> None:
+    """Fit MOBILE (density map) into the coordinate frame of REFERENCE (atomic model).
+
+    The atomic model is simulated as a density map and used as the reference;
+    the experimental density map is the mobile.  For the inverse (fit a PDB
+    into a density map), use ``torch-fit-in-map``.
+    """
+    import torch
+
+    from ._config import ExhaustiveSearchConfig, GradientRefinementConfig
+    from ._io import (
+        _load_mrc,
+        _save_mrc,
+        fit_map_in_pdb_from_files,
+    )
+    from . import apply_alignment as _apply_alignment
+
+    if quiet and output is None and output_json is None:
+        typer.echo(
+            "Error: --quiet requires --output or --output-json (otherwise all results are lost).",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if reference.suffix.lower() not in _PDB_SUFFIXES:
+        typer.echo(
+            f"Error: REFERENCE must be an atomic model "
+            f"({', '.join(_PDB_SUFFIXES)}), got '{reference.suffix}'.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if mobile.suffix.lower() not in _MRC_SUFFIXES:
+        typer.echo(
+            f"Error: MOBILE must be an MRC density map "
+            f"({', '.join(_MRC_SUFFIXES)}), got '{mobile.suffix}'.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if output is not None and output.suffix.lower() not in _MRC_SUFFIXES:
+        typer.echo(
+            f"Error: --output must have an MRC extension ({', '.join(_MRC_SUFFIXES)}), "
+            f"got '{output.suffix}'.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if save_simulated is not None and save_simulated.suffix.lower() not in _MRC_SUFFIXES:
+        typer.echo(
+            f"Error: --save-simulated must have an MRC extension ({', '.join(_MRC_SUFFIXES)}), "
+            f"got '{save_simulated.suffix}'.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    # Device parsing
+    if device == "auto":
+        devs = ["cuda" if torch.cuda.is_available() else "cpu"]
+    elif device == "all":
+        n = torch.cuda.device_count()
+        devs = [f"cuda:{i}" for i in range(n)] if n > 0 else ["cpu"]
+    elif "," in device:
+        devs = [
+            f"cuda:{d.strip()}" if d.strip().isdigit() else d.strip()
+            for d in device.split(",")
+        ]
+    else:
+        devs = [device]
+
+    primary_device = torch.device(devs[0])
+
+    exhaustive_cfg = ExhaustiveSearchConfig(
+        angular_step_degrees=angular_step,
+        symmetry=symmetry,
+        n_start=n_start,
+        devices=devs,
+    )
+
+    if n_iter > 0:
+        grad_kwargs: dict[str, object] = {
+            "optimizer": optimizer,
+            "n_iterations": n_iter,
+            "devices": devs,
+        }
+        if learning_rate is not None:
+            grad_kwargs["learning_rate"] = learning_rate
+        gradient_cfg = GradientRefinementConfig(**grad_kwargs)  # type: ignore[arg-type]
+    else:
+        gradient_cfg = None
+
+    result = fit_map_in_pdb_from_files(
+        mobile_map_path=mobile,
+        reference_pdb_path=reference,
+        pixel_size_angstroms=pixel_size,
+        box_size=box_size,
+        desired_resolution_angstroms=desired_resolution,
+        save_simulated=save_simulated is not None,
+        exhaustive_config=exhaustive_cfg,
+        gradient_config=gradient_cfg,
+        mask_path=mask,
+        device=primary_device,
+        verbose=not quiet,
+    )
+
+    if save_simulated is not None and result.simulated_volume is not None:
+        mob_map, mob_px = _load_mrc(mobile)
+        _save_mrc(
+            save_simulated,
+            result.simulated_volume,
+            pixel_size=pixel_size or mob_px,
+        )
+        typer.echo(f"Simulated reference density saved to {save_simulated}", err=True)
+
+    data = _result_to_dict(result)
+    if not quiet:
+        typer.echo(json.dumps(data, indent=2))
+
+    if output_json is not None:
+        output_json.write_text(json.dumps(data, indent=2))
+        typer.echo(f"Result written to {output_json}", err=True)
+
+    if output is not None:
+        mob_map, mob_px = _load_mrc(mobile)
+        aligned = _apply_alignment(mob_map.to(primary_device), result)
+        _save_mrc(output, aligned, pixel_size=mob_px)
+        typer.echo(f"Aligned density map saved to {output}", err=True)

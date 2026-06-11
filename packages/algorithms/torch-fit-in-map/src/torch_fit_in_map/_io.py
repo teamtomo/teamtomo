@@ -278,6 +278,140 @@ def fit_map_in_map_from_files(
     )
 
 
+def fit_map_in_pdb_from_files(
+    mobile_map_path: str | os.PathLike[str],
+    reference_pdb_path: str | os.PathLike[str],
+    pixel_size_angstroms: float | None = None,
+    box_size: int | None = None,
+    *,
+    desired_resolution_angstroms: float | None = None,
+    save_simulated: bool = False,
+    simulator: DensitySimulator | None = None,
+    exhaustive_config: ExhaustiveSearchConfig | None = None,
+    gradient_config: GradientRefinementConfig | None = None,
+    mask_path: str | os.PathLike[str] | None = None,
+    device: torch.device | None = None,
+    verbose: bool = True,
+) -> AlignmentResult:
+    """Load an MRC map and fit it into the coordinate frame of an atomic model.
+
+    The experimental density (*mobile_map_path*) is the **mobile**; the PDB
+    simulation is the **reference**.  For the inverse (fit PDB into a map), use
+    :func:`fit_pdb_in_map_from_files`.
+
+    Parameters
+    ----------
+    mobile_map_path : str or Path
+        Path to the experimental MRC density map to be fitted.
+    reference_pdb_path : str or Path
+        Path to the atomic model (PDB or mmCIF) that defines the reference frame.
+    pixel_size_angstroms : float or None
+        Voxel size for the simulated reference density.  Defaults to the pixel
+        size read from the mobile MRC header.
+    box_size : int or None
+        Cubic box size for the simulated reference density.  Defaults to the
+        largest dimension of the mobile map so that the two volumes are the
+        same size.
+    desired_resolution_angstroms : float or None
+        If given, low-pass filter the simulated density to this resolution
+        before alignment.  Must be >= 2 × *pixel_size_angstroms*.
+    save_simulated : bool
+        If ``True``, store the simulated density in
+        ``AlignmentResult.simulated_volume``.
+    simulator : DensitySimulator or None
+        Density simulator.
+    exhaustive_config : ExhaustiveSearchConfig or None
+        Search parameters.
+    gradient_config : GradientRefinementConfig or None
+        Refinement parameters.
+    mask_path : str or Path or None
+        Optional MRC mask path.
+    device : torch.device or None
+        Target device.
+    verbose : bool
+        Show progress bars.
+
+    Returns
+    -------
+    AlignmentResult
+    """
+    from . import fit_map_in_map
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if simulator is None:
+        simulator = DEFAULT_SIMULATOR
+
+    mobile_map, mob_px = _load_mrc(mobile_map_path)
+    mobile_map = mobile_map.to(device)
+
+    if pixel_size_angstroms is None:
+        pixel_size_angstroms = mob_px
+    if box_size is None:
+        box_size = max(mobile_map.shape[-3:])
+
+    if desired_resolution_angstroms is not None and desired_resolution_angstroms < 2.0 * pixel_size_angstroms:
+        raise ValueError(
+            f"desired_resolution_angstroms ({desired_resolution_angstroms} Å) must be "
+            f">= 2 × pixel_size ({2.0 * pixel_size_angstroms} Å)."
+        )
+
+    simulated = simulator.simulate(
+        pdb_path=Path(reference_pdb_path),
+        pixel_size=pixel_size_angstroms,
+        box_size=box_size,
+        device=device,
+    )
+
+    if desired_resolution_angstroms is not None:
+        from torch_fourier_filter.bandpass import low_pass_filter
+
+        cutoff = pixel_size_angstroms / desired_resolution_angstroms
+        lp = low_pass_filter(
+            cutoff=cutoff,
+            falloff=0.02,
+            image_shape=simulated.shape,  # type: ignore[arg-type]
+            rfft=True,
+            fftshift=False,
+            device=device,
+        )
+        ft = torch.fft.rfftn(simulated, norm="ortho")
+        simulated = torch.fft.irfftn(ft * lp, s=simulated.shape, norm="ortho")
+
+    mobile_map, simulated, common_px = normalise_voxel_sizes(
+        simulated, mobile_map, pixel_size_angstroms, mob_px
+    )
+    simulated = crop_or_pad_to_shape(simulated, tuple(mobile_map.shape[-3:]))  # type: ignore[arg-type]
+
+    mask: torch.Tensor | None = None
+    if mask_path is not None:
+        mask, _ = _load_mrc(mask_path)
+        mask = mask.to(device)
+
+    if exhaustive_config is None:
+        exhaustive_config = ExhaustiveSearchConfig(pixel_size_angstroms=common_px)
+    if gradient_config is None and exhaustive_config.pixel_size_angstroms:
+        gradient_config = GradientRefinementConfig(
+            pixel_size_angstroms=exhaustive_config.pixel_size_angstroms
+        )
+
+    result = fit_map_in_map(
+        mobile_map,
+        simulated,
+        exhaustive_config=exhaustive_config,
+        gradient_config=gradient_config,
+        mask=mask,
+        pixel_size_angstroms=common_px,
+        verbose=verbose,
+    )
+
+    if save_simulated:
+        result.simulated_volume = simulated.cpu()
+
+    return result
+
+
 def fit_pdb_in_map_from_files(
     mobile_pdb_path: str | os.PathLike[str],
     reference_map_path: str | os.PathLike[str],

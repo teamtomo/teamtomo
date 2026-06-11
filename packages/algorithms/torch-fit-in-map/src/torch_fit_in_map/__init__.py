@@ -22,7 +22,7 @@ from ._config import (
 from ._exhaustive import _exhaustive_topk, exhaustive_search
 from ._preprocess import crop_or_pad_to_shape, normalise_voxel_sizes
 from ._gradient import gradient_refine
-from ._io import fit_map_in_map_from_files, fit_pdb_in_map_from_files
+from ._io import fit_map_in_map_from_files, fit_map_in_pdb_from_files, fit_pdb_in_map_from_files
 from ._projection import projection_align
 from ._result import AlignmentResult
 from ._simulate import DEFAULT_SIMULATOR, DensitySimulator
@@ -372,6 +372,7 @@ __all__ = [
     "fit_map_in_map",
     "fit_map_in_map_from_files",
     "fit_map_in_pdb",
+    "fit_map_in_pdb_from_files",
     "fit_pdb_in_map",
     "fit_pdb_in_map_from_files",
     "gradient_refine",
