@@ -57,6 +57,11 @@ except ImportError:
     torch_image_interpolation = None
 
 try:
+    import torch_scattering
+except ImportError:
+    torch_scattering = None
+
+try:
     import torch_so3
 except ImportError:
     torch_so3 = None
@@ -83,6 +88,7 @@ __all__ = [
     "torch_fourier_slice",
     "torch_grid_utils",
     "torch_image_interpolation",
+    "torch_scattering",
     "torch_so3",
     "torch_subpixel_crop",
     "torch_transform_image",

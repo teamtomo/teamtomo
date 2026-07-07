@@ -26,6 +26,7 @@ members = [
     "torch-local-resolution",
     "torch-motion-correction",
     "torch-refine-tilt-axis-angle",
+    "torch-scattering",
     "torch-segment-fiducials-2d",
     "torch-so3",
     "torch-subpixel-crop",
@@ -3756,6 +3757,7 @@ dependencies = [
     { name = "torch-local-resolution" },
     { name = "torch-motion-correction" },
     { name = "torch-refine-tilt-axis-angle" },
+    { name = "torch-scattering" },
     { name = "torch-segment-fiducials-2d" },
     { name = "torch-so3" },
     { name = "torch-subpixel-crop" },
@@ -3803,6 +3805,7 @@ requires-dist = [
     { name = "torch-local-resolution", editable = "packages/algorithms/torch-local-resolution" },
     { name = "torch-motion-correction", editable = "packages/algorithms/torch-motion-correction" },
     { name = "torch-refine-tilt-axis-angle", editable = "packages/algorithms/torch-refine-tilt-axis-angle" },
+    { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
     { name = "torch-segment-fiducials-2d", editable = "packages/algorithms/torch-segment-fiducials-2d" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
@@ -4691,6 +4694,19 @@ dependencies = [
     { name = "torch-grid-utils" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "mrcfile" },
@@ -4699,6 +4715,19 @@ requires-dist = [
     { name = "torch" },
     { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
 ]
 
 [[package]]
@@ -4806,6 +4835,58 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-scattering"
+source = { editable = "packages/primitives/torch-scattering" }
+dependencies = [
+    { name = "scipy" },
+    { name = "torch" },
+    { name = "torch-ctf" },
+    { name = "torch-grid-utils" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "scipy" },
+    { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },

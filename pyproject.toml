@@ -20,6 +20,7 @@ dependencies = [
     "torch-subpixel-crop",
     "torch-fourier-slice",
     "torch-ctf",
+    "torch-scattering",
     "torch-fourier-filter",
     "torch-fourier-shell-correlation",
     "torch-cubic-spline-grids",
@@ -50,6 +51,7 @@ torch-fourier-rescale = { workspace = true }
 torch-subpixel-crop = { workspace = true }
 torch-fourier-slice = { workspace = true }
 torch-ctf = { workspace = true }
+torch-scattering = { workspace = true }
 torch-fourier-filter = { workspace = true }
 torch-fourier-shell-correlation = { workspace = true }
 torch-cubic-spline-grids = { workspace = true }
