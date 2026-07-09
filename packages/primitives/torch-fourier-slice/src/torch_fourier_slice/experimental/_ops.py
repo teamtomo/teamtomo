@@ -20,7 +20,7 @@ import math
 
 import torch
 
-from ._gpu import device_address, pre_launch_sync
+from ._gpu import device_address, pre_launch_sync, stream_address
 from ._kernels import device_session, kernels
 from ._validation import (
     interp_code,
@@ -71,7 +71,9 @@ def forward_project(
     ).contiguous()
     if use_gpu:
         bufs = (rec_r, rot, shifts_2d_t, shifts_3d_t, proj_r)
-        addrs = tuple(device_address(t) for t in bufs)
+        # device addresses of the buffers, then torch's stream address as the
+        # trailing element (folded in to stay under Mojo's def_function arity cap)
+        addrs = tuple(device_address(t) for t in bufs) + (stream_address(device),)
         pre_launch_sync(device, *bufs)
         kernels().extract_central_slices_rfft_3d_gpu(
             device_session(), rec_r, rot, shifts_2d_t, shifts_3d_t, proj_r, params, addrs
@@ -157,7 +159,7 @@ def run_scatter(
     )
     bufs = (slices_r, w_in, rot, shifts_2d_t, shifts_3d_t, vol_r, wvol)
     if use_gpu:
-        addrs = tuple(device_address(t) for t in bufs)
+        addrs = tuple(device_address(t) for t in bufs) + (stream_address(device),)
         pre_launch_sync(device, *bufs)
         kernels().insert_central_slices_rfft_3d_gpu(
             device_session(), bufs, params, addrs
@@ -253,7 +255,7 @@ def run_pose_grad(
             else kernels().extract_central_slices_rfft_3d_pose_grad
         )
     if use_gpu:
-        addrs = tuple(device_address(t) for t in bufs)
+        addrs = tuple(device_address(t) for t in bufs) + (stream_address(device),)
         pre_launch_sync(device, *bufs)
         fn(device_session(), bufs, params, addrs)
     else:
@@ -315,7 +317,7 @@ def run_weight_grad(
         else kernels().insert_central_slices_rfft_3d_weight_grad
     )
     if use_gpu:
-        addrs = tuple(device_address(t) for t in bufs)
+        addrs = tuple(device_address(t) for t in bufs) + (stream_address(device),)
         pre_launch_sync(device, *bufs)
         fn(device_session(), bufs, params, addrs)
     else:

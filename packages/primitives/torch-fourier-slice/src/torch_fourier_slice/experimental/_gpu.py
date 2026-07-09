@@ -84,6 +84,19 @@ def device_address(t: torch.Tensor) -> int:
     return t.data_ptr()
 
 
+def stream_address(device: torch.device) -> int:
+    """Address of torch's active GPU stream for the launch to enqueue on.
+
+    CUDA: the current stream's ``CUstream`` -- the Mojo kernel wraps it and
+    enqueues on it, so ordering with the surrounding torch ops needs no full
+    device sync. Metal/MPS: 0 (no external-stream handoff; the kernel runs on
+    the DeviceContext's own stream and the entry point syncs it).
+    """
+    if device.type == "cuda":
+        return torch.cuda.current_stream(device).cuda_stream
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Metal heap residency + queue sync
 # ---------------------------------------------------------------------------
@@ -132,15 +145,14 @@ def revive_heaps(*tensors: torch.Tensor | None) -> None:
 
 
 def pre_launch_sync(device: torch.device, *tensors: torch.Tensor | None) -> None:
-    """Make ``tensors`` safe for a Mojo kernel to read/write, then flush torch.
+    """Make ``tensors`` safe for a Mojo kernel to read/write before the launch.
 
-    On Metal: revive each tensor's heap and flush torch's command queue so any
-    pending torch writes land before the Mojo kernel reads them. On CUDA: a
-    full device sync serialises torch's stream with the Mojo launch. The Mojo
-    entry point syncs its own queue before returning, closing the other side.
+    Metal: revive each tensor's heap (else Mojo may read an evicted heap as
+    zeros) and flush torch's command queue so pending torch writes land first.
+    CUDA: nothing to do -- the kernel is enqueued on torch's own stream (see
+    ``stream_address``), so it is already ordered after prior torch ops and
+    before later ones; no full device sync is needed.
     """
     if device.type == "mps":
         revive_heaps(*tensors)
         torch.mps.synchronize()
-    elif device.type == "cuda":
-        torch.cuda.synchronize()

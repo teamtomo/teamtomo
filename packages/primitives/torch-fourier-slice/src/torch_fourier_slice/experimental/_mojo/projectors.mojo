@@ -360,15 +360,18 @@ def extract_central_slices_rfft_3d_gpu(
     """Forward project on the GPU, reading/writing torch device memory directly.
 
     `addrs_obj` carries the raw device virtual addresses of, in order,
-    (rec, rot, shifts_2d, shifts_3d, proj). The tensor objects are used only for
-    their shapes. `proj` is pre-zeroed on the device by the caller (radius-cut
-    pixels stay 0, matching the CPU path).
+    (rec, rot, shifts_2d, shifts_3d, proj), then the foreign (torch) GPU stream
+    address as the trailing element (0 to enqueue on the context's own stream;
+    see `_launch_project`). The tensor objects are used only for their shapes.
+    `proj` is pre-zeroed on the device by the caller (radius-cut pixels stay 0,
+    matching the CPU path). We sync the context only on the own-stream path.
     """
     var p = _forward_params(
         rec_obj, rot_obj, shifts_2d_obj, shifts_3d_obj, proj_obj, params_obj
     )
     var bv = Int(py=rec_obj.shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
+    var stream_addr = Int(py=addrs_obj[5])  # trailing element after 5 buffers
 
     var ctx = _session_ctx(session_obj)
     _launch_project(
@@ -380,8 +383,10 @@ def extract_central_slices_rfft_3d_gpu(
         _dptr(addrs_obj[4]),
         total,
         p,
+        stream_addr,
     )
-    ctx.synchronize()  # writes land before Python reads the output tensor
+    if stream_addr == 0:
+        ctx.synchronize()  # own-stream path: writes land before Python reads
     return PythonObject(0)
 
 
@@ -394,12 +399,14 @@ def insert_central_slices_rfft_3d_gpu(
     """Scatter on the GPU, reading/writing torch device memory directly.
 
     `addrs_obj` holds device VAs for bufs = (slices, weights, rot, shifts_2d,
-    shifts_3d, vol, wvol) in order. `vol`/`wvol` are pre-zeroed on the device by
-    the caller (the kernel atomically accumulates into them).
+    shifts_3d, vol, wvol) then the foreign stream address as the trailing
+    element (0 for the own-stream path; see `extract_central_slices_rfft_3d_gpu`).
+    `vol`/`wvol` are pre-zeroed on the device by the caller (atomic accumulate).
     """
     var p = _scatter_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
+    var stream_addr = Int(py=addrs_obj[7])  # trailing element after 7 buffers
 
     var ctx = _session_ctx(session_obj)
     _launch_scatter(
@@ -413,8 +420,10 @@ def insert_central_slices_rfft_3d_gpu(
         _dptr(addrs_obj[6]),
         total,
         p,
+        stream_addr,
     )
-    ctx.synchronize()  # writes land before Python reads vol/wvol
+    if stream_addr == 0:
+        ctx.synchronize()  # own-stream path: writes land before Python reads
     return PythonObject(0)
 
 
@@ -427,12 +436,14 @@ def extract_central_slices_rfft_3d_pose_grad_gpu(
     """Forward-projection rotation/shift gradients on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for bufs = (rec, rot, shifts_2d, shifts_3d,
-    grad_proj, grad_rot, grad_shift, grad_shift_3d). The three grad_* outputs
-    are pre-zeroed on the device by the caller (atomically accumulated).
+    grad_proj, grad_rot, grad_shift, grad_shift_3d) then the foreign stream
+    address as the trailing element (0 for the own-stream path). The three
+    grad_* outputs are pre-zeroed on the device by the caller (atomic accumulate).
     """
     var p = _pose_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
+    var stream_addr = Int(py=addrs_obj[8])  # trailing element after 8 buffers
 
     var ctx = _session_ctx(session_obj)
     _launch_forward_pose_grad(
@@ -447,8 +458,10 @@ def extract_central_slices_rfft_3d_pose_grad_gpu(
         _dptr(addrs_obj[7]),
         total,
         p,
+        stream_addr,
     )
-    ctx.synchronize()  # writes land before Python reads the grad tensors
+    if stream_addr == 0:
+        ctx.synchronize()  # own-stream path: writes land before Python reads
     return PythonObject(0)
 
 
@@ -461,12 +474,15 @@ def insert_central_slices_rfft_3d_pose_grad_gpu(
     """Backprojection rotation/shift gradients on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for bufs = (grad_rec, rot, shifts_2d,
-    shifts_3d, proj, grad_rot, grad_shift, grad_shift_3d). The three grad_*
-    outputs are pre-zeroed on the device by the caller (atomically accumulated).
+    shifts_3d, proj, grad_rot, grad_shift, grad_shift_3d) then the foreign
+    stream address as the trailing element (0 for the own-stream path). The
+    three grad_* outputs are pre-zeroed on the device by the caller (atomic
+    accumulate).
     """
     var p = _pose_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
+    var stream_addr = Int(py=addrs_obj[8])  # trailing element after 8 buffers
 
     var ctx = _session_ctx(session_obj)
     _launch_backproject_pose_grad(
@@ -481,8 +497,10 @@ def insert_central_slices_rfft_3d_pose_grad_gpu(
         _dptr(addrs_obj[7]),
         total,
         p,
+        stream_addr,
     )
-    ctx.synchronize()  # writes land before Python reads the grad tensors
+    if stream_addr == 0:
+        ctx.synchronize()  # own-stream path: writes land before Python reads
     return PythonObject(0)
 
 
@@ -496,18 +514,27 @@ def insert_central_slices_rfft_3d_weight_grad_gpu(
 
     `addrs_obj` holds device VAs for the used buffers gwvol=bufs[0], rot=bufs[1]
     and grad_weight=bufs[4] (at addr indices 0, 1, 4 to match the buffer order;
-    indices 2/3 are the unused shift placeholders). `grad_weight` is pre-zeroed
-    on the device by the caller.
+    indices 2/3 are the unused shift placeholders), then the foreign stream
+    address as the trailing element (index 5; 0 for the own-stream path).
+    `grad_weight` is pre-zeroed on the device by the caller.
     """
     var p = _pose_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
+    var stream_addr = Int(py=addrs_obj[5])  # trailing element after 5 addr slots
 
     var ctx = _session_ctx(session_obj)
     _launch_weight_grad(
-        ctx, _dptr(addrs_obj[0]), _dptr(addrs_obj[1]), _dptr(addrs_obj[4]), total, p
+        ctx,
+        _dptr(addrs_obj[0]),
+        _dptr(addrs_obj[1]),
+        _dptr(addrs_obj[4]),
+        total,
+        p,
+        stream_addr,
     )
-    ctx.synchronize()  # writes land before Python reads grad_weight
+    if stream_addr == 0:
+        ctx.synchronize()  # own-stream path: writes land before Python reads
     return PythonObject(0)
 
 

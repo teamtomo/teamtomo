@@ -11,6 +11,7 @@ there is no host<->device staging here.
 from std.math import ceildiv
 from std.gpu import global_idx
 from std.gpu.host import DeviceContext
+from std.memory import OpaquePointer
 
 from _common import BLOCK, FP, FourierSliceParams
 from _pixel import _project_pixel, _scatter_pixel
@@ -305,6 +306,15 @@ def _weight_grad_kernel(
 
 # ---------------------------------------------------------------------------
 # Launchers (unpack `p` to device scalars)
+#
+# `stream_addr` selects the GPU stream the kernel is enqueued on:
+#   != 0 : a foreign (torch) stream address (CUDA CUstream). Enqueuing on it
+#          orders the kernel with the surrounding torch ops directly, so no full
+#          device sync is needed -- the caller relies on torch's own stream.
+#   == 0 : the DeviceContext's own stream (the Metal path; the caller syncs the
+#          context afterwards, since Metal has no external-stream handoff).
+# `ctx.stream()` and `create_external_stream(...)` are the same stream type, so
+# one enqueue path serves both.
 # ---------------------------------------------------------------------------
 
 
@@ -318,7 +328,38 @@ def _launch_project(
     proj: FP,
     total: Int,
     p: FourierSliceParams,
+    stream_addr: Int,
 ) raises:
+    if stream_addr != 0:
+        # CUDA: enqueue on torch's stream (Metal has no external-stream API).
+        var stream = ctx.create_external_stream(
+            OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
+        )
+        var compiled = ctx.compile_function[_project_gpu_kernel]()
+        stream.enqueue_function(
+            compiled,
+            rec,
+            rot,
+            shifts_2d,
+            shifts_3d,
+            proj,
+            total,
+            p.bp,
+            p.sidelength,
+            p.proj_sidelength,
+            p.bv_rot,
+            p.bv_shift_2d,
+            p.oversampling,
+            p.radius_cutoff_sq,
+            p.has_shifts_2d,
+            p.interp,
+            p.ewald_curvature,
+            p.has_shifts_3d,
+            p.bv_shift_3d,
+            grid_dim=ceildiv(total, BLOCK),
+            block_dim=BLOCK,
+        )
+        return
     ctx.enqueue_function[_project_gpu_kernel](
         rec,
         rot,
@@ -355,7 +396,42 @@ def _launch_scatter(
     wvol: FP,
     total: Int,
     p: FourierSliceParams,
+    stream_addr: Int,
 ) raises:
+    if stream_addr != 0:
+        var stream = ctx.create_external_stream(
+            OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
+        )
+        var compiled = ctx.compile_function[_scatter_gpu_kernel]()
+        stream.enqueue_function(
+            compiled,
+            inp,
+            weights,
+            rot,
+            shifts_2d,
+            shifts_3d,
+            vol,
+            wvol,
+            total,
+            p.bp,
+            p.sidelength,
+            p.proj_sidelength,
+            p.bv_rot,
+            p.bv_shift_2d,
+            p.oversampling,
+            p.radius_cutoff_sq,
+            p.has_shifts_2d,
+            p.interp,
+            p.has_weights,
+            p.friedel_double,
+            p.skip_redundant,
+            p.ewald_curvature,
+            p.has_shifts_3d,
+            p.bv_shift_3d,
+            grid_dim=ceildiv(total, BLOCK),
+            block_dim=BLOCK,
+        )
+        return
     ctx.enqueue_function[_scatter_gpu_kernel](
         inp,
         weights,
@@ -398,7 +474,40 @@ def _launch_forward_pose_grad(
     grad_shift_3d: FP,
     total: Int,
     p: FourierSliceParams,
+    stream_addr: Int,
 ) raises:
+    if stream_addr != 0:
+        var stream = ctx.create_external_stream(
+            OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
+        )
+        var compiled = ctx.compile_function[_forward_pose_grad_kernel]()
+        stream.enqueue_function(
+            compiled,
+            rec,
+            rot,
+            shifts_2d,
+            shifts_3d,
+            grad_proj,
+            grad_rot,
+            grad_shift,
+            grad_shift_3d,
+            total,
+            p.bp,
+            p.sidelength,
+            p.proj_sidelength,
+            p.bv_rot,
+            p.bv_shift_2d,
+            p.oversampling,
+            p.radius_cutoff_sq,
+            p.has_shifts_2d,
+            p.interp,
+            p.ewald_curvature,
+            p.has_shifts_3d,
+            p.bv_shift_3d,
+            grid_dim=ceildiv(total, BLOCK),
+            block_dim=BLOCK,
+        )
+        return
     ctx.enqueue_function[_forward_pose_grad_kernel](
         rec,
         rot,
@@ -439,7 +548,40 @@ def _launch_backproject_pose_grad(
     grad_shift_3d: FP,
     total: Int,
     p: FourierSliceParams,
+    stream_addr: Int,
 ) raises:
+    if stream_addr != 0:
+        var stream = ctx.create_external_stream(
+            OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
+        )
+        var compiled = ctx.compile_function[_backproject_pose_grad_kernel]()
+        stream.enqueue_function(
+            compiled,
+            grad_rec,
+            rot,
+            shifts_2d,
+            shifts_3d,
+            proj,
+            grad_rot,
+            grad_shift,
+            grad_shift_3d,
+            total,
+            p.bp,
+            p.sidelength,
+            p.proj_sidelength,
+            p.bv_rot,
+            p.bv_shift_2d,
+            p.oversampling,
+            p.radius_cutoff_sq,
+            p.has_shifts_2d,
+            p.interp,
+            p.ewald_curvature,
+            p.has_shifts_3d,
+            p.bv_shift_3d,
+            grid_dim=ceildiv(total, BLOCK),
+            block_dim=BLOCK,
+        )
+        return
     ctx.enqueue_function[_backproject_pose_grad_kernel](
         grad_rec,
         rot,
@@ -475,7 +617,33 @@ def _launch_weight_grad(
     grad_weight: FP,
     total: Int,
     p: FourierSliceParams,
+    stream_addr: Int,
 ) raises:
+    if stream_addr != 0:
+        var stream = ctx.create_external_stream(
+            OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
+        )
+        var compiled = ctx.compile_function[_weight_grad_kernel]()
+        stream.enqueue_function(
+            compiled,
+            gwvol,
+            rot,
+            grad_weight,
+            total,
+            p.bp,
+            p.sidelength,
+            p.proj_sidelength,
+            p.bv_rot,
+            p.bv_shift_2d,
+            p.oversampling,
+            p.radius_cutoff_sq,
+            p.interp,
+            p.friedel_double,
+            p.ewald_curvature,
+            grid_dim=ceildiv(total, BLOCK),
+            block_dim=BLOCK,
+        )
+        return
     ctx.enqueue_function[_weight_grad_kernel](
         gwvol,
         rot,
