@@ -16,7 +16,6 @@ def _b_envelope(frequency_grid_px: torch.Tensor, B: float) -> torch.Tensor:
         ``fftfreq_grid(image_shape, norm=True) / pixel_size``.
     B: float
         The B-factor value.
-        Suggested value is 5 A^2 / e-/A^2
 
     Returns
     -------
@@ -195,14 +194,12 @@ def _Cs_envelope(
     Cs = spherical_aberration * 1e7  # mm -> angstroms
     defocus *= 1e4  # microns -> angstroms
 
-    return torch.exp(
-        -(((torch.pi * (alpha / 1000)) / _lambda) ** 2)
-        * (
-            Cs * _lambda**3 * frequency_grid_px**3
-            + _lambda * (defocus) * frequency_grid_px
-        )
-        ** 2
-    )
+    aperture_term = (torch.pi * (alpha / 1000) / _lambda) ** 2
+    spherical_term = Cs * _lambda**3 * frequency_grid_px**3
+    defocus_term = _lambda * defocus * frequency_grid_px
+    phase_deviation = spherical_term + defocus_term
+
+    return torch.exp(-aperture_term * phase_deviation**2)
 
 
 def Cs_envelope(
