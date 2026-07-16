@@ -780,7 +780,7 @@ wheels = [
 
 [[package]]
 name = "etomofiles"
-version = "0.1.1"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mrcfile" },
@@ -788,9 +788,9 @@ dependencies = [
     { name = "pandas" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/ab/66be00df0fab12a0b13868c720bcc934b78a816f4201d335bd524220f8cb/etomofiles-0.1.1.tar.gz", hash = "sha256:8f41827145cd2a256622cf10ade48307a3e7c50a535befe81a49d54a84b1ca76", size = 16603, upload-time = "2025-10-22T10:09:58.764Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/4d/be07d1b7f19bc61818fe9bada35b15935104c1f03a9267997510bb01a0bb/etomofiles-0.1.2.tar.gz", hash = "sha256:2e5778145378a0b748f0c6eff39e751e8e426ce88c5167b16ffcfb9b693f19c7", size = 18245, upload-time = "2026-06-30T23:52:03.824Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c6/f5/7e403f93faae3c9b64a54c6158292d9e7453c043b177b32ab30b40207e8a/etomofiles-0.1.1-py3-none-any.whl", hash = "sha256:9f692ef3ca4c9be76ef055b9f87bc621cf0224e50fbab1346a9360801265b68a", size = 9390, upload-time = "2025-10-22T10:09:57.751Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/74/ccef45630e9eebab4c594caeba2bf9dfafd637028fcd11896bdc0a2f0886/etomofiles-0.1.2-py3-none-any.whl", hash = "sha256:a066b0272b5946a29c4f681b9e90878bf769880a675b69dd71b824d01a19cbf8", size = 9691, upload-time = "2026-06-30T23:52:02.413Z" },
 ]
 
 [[package]]
