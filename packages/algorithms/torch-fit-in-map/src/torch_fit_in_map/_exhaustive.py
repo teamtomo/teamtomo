@@ -6,12 +6,12 @@ import heapq
 import math
 
 import torch
-from tqdm import tqdm
+from torch_affine_utils import homogenise_coordinates
 from torch_affine_utils.transforms_3d import Ry, Rz
 from torch_grid_utils import coordinate_grid
-from torch_affine_utils import homogenise_coordinates
 from torch_image_interpolation import sample_image_3d
 from torch_so3 import get_symmetry_ranges, get_uniform_euler_angles
+from tqdm import tqdm
 
 from ._config import ExhaustiveSearchConfig
 

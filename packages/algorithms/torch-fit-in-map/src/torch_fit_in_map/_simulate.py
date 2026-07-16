@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 @runtime_checkable
 class DensitySimulator(Protocol):
-    """Protocol for simulating a density map from an atomic model.
+    """Protocol for simulating a density map from a table of atoms.
+
+    Atoms are supplied as a :class:`pandas.DataFrame` with (at least) the
+    columns ``x``, ``y``, ``z`` (Cartesian coordinates in Angstroms) and
+    ``element`` (atomic symbol, e.g. ``"C"``).  This is the column convention
+    produced by :func:`mmdf.read`, so callers can obtain a compatible frame with
+    ``mmdf.read("model.pdb")`` (file reading itself lives in the CLI wrapper,
+    ``torch-fit-in-map-cli``).
 
     The default implementation uses ``torch-calculate-electrostatic-potential``
     (``espcalculator``) which must be installed separately::
@@ -18,34 +27,37 @@ class DensitySimulator(Protocol):
         pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
 
     A custom simulator can be injected by implementing this protocol and passing
-    it to :func:`fit_map_in_pdb`, :func:`fit_pdb_in_map`, or their
-    ``_from_files`` variants.
+    it to :func:`fit_map_in_pdb` or :func:`fit_pdb_in_map`.
 
     Example
     -------
     .. code-block:: python
 
+        import mmdf
+
         class MySimulator:
-            def simulate(self, pdb_path, pixel_size, box_size, device=None):
+            def simulate(self, atoms, pixel_size, box_size, device=None):
                 ...
 
-        result = fit_pdb_in_map("model.pdb", density, 1.5, 128,
+        atoms = mmdf.read("model.pdb")
+        result = fit_pdb_in_map(atoms, density, 1.5, 128,
                                 simulator=MySimulator())
     """
 
     def simulate(
         self,
-        pdb_path: str | Path,
+        atoms: pd.DataFrame,
         pixel_size: float,
         box_size: int,
         device: torch.device | None = None,
     ) -> torch.Tensor:
-        """Simulate a density from an atomic model.
+        """Simulate a density from a table of atoms.
 
         Parameters
         ----------
-        pdb_path : str or Path
-            Path to the PDB or mmCIF file.
+        atoms : pandas.DataFrame
+            Atom table with columns ``x``, ``y``, ``z`` (Angstroms) and
+            ``element`` (atomic symbol).
         pixel_size : float
             Voxel size in Angstroms.
         box_size : int
@@ -62,51 +74,54 @@ class DensitySimulator(Protocol):
 
 
 class _ESPSimulator:
-    """Default simulator using ``espcalculator`` (torch-calculate-electrostatic-potential).
+    """Default simulator using ``espcalculator`` (electrostatic potential).
 
-    Atoms are loaded with ``gemmi``, centered in the box, and passed to
-    ``espcalculator.calculate_esp``.  Install the optional dependency with::
+    Atom coordinates and element symbols are taken from the ``atoms`` DataFrame,
+    centered in the box, and passed to ``espcalculator.calculate_esp``.  Install
+    the optional dependency with::
 
         pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
     """
 
     def simulate(
         self,
-        pdb_path: str | Path,
+        atoms: pd.DataFrame,
         pixel_size: float,
         box_size: int,
         device: torch.device | None = None,
     ) -> torch.Tensor:
         try:
-            import gemmi  # type: ignore[import]
-            from espcalculator import AtomStack, Lattice, calculate_esp  # type: ignore[import]
+            from espcalculator import (  # type: ignore[import]
+                AtomStack,
+                Lattice,
+                calculate_esp,
+            )
         except ImportError as exc:
             raise ImportError(
                 "The default DensitySimulator requires 'espcalculator'.\n"
                 "Install it with:\n"
                 "  pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git\n"
-                "or pass a custom simulator= to fit_map_in_pdb / fit_pdb_in_map / their _from_files variants."
+                "or pass a custom simulator= to fit_map_in_pdb / fit_pdb_in_map."
             ) from exc
 
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # --- load atoms with gemmi ---
-        structure = gemmi.read_structure(str(pdb_path))
-        coords: list[list[float]] = []
-        names: list[str] = []
-        for model in structure:
-            for chain in model:
-                for residue in chain:
-                    for atom in residue:
-                        pos = atom.pos
-                        coords.append([pos.x, pos.y, pos.z])
-                        names.append(atom.element.name)
+        # --- read atoms from the DataFrame ---
+        missing = {"x", "y", "z", "element"} - set(atoms.columns)
+        if missing:
+            raise ValueError(
+                f"atoms DataFrame is missing required column(s): {sorted(missing)}"
+            )
+        if len(atoms) == 0:
+            raise ValueError("atoms DataFrame is empty")
 
-        if not coords:
-            raise ValueError(f"No atoms found in {pdb_path}")
-
-        coords_t = torch.tensor(coords, dtype=torch.float32, device=device)  # (N, 3)
+        names: list[str] = atoms["element"].astype(str).tolist()
+        coords_t = torch.tensor(
+            atoms[["x", "y", "z"]].to_numpy(),
+            dtype=torch.float32,
+            device=device,
+        )  # (N, 3)
 
         # --- center atoms at box centre ---
         box_centre_a = (box_size - 1) / 2.0 * pixel_size

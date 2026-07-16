@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from tqdm import tqdm
 from torch_grid_utils import coordinate_grid
 from torch_image_interpolation import sample_image_3d
+from tqdm import tqdm
 
 from ._config import GradientRefinementConfig
 from ._preprocess import _normalise_volume
 from ._result import AlignmentResult
-
 
 # ---------------------------------------------------------------------------
 # Rodrigues rotation helpers

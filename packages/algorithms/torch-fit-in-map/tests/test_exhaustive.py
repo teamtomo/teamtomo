@@ -1,12 +1,12 @@
 """Tests for the exhaustive SO(3) search."""
 
-import torch
 import pytest
+import torch
 
 from torch_fit_in_map import ExhaustiveSearchConfig, exhaustive_search
 from torch_fit_in_map._exhaustive import (
-    _euler_zyz_to_4x4_zyx,
     _argmax_to_shift,
+    _euler_zyz_to_4x4_zyx,
     _parse_symmetry,
 )
 
@@ -118,7 +118,7 @@ def test_exhaustive_topk_returns_k_results():
 
 def test_fit_map_in_map_multistart():
     """fit_map_in_map with n_start=3 should return the best NCC-scored refined result."""
-    from torch_fit_in_map import fit_map_in_map, GradientRefinementConfig
+    from torch_fit_in_map import GradientRefinementConfig, fit_map_in_map
 
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)

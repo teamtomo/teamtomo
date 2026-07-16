@@ -19,6 +19,7 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 
@@ -77,27 +78,15 @@ class _GaussianCaSimulator:
 
     def simulate(
         self,
-        pdb_path: Path | str,
+        atoms: pd.DataFrame,
         pixel_size: float,
         box_size: int,
         device: torch.device | None = None,
     ) -> torch.Tensor:
-        import gemmi  # type: ignore[import]
-
-        structure = gemmi.read_structure(str(pdb_path))
-        ca_zyx = np.array(
-            [
-                [a.pos.z, a.pos.y, a.pos.x]
-                for model in structure
-                for chain in model
-                for res in chain
-                for a in res
-                if a.name == "CA"
-            ],
-            dtype=np.float32,
-        )
+        ca = atoms[atoms["atom"] == "CA"]
+        ca_zyx = ca[["z", "y", "x"]].to_numpy(dtype=np.float32)
         if len(ca_zyx) == 0:
-            raise ValueError(f"No CA atoms in {pdb_path}")
+            raise ValueError("No CA atoms in the provided DataFrame")
 
         centroid = ca_zyx.mean(0)
         box_centre_A = (box_size - 1) / 2.0 * pixel_size
@@ -270,6 +259,8 @@ def test_pdb_in_map_recovery(pdb_8yrq):
     (not the mobile), the expected result is the forward transform
     (R_perturb, t_perturb), not its inverse.
     """
+    import mmdf
+
     from torch_fit_in_map import (
         AlignmentResult,
         ExhaustiveSearchConfig,
@@ -284,8 +275,10 @@ def test_pdb_in_map_recovery(pdb_8yrq):
     pixel_size = 2.0   # Å — coarse enough for speed, fine enough for 0.5 Å tolerance
     box_size = _MAX_BOX
 
+    atoms = mmdf.read(str(pdb_8yrq))
+
     # Base density (unperturbed)
-    ref_density = sim.simulate(pdb_8yrq, pixel_size, box_size, device=device)
+    ref_density = sim.simulate(atoms, pixel_size, box_size, device=device)
 
     # ── perturbation ──────────────────────────────────────────────────────────
     R_perturb = _rotation_z_zyx(5.0).to(device)
@@ -300,7 +293,7 @@ def test_pdb_in_map_recovery(pdb_8yrq):
 
     # ── alignment ─────────────────────────────────────────────────────────────
     result = fit_pdb_in_map(
-        mobile_pdb=str(pdb_8yrq),
+        mobile_atoms=atoms,
         reference_map=perturbed_ref,
         pixel_size_angstroms=pixel_size,
         box_size=box_size,

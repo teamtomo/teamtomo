@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 try:
     __version__ = version("torch-fit-in-map")
@@ -13,19 +13,23 @@ except PackageNotFoundError:
 
 import torch
 from torch_transform_image import affine_transform_image_3d
+from tqdm import tqdm
 
+from ._atoms import transform_atoms
 from ._config import (
     ExhaustiveSearchConfig,
     GradientRefinementConfig,
     ProjectionAlignmentConfig,
 )
 from ._exhaustive import _exhaustive_topk, exhaustive_search
-from ._preprocess import crop_or_pad_to_shape, normalise_voxel_sizes
 from ._gradient import gradient_refine
-from ._io import fit_map_in_map_from_files, fit_map_in_pdb_from_files, fit_pdb_in_map_from_files
+from ._preprocess import crop_or_pad_to_shape, normalise_voxel_sizes
 from ._projection import projection_align
 from ._result import AlignmentResult
 from ._simulate import DEFAULT_SIMULATOR, DensitySimulator
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 # Sentinel for "use default gradient config" (avoids mutable default argument)
 _GRADIENT_UNSET: object = object()
@@ -43,9 +47,8 @@ def fit_map_in_map(
     """Fit *mobile_map* into *reference_map* via exhaustive SO(3) search + refinement.
 
     Both volumes must share the same voxel size.  Call
-    :func:`~torch_fit_in_map._preprocess.normalise_voxel_sizes` first if
-    they differ, or use :func:`fit_map_in_map_from_files` which handles this
-    automatically.
+    :func:`normalise_voxel_sizes` first if they differ (the
+    ``torch-fit-in-map-cli`` file wrappers handle this automatically).
 
     Parameters
     ----------
@@ -101,8 +104,7 @@ def fit_map_in_map(
         def _refine_worker(i, candidate, device_str):
             dev = torch.device(device_str)
             if verbose and len(devices) == 1:
-                from tqdm import tqdm as _tqdm
-                _tqdm.write(f"Gradient refinement: start {i + 1}/{n_start}")
+                tqdm.write(f"Gradient refinement: start {i + 1}/{n_start}")
 
             ref_dev = reference_map.to(dev)
             mob_dev = mobile_map.to(dev)
@@ -125,15 +127,13 @@ def fit_map_in_map(
 
         refined: list = []
         if verbose and n_start > 1:
-            from tqdm import tqdm as _tqdm
-            pbar = _tqdm(total=n_start, desc="Refining poses", unit="pose", dynamic_ncols=True)
+            pbar = tqdm(total=n_start, desc="Refining poses", unit="pose", dynamic_ncols=True)
         else:
             pbar = None
 
         if len(devices) > 1:
             if verbose:
-                from tqdm import tqdm as _tqdm
-                _tqdm.write(f"Parallel gradient refinement on {len(devices)} devices...")
+                tqdm.write(f"Parallel gradient refinement on {len(devices)} devices...")
 
             with ThreadPoolExecutor(max_workers=len(devices)) as executor:
                 futures = [
@@ -210,7 +210,7 @@ def apply_alignment(
 
 def fit_map_in_pdb(
     mobile_map: torch.Tensor,
-    reference_pdb: str,
+    reference_atoms: pd.DataFrame,
     pixel_size_angstroms: float,
     box_size: int,
     simulator: DensitySimulator | None = None,
@@ -220,27 +220,26 @@ def fit_map_in_pdb(
     mask: torch.Tensor | None = None,
     verbose: bool = True,
 ) -> AlignmentResult:
-    """Fit *mobile_map* into the coordinate frame defined by a PDB atomic model.
+    """Fit *mobile_map* into the coordinate frame defined by an atomic model.
 
-    The PDB is simulated as a density map, which serves as the **reference**.
+    The atoms are simulated as a density map, which serves as the **reference**.
     The experimental density *mobile_map* is the **mobile** being fitted.
-    For the inverse (fit PDB into a density map), use :func:`fit_pdb_in_map`.
+    For the inverse (fit atoms into a density map), use :func:`fit_pdb_in_map`.
 
     Parameters
     ----------
     mobile_map : torch.Tensor
         ``(d, h, w)`` experimental density map to be fitted.
-    reference_pdb : str
-        Path to the atomic model (PDB or mmCIF) that serves as reference.
+    reference_atoms : pandas.DataFrame
+        Atom table (columns ``x``, ``y``, ``z``, ``element``) that serves as
+        reference.  Obtain one with ``mmdf.read("model.pdb")``.
     pixel_size_angstroms : float
         Voxel size for the simulated reference density (Angstroms).
     box_size : int
         Cubic box size for the simulated reference density (voxels).
     simulator : DensitySimulator or None
         Density simulator.  See :class:`~torch_fit_in_map.DensitySimulator`.
-        When ``None``, a placeholder is used that raises ``NotImplementedError``
-        with guidance until ``torch-calculate-electrostatic-potential`` is
-        available.
+        When ``None``, the default ``espcalculator``-based simulator is used.
     save_simulated : bool
         Store the simulated reference density in ``AlignmentResult.simulated_volume``.
     exhaustive_config : ExhaustiveSearchConfig or None
@@ -259,7 +258,7 @@ def fit_map_in_pdb(
 
     device = mobile_map.device
     simulated = simulator.simulate(
-        pdb_path=Path(reference_pdb),
+        atoms=reference_atoms,
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
         device=device,
@@ -286,7 +285,7 @@ def fit_map_in_pdb(
 
 
 def fit_pdb_in_map(
-    mobile_pdb: str,
+    mobile_atoms: pd.DataFrame,
     reference_map: torch.Tensor,
     pixel_size_angstroms: float,
     box_size: int,
@@ -297,16 +296,17 @@ def fit_pdb_in_map(
     mask: torch.Tensor | None = None,
     verbose: bool = True,
 ) -> AlignmentResult:
-    """Fit an atomic model (PDB) into a density map.
+    """Fit an atomic model into a density map.
 
-    The PDB is simulated as a density map, which is the **mobile** being fitted
-    into *reference_map*.  For the inverse (fit a density map into a PDB frame),
-    use :func:`fit_map_in_pdb`.
+    The atoms are simulated as a density map, which is the **mobile** being
+    fitted into *reference_map*.  For the inverse (fit a density map into an
+    atomic-model frame), use :func:`fit_map_in_pdb`.
 
     Parameters
     ----------
-    mobile_pdb : str
-        Path to the atomic model (PDB or mmCIF) to be fitted.
+    mobile_atoms : pandas.DataFrame
+        Atom table (columns ``x``, ``y``, ``z``, ``element``) to be fitted.
+        Obtain one with ``mmdf.read("model.pdb")``.
     reference_map : torch.Tensor
         ``(d, h, w)`` experimental density map that serves as reference.
     pixel_size_angstroms : float
@@ -333,7 +333,7 @@ def fit_pdb_in_map(
 
     device = reference_map.device
     simulated = simulator.simulate(
-        pdb_path=Path(mobile_pdb),
+        atoms=mobile_atoms,
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
         device=device,
@@ -370,11 +370,10 @@ __all__ = [
     "crop_or_pad_to_shape",
     "exhaustive_search",
     "fit_map_in_map",
-    "fit_map_in_map_from_files",
     "fit_map_in_pdb",
-    "fit_map_in_pdb_from_files",
     "fit_pdb_in_map",
-    "fit_pdb_in_map_from_files",
     "gradient_refine",
+    "normalise_voxel_sizes",
     "projection_align",
+    "transform_atoms",
 ]

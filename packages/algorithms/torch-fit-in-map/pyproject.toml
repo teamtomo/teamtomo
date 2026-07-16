@@ -40,20 +40,16 @@ classifiers = [
 ]
 dependencies = [
     "torch",
+    "pandas",
     "pydantic>=2.0,<3",
-    "typer",
-    "mrcfile",
     "torch-so3",
     "torch-fourier-slice",
     "torch-fourier-rescale",
     "torch-affine-utils",
     "torch-transform-image",
     "torch-grid-utils",
-    "torch-fourier-filter",
-    "torch-fourier-shell-correlation",
     "torch-image-interpolation",
     "tqdm",
-    "gemmi",
     "torch-calculate-electrostatic-potential @ git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git",
 ]
 
@@ -61,14 +57,9 @@ dependencies = [
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
 
-[project.scripts]
-torch-fit-in-map = "torch_fit_in_map._cli:align_app"
-torch-fit-in-atomic-model = "torch_fit_in_map._cli:fit_in_atomic_model_app"
-torch-simulate-density = "torch_fit_in_map._cli:simulate_app"
-
 # https://peps.python.org/pep-0735/
 [dependency-groups]
-test = ["pytest", "pytest-cov", "scipy"]
+test = ["pytest", "pytest-cov", "scipy", "mmdf"]
 dev = [
     { include-group = "test" },
     "ipython",

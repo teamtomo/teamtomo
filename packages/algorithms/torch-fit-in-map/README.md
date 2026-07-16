@@ -7,23 +7,29 @@
 
 ## Overview
 
-`torch-fit-in-map` is a PyTorch package for rigid-body volume alignment in cryo-EM. It finds the rotation and translation that best superimposes a *mobile* volume onto a *reference* volume using normalised cross-correlation (NCC).
+`torch-fit-in-map` is a PyTorch package for rigid-body volume alignment in
+cryo-EM. It finds the rotation and translation that best superimposes a *mobile*
+volume onto a *reference* volume using normalised cross-correlation (NCC).
 
-Two input modes are supported:
+The public API operates purely on **`torch.Tensor`** density maps and
+**`pandas.DataFrame`** atom tables — it does no file I/O. Reading/writing MRC and
+PDB/mmCIF files and the command-line tools live in the companion package
+[`torch-fit-in-map-cli`](https://github.com/rsanchezgarc/torch-fit-in-map-cli).
 
-- **Map-to-map** — align one MRC density map onto another.
-- **PDB-to-map** — simulate an electrostatic potential density from an atomic model and align it to an experimental map.
+Two alignment modes are supported:
+
+- **Map-to-map** — align one density map onto another (`fit_map_in_map`).
+- **Atoms ↔ map** — simulate an electrostatic-potential density from a table of
+  atoms and align it against a map (`fit_pdb_in_map` / `fit_map_in_pdb`).
 
 ## Features
 
 - Exhaustive SO(3) grid search with per-rotation FFT-based optimal translation
-- Symmetry-aware search (`C1`, `C4`, `D2`, `T`, `O`, `I`, …) to restrict the search to the asymmetric unit
+- Symmetry-aware search (`C1`, `C4`, `D2`, `T`, `O`, `I`, …) to restrict to the asymmetric unit
 - Gradient-based local refinement (L-BFGS or Adam) using PyTorch autograd
 - Multi-start refinement to escape local minima
-- Optional soft masking
-- Multi-GPU support for both exhaustive search and gradient refinement
-- Atomic-model output: transform the input PDB/mmCIF coordinates into the reference frame
-- Command-line tools: `torch-fit-in-map` and `torch-simulate-density`
+- Optional soft masking and multi-GPU support
+- Atom-table transform: map input atomic coordinates into the reference frame (`transform_atoms`)
 
 ## Installation
 
@@ -31,11 +37,9 @@ Two input modes are supported:
 pip install torch-fit-in-map
 ```
 
-For PDB-to-map alignment, the electrostatic potential simulator must also be installed:
-
-```bash
-pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
-```
+The atoms↔map modes use the electrostatic-potential simulator
+`torch-calculate-electrostatic-potential` (installed automatically as a
+dependency).
 
 ## Basic Usage
 
@@ -43,94 +47,82 @@ pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potent
 
 ```python
 import torch
-from torch_fit_in_map import align_volumes, apply_alignment
+from torch_fit_in_map import fit_map_in_map, apply_alignment
 
 # (d, h, w) float tensors at the same pixel size
 reference = torch.load("reference.pt")
 mobile    = torch.load("mobile.pt")
 
-result = align_volumes(reference, mobile, pixel_size_angstroms=1.5)
+result = fit_map_in_map(mobile, reference, pixel_size_angstroms=1.5)
 
-print(f"NCC score:         {result.score:.4f}")
+print(f"NCC score:        {result.score:.4f}")
 print(f"Rotation (zyx):\n{result.rotation_matrix}")
-print(f"Translation (px):  {result.translation_pixels}")
-print(f"Translation (Å):   {result.translation_angstroms}")
+print(f"Translation (px): {result.translation_pixels}")
 
 aligned = apply_alignment(mobile, result)
 ```
 
-### From MRC files
+If the two maps have different voxel sizes, resample first with
+`normalise_voxel_sizes(reference, mobile, ref_px, mob_px)`.
+
+### Atoms ↔ map alignment
+
+Atoms are passed as a DataFrame with columns `x`, `y`, `z` (Å) and `element` —
+exactly what [`mmdf`](https://github.com/teamtomo/mmdf) produces:
 
 ```python
-from torch_fit_in_map import align_volumes_from_files, apply_alignment
+import mmdf
+from torch_fit_in_map import fit_pdb_in_map
 
-result = align_volumes_from_files("reference.mrc", "mobile.mrc")
+atoms = mmdf.read("model.pdb")          # pandas DataFrame
+
+result = fit_pdb_in_map(
+    mobile_atoms=atoms,
+    reference_map=experimental,          # (d, h, w) tensor
+    pixel_size_angstroms=1.5,
+    box_size=128,
+)
 ```
 
-Voxel sizes are read from the MRC headers; if they differ the mobile map is
-automatically Fourier-rescaled to match the reference.
+`fit_map_in_pdb` does the inverse (fit a map into the frame of an atomic model).
+Both accept a custom `simulator=` implementing the `DensitySimulator` protocol.
 
-### PDB-to-map alignment
+### Transforming atoms into the reference frame
 
 ```python
-from torch_fit_in_map import align_map_to_pdb_from_files
+from torch_fit_in_map import transform_atoms
 
-result = align_map_to_pdb_from_files(
-    map_path="experimental.mrc",
-    pdb_path="model.pdb",
-    desired_resolution_angstroms=8.0,  # low-pass filter simulated density
-)
+moved = transform_atoms(
+    atoms, result,
+    pixel_size=1.5,
+    box_shape=reference.shape,           # (d, h, w)
+)   # returns a DataFrame with transformed x/y/z
 ```
 
 ### Tuning the search
 
 ```python
 from torch_fit_in_map import (
-    align_volumes,
+    fit_map_in_map,
     ExhaustiveSearchConfig,
     GradientRefinementConfig,
 )
 
-exhaustive_cfg = ExhaustiveSearchConfig(
-    angular_step_degrees=7.5,   # finer orientation sampling
-    symmetry="C4",              # restrict search to C4 asymmetric unit
-    n_start=5,                  # refine top-5 poses independently
-    rotation_batch_size=32,     # increase for faster throughput on large VRAM
-)
-
-gradient_cfg = GradientRefinementConfig(
-    optimizer="lbfgs",
-    n_iterations=200,
-    loss="ncc",
-)
-
-result = align_volumes(
-    reference,
+result = fit_map_in_map(
     mobile,
-    exhaustive_config=exhaustive_cfg,
-    gradient_config=gradient_cfg,
+    reference,
+    exhaustive_config=ExhaustiveSearchConfig(
+        angular_step_degrees=7.5,   # finer orientation sampling
+        symmetry="C4",              # restrict to C4 asymmetric unit
+        n_start=5,                  # refine top-5 poses independently
+        devices=["cuda:0", "cuda:1"],
+    ),
+    gradient_config=GradientRefinementConfig(optimizer="lbfgs", n_iterations=200),
     pixel_size_angstroms=1.5,
 )
 ```
 
-Pass `gradient_config=None` to return the exhaustive-search result without
-further refinement.
-
-### Multi-GPU
-
-```python
-exhaustive_cfg = ExhaustiveSearchConfig(
-    angular_step_degrees=7.5,
-    devices=["cuda:0", "cuda:1"],
-)
-gradient_cfg = GradientRefinementConfig(
-    n_start=4,
-    devices=["cuda:0", "cuda:1"],
-)
-result = align_volumes(reference, mobile,
-                       exhaustive_config=exhaustive_cfg,
-                       gradient_config=gradient_cfg)
-```
+Pass `gradient_config=None` to return the exhaustive-search result without refinement.
 
 ## AlignmentResult
 
@@ -147,42 +139,9 @@ Use `apply_alignment(mobile, result)` to produce the aligned volume.
 
 ## Command-line tools
 
-### Align two volumes or a PDB to a map
-
-```bash
-# Map-to-map
-torch-fit-in-map reference.mrc mobile.mrc --output aligned.mrc
-
-# PDB-to-map (auto-detected from extension)
-torch-fit-in-map experimental.mrc model.pdb \
-    --desired-resolution 8.0 \
-    --output fitted.pdb \
-    --save-simulated simulated.mrc
-```
-
-Key options:
-
-| Option | Default | Description |
-|---|---|---|
-| `--angular-step` | `15.0` | Angular search step in degrees |
-| `--symmetry` | `C1` | Point-group symmetry of the reference |
-| `--n-start` | `1` | Top poses to refine independently |
-| `--n-iter` | `100` | Gradient refinement iterations (0 to skip) |
-| `--optimizer` | `lbfgs` | `lbfgs` or `adam` |
-| `--mask` | — | Optional soft-mask MRC |
-| `--output-json` | — | Write result (rotation, translation, score) as JSON |
-| `--device` | `auto` | `cpu`, `cuda`, `all`, or `0,1` for multi-GPU |
-| `--quiet` | — | Suppress progress bars (requires `--output` or `--output-json`) |
-
-### Simulate a density from an atomic model
-
-```bash
-torch-simulate-density model.pdb \
-    --output simulated.mrc \
-    --pixel-size 1.5 \
-    --box-size 128 \
-    --desired-resolution 6.0
-```
+The `torch-fit-in-map`, `torch-fit-in-atomic-model` and `torch-simulate-density`
+commands (with MRC/PDB file handling) live in
+[`torch-fit-in-map-cli`](https://github.com/rsanchezgarc/torch-fit-in-map-cli).
 
 ## License
 

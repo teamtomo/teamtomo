@@ -4338,27 +4338,24 @@ test = [
 name = "torch-fit-in-map"
 source = { editable = "packages/algorithms/torch-fit-in-map" }
 dependencies = [
-    { name = "gemmi" },
-    { name = "mrcfile" },
+    { name = "pandas" },
     { name = "pydantic" },
     { name = "torch" },
     { name = "torch-affine-utils" },
     { name = "torch-calculate-electrostatic-potential" },
-    { name = "torch-fourier-filter" },
     { name = "torch-fourier-rescale" },
-    { name = "torch-fourier-shell-correlation" },
     { name = "torch-fourier-slice" },
     { name = "torch-grid-utils" },
     { name = "torch-image-interpolation" },
     { name = "torch-so3" },
     { name = "torch-transform-image" },
     { name = "tqdm" },
-    { name = "typer" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "ipython" },
+    { name = "mmdf" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
@@ -4369,6 +4366,7 @@ dev = [
     { name = "scipy" },
 ]
 test = [
+    { name = "mmdf" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "scipy" },
@@ -4376,27 +4374,24 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gemmi" },
-    { name = "mrcfile" },
+    { name = "pandas" },
     { name = "pydantic", specifier = ">=2.0,<3" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-calculate-electrostatic-potential", git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git" },
-    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
-    { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
     { name = "tqdm" },
-    { name = "typer" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "ipython" },
+    { name = "mmdf" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
@@ -4407,6 +4402,7 @@ dev = [
     { name = "scipy" },
 ]
 test = [
+    { name = "mmdf" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "scipy" },
