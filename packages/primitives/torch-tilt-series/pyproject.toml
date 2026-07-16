@@ -11,7 +11,6 @@ fallback-version = "0.5.0"
 
 [tool.hatch.version.raw-options]
 search_parent_directories = true
-# Parse tags of the form: <package-name>@v<semver>
 tag_regex = "^torch-tilt-series@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 # Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
 # See https://github.com/ofek/hatch-vcs/issues/71
@@ -27,14 +26,15 @@ sources = ["src"]
 [project]
 name = "torch-tilt-series"
 dynamic = ["version"]
-description = "Tomogram reconstruction, subtomogram reconstruction, and subtilt extraction for cryo-ET."
+description = "Tilt series data structure, projection and subtilt extraction for cryo-ET."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "BSD-3-Clause" }
 authors = [
     { name = "Marten Chaillet", email = "martenchaillet@gmail.com" },
-    { name = "Alister Burt", email = "alisterburt@gmail.com"}
+    { name = "Davide Torre", email = "davidetorre99@gmail.com" },
 ]
+# https://pypi.org/classifiers/
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: BSD License",
@@ -45,50 +45,57 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
+# add your package dependencies here
 dependencies = [
     "numpy",
     "einops",
     "torch",
-    "torch-fourier-slice",
-    "torch-grid-utils>=0.0.8",
     "torch-affine-utils",
-    "torch-subpixel-crop",
-    "etomofiles",
-    "alnfile",
-    "mrcfile",
 ]
+
+# https://peps.python.org/pep-0621/#dependencies-optional-dependencies
+# add dependencies for "extra" features here.  Not dev dependencies.
+[project.optional-dependencies]
+io = ["alnfile", "etomofiles"]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
-
-# https://peps.python.org/pep-0735/
-[dependency-groups]
-test = ["pytest", "pytest-cov"]
-dev = [
-    { include-group = "test" },
-    "ipython",
-    "mypy",
-    "pdbpp", # https://github.com/pdbpp/pdbpp
-    "pre-commit",
-    "rich", # https://github.com/Textualize/rich
-    "ruff",
-]
+documentation = "https://github.com/teamtomo/teamtomo#readme"
+changelog = "https://github.com/teamtomo/teamtomo#changelog"
+"Bug Tracker" = "https://github.com/teamtomo/teamtomo/issues"
+"Source Code" = "https://github.com/teamtomo/teamtomo"
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
 # same as console_scripts entry point
 # [project.scripts]
-# torch-tomogram-cli = "torch_tomogram:main_cli"
+# torch-tilt-series-cli = "torch_tilt_series:main_cli"
 
 # [project.entry-points."some.group"]
-# tomatoes = "torch_tomogram:main_tomatoes"
+# tomatoes = "torch_tilt_series:main_tomatoes"
 
+# https://peps.python.org/pep-0735/
+# setup with `uv sync` or `pip install -e . --group dev`
+[dependency-groups]
+test = ["pytest", "pytest-cov", "mrcfile", "alnfile", "etomofiles"]
+dev = [
+    { include-group = "test" },
+    "ipython",
+    "mypy",
+    "pdbpp",  # https://github.com/pdbpp/pdbpp
+    "pre-commit-uv",
+    "rich",  # https://github.com/Textualize/rich
+    "ruff",
+]
+
+[tool.uv.sources]
+torch-affine-utils = { workspace = true }
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py311"
 src = ["src"]
 fix = true
 # unsafe-fixes = true
@@ -128,7 +135,11 @@ skip-magic-trailing-comma = false  # default is false
 minversion = "7.0"
 addopts = ["--color=yes"]
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # mrcfile 1.5.x triggers this when reading MRC headers with NumPy >= 2.5
+    "ignore:Setting the dtype on a NumPy array has been deprecated:DeprecationWarning",
+]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
@@ -139,6 +150,11 @@ disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
 # plugins = ["pydantic.mypy"]
+
+# # module specific overrides
+# [[tool.mypy.overrides]]
+# module = ["numpy.*",]
+# ignore_errors = true
 
 # https://coverage.readthedocs.io/
 [tool.coverage.report]
@@ -157,6 +173,9 @@ exclude_lines = [
 [tool.coverage.run]
 source = ["torch_tilt_series"]
 
+# https://github.com/mgedmin/check-manifest#configuration
+# add files that you want check-manifest to explicitly ignore here
+# (files that are in the repo but shouldn't go in the package)
 [tool.check-manifest]
 ignore = [
     ".pre-commit-config.yaml",

@@ -71,6 +71,11 @@ try:
 except ImportError:
     torch_transform_image = None
 
+try:
+    import torch_tilt_series
+except ImportError:
+    torch_tilt_series = None
+
 __all__ = [
     "torch_affine_utils",
     "torch_ctf",
@@ -85,5 +90,6 @@ __all__ = [
     "torch_image_interpolation",
     "torch_so3",
     "torch_subpixel_crop",
+    "torch_tilt_series",
     "torch_transform_image",
 ]
