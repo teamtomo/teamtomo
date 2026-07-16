@@ -36,6 +36,11 @@ try:
 except ImportError:
     torch_local_resolution = None  # type: ignore[assignment]
 
+try:
+    import torch_reconstruct_tomogram
+except ImportError:
+    torch_reconstruct_tomogram = None  # type: ignore[assignment]
+
 __all__ = [
     "torch_2dtm",
     "torch_motion_correction",
@@ -44,4 +49,5 @@ __all__ = [
     "torch_segment_fiducials_2d",
     "torch_tiltxcorr",
     "torch_local_resolution",
+    "torch_reconstruct_tomogram",
 ]

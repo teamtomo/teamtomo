@@ -26,6 +26,7 @@ members = [
     "torch-image-interpolation",
     "torch-local-resolution",
     "torch-motion-correction",
+    "torch-reconstruct-tomogram",
     "torch-refine-tilt-axis-angle",
     "torch-scattering",
     "torch-segment-fiducials-2d",
@@ -3771,6 +3772,7 @@ dependencies = [
     { name = "torch-image-interpolation" },
     { name = "torch-local-resolution" },
     { name = "torch-motion-correction" },
+    { name = "torch-reconstruct-tomogram" },
     { name = "torch-refine-tilt-axis-angle" },
     { name = "torch-scattering" },
     { name = "torch-segment-fiducials-2d" },
@@ -3820,6 +3822,7 @@ requires-dist = [
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torch-local-resolution", editable = "packages/algorithms/torch-local-resolution" },
     { name = "torch-motion-correction", editable = "packages/algorithms/torch-motion-correction" },
+    { name = "torch-reconstruct-tomogram", editable = "packages/algorithms/torch-reconstruct-tomogram" },
     { name = "torch-refine-tilt-axis-angle", editable = "packages/algorithms/torch-refine-tilt-axis-angle" },
     { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
     { name = "torch-segment-fiducials-2d", editable = "packages/algorithms/torch-segment-fiducials-2d" },
@@ -4886,6 +4889,66 @@ dev = [
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-reconstruct-tomogram"
+source = { editable = "packages/algorithms/torch-reconstruct-tomogram" }
+dependencies = [
+    { name = "einops" },
+    { name = "mrcfile" },
+    { name = "torch" },
+    { name = "torch-ctf" },
+    { name = "torch-fourier-rescale" },
+    { name = "torch-fourier-slice" },
+    { name = "torch-grid-utils" },
+    { name = "torch-subpixel-crop" },
+    { name = "torch-tilt-series" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "mrcfile" },
+    { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit-uv" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "rich" },
