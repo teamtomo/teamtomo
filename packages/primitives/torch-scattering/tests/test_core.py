@@ -15,21 +15,21 @@ from torch_scattering._core import (
 )
 
 
-def test_interaction_parameter_matches_kirkland_300kev():
-    """sigma at 300 keV should match Kirkland's tabulated interaction constant.
+def test_interaction_parameter_matches_kirkland_300kv():
+    """sigma at 300 kV should match Kirkland's tabulated interaction constant.
 
     wavelength = 0.019687 Angstrom is the well-known relativistic electron
-    wavelength at 300 keV (Kirkland, Advanced Computing in Electron
+    wavelength at 300 kV (Kirkland, Advanced Computing in Electron
     Microscopy). The expected sigma = 6.526e-4 rad/(V*Angstrom) is the
     corresponding tabulated interaction parameter.
     """
-    sigma = interaction_parameter(energy=300.0)
+    sigma = interaction_parameter(voltage=300.0)
     assert abs(sigma - 6.526e-4) < 1e-7
 
 
-def test_interaction_parameter_matches_kirkland_100kev():
-    """sigma at 100 keV should match Kirkland's tabulated interaction constant."""
-    sigma = interaction_parameter(energy=100.0)
+def test_interaction_parameter_matches_kirkland_100kv():
+    """sigma at 100 kV should match Kirkland's tabulated interaction constant."""
+    sigma = interaction_parameter(voltage=100.0)
     assert abs(sigma - 9.244e-4) < 1e-7
 
 
@@ -45,8 +45,8 @@ def test_interaction_parameter_matches_kirkland_mass_based_form():
     the energy-ratio form `interaction_parameter` computes) - agreement
     between the two is an independent cross-check of the implementation.
     """
-    energy_kev = 300.0
-    voltage = energy_kev * 1.0e3  # [V]
+    voltage_kv = 300.0
+    voltage = voltage_kv * 1.0e3  # [V]
     wavelength_m = float(calculate_relativistic_electron_wavelength(voltage))
 
     relativistic_mass = (
@@ -62,7 +62,7 @@ def test_interaction_parameter_matches_kirkland_mass_based_form():
     )  # rad/(V*m)
     sigma_mass_based = sigma_si / 1.0e10  # rad/(V*m) -> rad/(V*Angstrom)
 
-    sigma = interaction_parameter(energy=energy_kev)
+    sigma = interaction_parameter(voltage=voltage_kv)
     assert abs(float(sigma) - sigma_mass_based) / sigma_mass_based < 1e-6
 
 
@@ -158,7 +158,7 @@ def test_multislice_step_conserves_energy_for_real_potential():
         image_shape=(8, 8), rfft=False, spacing=1.0, norm=True
     )
     propagator = fresnel_propagator(frequency_grid, wavelength=wavelength, dz=dz)
-    sigma = interaction_parameter(energy=300.0)
+    sigma = interaction_parameter(voltage=300.0)
 
     new_wave = multislice_step(wave, potential_slice, propagator, sigma, dz)
 

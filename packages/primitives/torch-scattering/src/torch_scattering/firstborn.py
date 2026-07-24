@@ -16,7 +16,7 @@ from torch_scattering._core import (
 def firstborn(
     potential: torch.Tensor,
     pixel_size: float | torch.Tensor,
-    energy: float | torch.Tensor,
+    voltage: float | torch.Tensor,
     n_slices: int | None = None,
 ) -> torch.Tensor:
     """
@@ -30,8 +30,8 @@ def firstborn(
     pixel_size : float | torch.Tensor
         Pixel size in Angstroms. The slice thickness `dz` is assumed to
         equal `pixel_size`.
-    energy : float | torch.Tensor
-        Electron beam energy in kiloelectronvolts (e.g. 300 for 300 kV).
+    voltage : float | torch.Tensor
+        Electron beam acceleration voltage in kilovolts (e.g. 300 for 300 kV).
     n_slices : int | None
         Number of terms to sum in the Born series. If `None` (default),
         every slice of `potential` is treated individually (equivalent to
@@ -67,7 +67,7 @@ def firstborn(
        Springer US, Boston, MA, 2010.
     """
     wavelength, sigma, frequency_grid = _prepare_propagation_parameters(
-        potential, pixel_size, energy
+        potential, pixel_size, voltage
     )
 
     total_slices = potential.shape[-3]

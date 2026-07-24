@@ -12,7 +12,7 @@ Multislice electron scattering simulation in PyTorch, for cryo-EM/cryo-ET forwar
 
 `torch_scattering` computes the 2D exit wave produced by propagating an electron
 beam through a 3D scattering potential. Given a potential of shape `(..., Z, H, W)`,
-a pixel size, and a beam energy, each function returns the complex-valued exit
+a pixel size, and a beam voltage, each function returns the complex-valued exit
 wave of shape `(..., H, W)`.
 
 Four propagation modes are provided, trading physical accuracy for speed:
@@ -55,7 +55,7 @@ potential = torch.zeros((50, 64, 64), dtype=torch.complex64)
 exit_wave = multislice(
     potential=potential,
     pixel_size=1.0,   # Angstroms
-    energy=300,       # keV
+    voltage=300,      # kV
 )
 # exit_wave.shape is (64, 64)
 ```
@@ -65,9 +65,9 @@ exit_wave = multislice(
 ```python
 from torch_scattering import firstborn, projection, rytov
 
-exit_wave = rytov(potential, pixel_size=1.0, energy=300)
-exit_wave = firstborn(potential, pixel_size=1.0, energy=300)
-exit_wave = projection(potential, pixel_size=1.0, energy=300)  # n_slices not applicable
+exit_wave = rytov(potential, pixel_size=1.0, voltage=300)
+exit_wave = firstborn(potential, pixel_size=1.0, voltage=300)
+exit_wave = projection(potential, pixel_size=1.0, voltage=300)  # n_slices not applicable
 ```
 
 ### Coarsening slices
@@ -78,7 +78,7 @@ individually - the most accurate but slowest setting.
 
 ```python
 # propagate as 10 chunks instead of all 50 slices individually
-exit_wave = multislice(potential, pixel_size=1.0, energy=300, n_slices=10)
+exit_wave = multislice(potential, pixel_size=1.0, voltage=300, n_slices=10)
 ```
 
 ### Batching
@@ -87,7 +87,7 @@ All functions accept arbitrary leading batch dimensions on `potential`:
 
 ```python
 potential = torch.zeros((8, 50, 64, 64), dtype=torch.complex64)  # batch of 8
-exit_wave = multislice(potential, pixel_size=1.0, energy=300)
+exit_wave = multislice(potential, pixel_size=1.0, voltage=300)
 # exit_wave.shape is (8, 64, 64)
 ```
 
@@ -107,7 +107,7 @@ from torch_scattering import (
 
 frequency_grid = fftfreq_grid(image_shape=(64, 64), rfft=False, spacing=1.0, norm=True)
 propagator = fresnel_propagator(frequency_grid, wavelength=0.01969, dz=1.0)
-sigma = interaction_parameter(energy=300)
+sigma = interaction_parameter(voltage=300)
 
 wave = torch.ones((64, 64), dtype=torch.complex64)
 potential_slice = torch.zeros((64, 64), dtype=torch.complex64)

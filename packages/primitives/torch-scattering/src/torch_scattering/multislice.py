@@ -17,7 +17,7 @@ from torch_scattering._core import (
 def multislice(
     potential: torch.Tensor,
     pixel_size: float | torch.Tensor,
-    energy: float | torch.Tensor,
+    voltage: float | torch.Tensor,
     n_slices: int | None = None,
 ) -> torch.Tensor:
     """
@@ -31,8 +31,8 @@ def multislice(
     pixel_size : float | torch.Tensor
         Pixel size in Angstroms. The slice thickness `dz` is assumed to
         equal `pixel_size`.
-    energy : float | torch.Tensor
-        Electron beam energy in kiloelectronvolts (e.g. 300 for 300 kV).
+    voltage : float | torch.Tensor
+        Electron beam acceleration voltage in kilovolts (e.g. 300 for 300 kV).
     n_slices : int | None
         Number of multislice steps to take. If `None` (default), every
         slice of `potential` is propagated individually (equivalent to
@@ -64,7 +64,7 @@ def multislice(
     spacing.
     """
     wavelength, sigma, frequency_grid = _prepare_propagation_parameters(
-        potential, pixel_size, energy
+        potential, pixel_size, voltage
     )
 
     height, width = potential.shape[-2:]

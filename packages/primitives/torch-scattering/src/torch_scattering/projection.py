@@ -12,7 +12,7 @@ from torch_scattering._core import interaction_parameter, transmission_function
 def projection(
     potential: torch.Tensor,
     pixel_size: float | torch.Tensor,
-    energy: float | torch.Tensor,
+    voltage: float | torch.Tensor,
 ) -> torch.Tensor:
     """
     Compute the 2D exit wave from a 3D potential via the projection approximation.
@@ -25,8 +25,8 @@ def projection(
     pixel_size : float | torch.Tensor
         Pixel size in Angstroms. The slice thickness `dz` is assumed to
         equal `pixel_size`.
-    energy : float | torch.Tensor
-        Electron beam energy in kiloelectronvolts (e.g. 300 for 300 kV).
+    voltage : float | torch.Tensor
+        Electron beam acceleration voltage in kilovolts (e.g. 300 for 300 kV).
 
     Returns
     -------
@@ -42,6 +42,6 @@ def projection(
     specimen is thin enough that propagation effects within it are
     negligible.
     """
-    sigma = interaction_parameter(energy=energy)
+    sigma = interaction_parameter(voltage=voltage)
     projected_potential = potential.sum(dim=-3)
     return transmission_function(projected_potential, sigma=sigma, dz=pixel_size)

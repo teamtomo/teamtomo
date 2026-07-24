@@ -166,35 +166,35 @@ def chunk_slices(total_slices: int, n_chunks: int) -> list[int]:
     return sizes
 
 
-def interaction_parameter(energy: float | torch.Tensor) -> float | torch.Tensor:
+def interaction_parameter(voltage: float | torch.Tensor) -> float | torch.Tensor:
     """
     Calculate the electron-specimen interaction parameter.
 
     Computes the interaction constant sigma for electron scattering,
     following Kirkland Eq. (5.6). Wavelength is computed internally from
-    `energy` via `torch_ctf.calculate_relativistic_electron_wavelength`.
+    `voltage` via `torch_ctf.calculate_relativistic_electron_wavelength`.
 
     Parameters
     ----------
-    energy : float | torch.Tensor
-        Electron beam energy in kiloelectronvolts.
+    voltage : float | torch.Tensor
+        Electron beam acceleration voltage in kilovolts.
 
     Returns
     -------
     float | torch.Tensor
         Interaction parameter sigma in units of rad/(V*Angstrom). A tensor
-        if `energy` is a tensor, otherwise a plain float.
+        if `voltage` is a tensor, otherwise a plain float.
 
     References
     ----------
     .. [1] E. J. Kirkland, Advanced Computing in Electron Microscopy,
        Eq. (5.6), Springer US, Boston, MA, 2010.
     """
-    wavelength_m = calculate_relativistic_electron_wavelength(energy * 1.0e3)
+    wavelength_m = calculate_relativistic_electron_wavelength(voltage * 1.0e3)
     wavelength = wavelength_m * 1.0e10  # meters -> Angstroms
     # Electron rest mass energy, m0*c^2, in electronvolts.
     rest_ev = C.electron_mass * C.speed_of_light**2 / C.elementary_charge
-    ev = energy * 1.0e3  # [eV]
+    ev = voltage * 1.0e3  # [eV]
     sigma: float | torch.Tensor = (
         2.0 * C.pi / (wavelength * ev) * ((ev + rest_ev) / (ev + 2.0 * rest_ev))
     )
@@ -204,7 +204,7 @@ def interaction_parameter(energy: float | torch.Tensor) -> float | torch.Tensor:
 def _prepare_propagation_parameters(
     potential: torch.Tensor,
     pixel_size: float | torch.Tensor,
-    energy: float | torch.Tensor,
+    voltage: float | torch.Tensor,
 ) -> tuple[torch.Tensor, float | torch.Tensor, torch.Tensor]:
     """
     Compute the wavelength, interaction parameter, and frequency grid.
@@ -218,8 +218,8 @@ def _prepare_propagation_parameters(
         Complex-valued 3D scattering potential, shape (..., Z, H, W).
     pixel_size : float | torch.Tensor
         Pixel size in Angstroms.
-    energy : float | torch.Tensor
-        Electron beam energy in kiloelectronvolts.
+    voltage : float | torch.Tensor
+        Electron beam acceleration voltage in kilovolts.
 
     Returns
     -------
@@ -228,9 +228,9 @@ def _prepare_propagation_parameters(
         rad/(V*Angstrom), and `frequency_grid`, the real-valued grid of
         spatial frequency magnitudes (1/Angstrom), shape (H, W).
     """
-    wavelength_m = calculate_relativistic_electron_wavelength(energy * 1.0e3)
+    wavelength_m = calculate_relativistic_electron_wavelength(voltage * 1.0e3)
     wavelength = wavelength_m * 1.0e10  # meters -> Angstroms
-    sigma = interaction_parameter(energy=energy)
+    sigma = interaction_parameter(voltage=voltage)
 
     height, width = potential.shape[-2:]
     frequency_grid = fftfreq_grid(

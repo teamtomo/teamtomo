@@ -16,7 +16,7 @@ def test_multislice_vacuum_leaves_plane_wave_unchanged():
     every slice unchanged.
     """
     potential = torch.zeros(1, 5, 8, 8, dtype=torch.complex64)
-    exit_wave = multislice(potential, pixel_size=1.0, energy=300.0)
+    exit_wave = multislice(potential, pixel_size=1.0, voltage=300.0)
     assert torch.allclose(exit_wave, torch.ones_like(exit_wave), atol=1e-5)
 
 
@@ -30,7 +30,7 @@ def test_multislice_conserves_energy_for_real_potential():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 5, 8, 8, dtype=torch.complex64).real.to(torch.complex64)
-    exit_wave = multislice(potential, pixel_size=1.0, energy=300.0)
+    exit_wave = multislice(potential, pixel_size=1.0, voltage=300.0)
     output_energy = exit_wave.abs().pow(2).sum()
     expected_energy = torch.tensor(8.0 * 8.0)
     assert torch.allclose(output_energy, expected_energy, rtol=1e-4)
@@ -44,8 +44,8 @@ def test_multislice_explicit_full_n_slices_matches_default():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 5, 8, 8, dtype=torch.complex64).real.to(torch.complex64)
-    default_wave = multislice(potential, pixel_size=1.0, energy=300.0)
-    explicit_wave = multislice(potential, pixel_size=1.0, energy=300.0, n_slices=5)
+    default_wave = multislice(potential, pixel_size=1.0, voltage=300.0)
+    explicit_wave = multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=5)
     assert torch.equal(default_wave, explicit_wave)
 
 
@@ -59,7 +59,7 @@ def test_multislice_grouped_conserves_energy_for_real_potential():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 10, 8, 8, dtype=torch.complex64).real.to(torch.complex64)
-    exit_wave = multislice(potential, pixel_size=1.0, energy=300.0, n_slices=3)
+    exit_wave = multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=3)
     output_energy = exit_wave.abs().pow(2).sum()
     expected_energy = torch.tensor(8.0 * 8.0)
     assert torch.allclose(output_energy, expected_energy, rtol=1e-4)
@@ -75,8 +75,8 @@ def test_multislice_grouped_differs_from_ungrouped():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 10, 8, 8, dtype=torch.complex64).real.to(torch.complex64)
-    ungrouped = multislice(potential, pixel_size=1.0, energy=300.0)
-    grouped = multislice(potential, pixel_size=1.0, energy=300.0, n_slices=3)
+    ungrouped = multislice(potential, pixel_size=1.0, voltage=300.0)
+    grouped = multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=3)
     assert not torch.allclose(ungrouped, grouped)
 
 
@@ -93,8 +93,8 @@ def test_multislice_grouped_pairs_with_empty_neighbor_match_full_resolution():
     even_potential = torch.randn(8, 16, 16).to(torch.complex64)
     potential[0, 0::2] = even_potential
 
-    wave_16 = multislice(potential, pixel_size=1.0, energy=300.0, n_slices=16)
-    wave_8 = multislice(potential, pixel_size=1.0, energy=300.0, n_slices=8)
+    wave_16 = multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=16)
+    wave_8 = multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=8)
     assert torch.allclose(wave_16, wave_8, atol=1e-5)
 
 
@@ -103,4 +103,4 @@ def test_multislice_rejects_invalid_n_slices(n_slices):
     """n_slices must be in (0, Z]; 0, negative, and > Z are invalid."""
     potential = torch.zeros(1, 10, 8, 8, dtype=torch.complex64)
     with pytest.raises(ValueError):
-        multislice(potential, pixel_size=1.0, energy=300.0, n_slices=n_slices)
+        multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=n_slices)

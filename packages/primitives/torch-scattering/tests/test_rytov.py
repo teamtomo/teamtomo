@@ -15,7 +15,7 @@ def test_rytov_vacuum_leaves_plane_wave_unchanged():
     wave must equal the incident unit-amplitude, zero-phase plane wave.
     """
     potential = torch.zeros(1, 5, 8, 8, dtype=torch.complex64)
-    exit_wave = rytov(potential, pixel_size=1.0, energy=300.0)
+    exit_wave = rytov(potential, pixel_size=1.0, voltage=300.0)
     assert torch.allclose(exit_wave, torch.ones_like(exit_wave), atol=1e-5)
 
 
@@ -31,12 +31,12 @@ def test_rytov_matches_explicit_per_slice_loop():
     torch.manual_seed(0)
     potential = torch.randn(1, 5, 8, 8, dtype=torch.complex64)
     pixel_size = 1.5
-    energy = 300.0
+    voltage = 300.0
 
-    exit_wave = rytov(potential, pixel_size=pixel_size, energy=energy)
+    exit_wave = rytov(potential, pixel_size=pixel_size, voltage=voltage)
 
-    sigma = interaction_parameter(energy=energy)
-    wavelength = 0.019687  # relativistic wavelength at 300 keV, Angstroms
+    sigma = interaction_parameter(voltage=voltage)
+    wavelength = 0.019687  # relativistic wavelength at 300 kV, Angstroms
     frequency_grid = fftfreq_grid(
         image_shape=(8, 8), rfft=False, spacing=pixel_size, norm=True
     )
@@ -66,7 +66,7 @@ def test_rytov_approximately_conserves_energy_for_weak_potential():
     potential = 1e-4 * torch.randn(1, 5, 8, 8, dtype=torch.complex64).real.to(
         torch.complex64
     )
-    exit_wave = rytov(potential, pixel_size=1.0, energy=300.0)
+    exit_wave = rytov(potential, pixel_size=1.0, voltage=300.0)
     assert torch.allclose(exit_wave.abs(), torch.ones_like(exit_wave.abs()), atol=1e-3)
 
 
@@ -78,8 +78,8 @@ def test_rytov_explicit_full_n_slices_matches_default():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 5, 8, 8, dtype=torch.complex64)
-    default_wave = rytov(potential, pixel_size=1.0, energy=300.0)
-    explicit_wave = rytov(potential, pixel_size=1.0, energy=300.0, n_slices=5)
+    default_wave = rytov(potential, pixel_size=1.0, voltage=300.0)
+    explicit_wave = rytov(potential, pixel_size=1.0, voltage=300.0, n_slices=5)
     assert torch.equal(default_wave, explicit_wave)
 
 
@@ -93,8 +93,8 @@ def test_rytov_grouped_differs_from_ungrouped():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 10, 8, 8, dtype=torch.complex64)
-    ungrouped = rytov(potential, pixel_size=1.0, energy=300.0)
-    grouped = rytov(potential, pixel_size=1.0, energy=300.0, n_slices=3)
+    ungrouped = rytov(potential, pixel_size=1.0, voltage=300.0)
+    grouped = rytov(potential, pixel_size=1.0, voltage=300.0, n_slices=3)
     assert not torch.allclose(ungrouped, grouped)
 
 
@@ -111,8 +111,8 @@ def test_rytov_grouped_pairs_with_empty_neighbor_match_full_resolution():
     even_potential = torch.randn(8, 16, 16).to(torch.complex64)
     potential[0, 0::2] = even_potential
 
-    wave_16 = rytov(potential, pixel_size=1.0, energy=300.0, n_slices=16)
-    wave_8 = rytov(potential, pixel_size=1.0, energy=300.0, n_slices=8)
+    wave_16 = rytov(potential, pixel_size=1.0, voltage=300.0, n_slices=16)
+    wave_8 = rytov(potential, pixel_size=1.0, voltage=300.0, n_slices=8)
     assert torch.allclose(wave_16, wave_8, atol=1e-5)
 
 
@@ -121,4 +121,4 @@ def test_rytov_rejects_invalid_n_slices(n_slices):
     """n_slices must be in (0, Z]; 0, negative, and > Z are invalid."""
     potential = torch.zeros(1, 10, 8, 8, dtype=torch.complex64)
     with pytest.raises(ValueError):
-        rytov(potential, pixel_size=1.0, energy=300.0, n_slices=n_slices)
+        rytov(potential, pixel_size=1.0, voltage=300.0, n_slices=n_slices)

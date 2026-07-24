@@ -12,7 +12,7 @@ def test_projection_vacuum_leaves_plane_wave_unchanged():
     wave must equal the incident unit-amplitude, zero-phase plane wave.
     """
     potential = torch.zeros(1, 5, 8, 8, dtype=torch.complex64)
-    exit_wave = projection(potential, pixel_size=1.0, energy=300.0)
+    exit_wave = projection(potential, pixel_size=1.0, voltage=300.0)
     assert torch.allclose(exit_wave, torch.ones_like(exit_wave), atol=1e-5)
 
 
@@ -25,7 +25,7 @@ def test_projection_conserves_energy_for_real_potential():
     """
     torch.manual_seed(0)
     potential = torch.randn(1, 5, 8, 8, dtype=torch.complex64).real.to(torch.complex64)
-    exit_wave = projection(potential, pixel_size=1.0, energy=300.0)
+    exit_wave = projection(potential, pixel_size=1.0, voltage=300.0)
     output_energy = exit_wave.abs().pow(2).sum()
     expected_energy = torch.tensor(8.0 * 8.0)
     assert torch.allclose(output_energy, expected_energy, rtol=1e-4)
