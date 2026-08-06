@@ -36,8 +36,7 @@ class TiltSeries:
     Coordinate spaces:
     - sample space: canonical 3D space representing the sample before stage
       rotation (`x_tilts` is defined here). Volume deformations (e.g. local
-      warping) are modelled relative to this space -> see `local_shifts` on
-      `project_points`.
+      warping) are modelled relative to this space -> see `self.local_shifts`.
     - levelled sample space: sample space plus a fixed, data-derived
       correction (e.g. a leveling rotation), via `sample2levelled`.
     - tomogram space: arbitrary 3D reconstruction/visualization volume; may
@@ -90,6 +89,8 @@ class TiltSeries:
         x_tilts: torch.Tensor | float = 0.0,
         sample2levelled: torch.Tensor | None = None,
         levelled2tomo: torch.Tensor | None = None,
+        local_shifts: LocalShiftFn | None = None,
+        local_shifts_2d: LocalShiftFn | None = None,
         image_path: Path | str | None = None,
         image_indices: torch.Tensor | np.ndarray | None = None,
         pixel_spacing: float | None = None,
@@ -111,6 +112,11 @@ class TiltSeries:
         self.levelled2tomo = _as_tensor(
             levelled2tomo if levelled2tomo is not None else torch.eye(4), device
         )
+        # Sample-space deformation model: called with sample-space points
+        # (n_points, 3) in Angstroms, must return an Angstrom-space
+        # correction of the same shape.
+        self.local_shifts = local_shifts
+        self.local_shifts_2d = local_shifts_2d
         self.image_path = Path(image_path) if image_path is not None else None
         self.image_indices = (
             torch.as_tensor(_writable(image_indices)).long()
@@ -227,7 +233,6 @@ class TiltSeries:
     def project_points(
         self,
         points_zyx: torch.Tensor,
-        local_shifts: LocalShiftFn | None = None,
         output_zyxw: bool = False,
     ) -> torch.Tensor:
         """Project 3D points to 2D detector coordinates, both in Angstroms.
@@ -236,10 +241,14 @@ class TiltSeries:
           the center of tomogram space (see `sample2tomo`)
         - projected 2D points are in Angstroms, relative to the center of
           the detector
-        - local_shifts, if provided, is called with the sample-space points
-          (n_points, 3), in Angstroms, after tomo2sample: tilt-independent,
-          applied once, before projection (e.g. for local sample
-          deformation/warping)
+        - if `self.local_shifts` is set, it is called with the sample-space
+          points (n_points, 3), in Angstroms, after tomo2sample:
+          tilt-independent, applied once, before projection (e.g. for local
+          sample deformation/warping)
+        - if `self.local_shifts_2d` is set, it is called with the projected
+          points (n_points, n_tilts, 2 or 4), in Angstroms, after
+          projection: per-tilt, applied once per tilt (e.g. for per-tilt
+          image alignment refinement)
         - output_zyxw, if True, skips dropping the z row: returns
           (n_points, n_tilts, 4) zyxw instead of (n_points,
           n_tilts, 2) yx. z here is scope-space depth (Rz leaves it
@@ -253,8 +262,8 @@ class TiltSeries:
         points_zyxw = points_zyxw @ self.tomo2sample.T  # unbatched (4, 4), not per-tilt
         points_zyx = points_zyxw[..., :3]
 
-        if local_shifts is not None:
-            points_zyx = points_zyx + local_shifts(points_zyx)
+        if self.local_shifts is not None:
+            points_zyx = points_zyx + self.local_shifts(points_zyx)
 
         # Apply projection matrices
         M = self.projection_matrices
@@ -267,4 +276,6 @@ class TiltSeries:
         projected = einops.rearrange(
             projected, "nparticles ntilts c 1 -> nparticles ntilts c"
         )
+        if self.local_shifts_2d is not None:
+            projected = projected + self.local_shifts_2d(projected)
         return projected  # (points, tilts, yx) or (points, tilts, zyxw)

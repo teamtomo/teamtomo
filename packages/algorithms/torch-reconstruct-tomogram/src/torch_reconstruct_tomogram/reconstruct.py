@@ -13,10 +13,7 @@ from torch_reconstruct_tomogram.io import (
     load_tilt_series_images,
     normalize_on_central_crop,
 )
-from torch_reconstruct_tomogram.projection import (
-    LocalShiftFn,
-    _extract_particle_tilt_series,
-)
+from torch_reconstruct_tomogram.projection import _extract_particle_tilt_series
 
 _PAD_FACTOR = 2.0
 
@@ -27,7 +24,6 @@ def _reconstruct_subvolume(
     points_zyx: torch.Tensor,
     sidelength: int,
     output_pixel_spacing: float | None = None,
-    local_shifts: LocalShiftFn | None = None,
 ) -> torch.Tensor:
     """Reconstruct subvolume(s), given already-loaded images."""
     device = images.device
@@ -47,7 +43,6 @@ def _reconstruct_subvolume(
     )
     rotation_matrices = torch.linalg.pinv(rotation_matrices)
 
-
     sidelength_padded_output = int(_PAD_FACTOR * sidelength)
     sidelength_padded_native = max(
         1,
@@ -60,7 +55,6 @@ def _reconstruct_subvolume(
         points_zyx,
         sidelength=sidelength_padded_native,
         return_rfft=True,
-        local_shifts=local_shifts,
     )
 
     particle_tilt_series_rfft = torch.fft.fftshift(particle_tilt_series_rfft, dim=(-2,))
@@ -120,7 +114,6 @@ def reconstruct_subvolume(
     sidelength: int,
     output_pixel_spacing: float | None = None,
     normalize: bool = True,
-    local_shifts: LocalShiftFn | None = None,
 ) -> torch.Tensor:
     """Reconstruct 3D patch(es) at location(s) in the sample.
 
@@ -136,9 +129,6 @@ def reconstruct_subvolume(
       arbitrary output pixel size independent of the raw data's
     - normalize, if True (default), applies `normalize_on_central_crop` to the
       loaded images before reconstruction
-    - local_shifts, if provided, is called with projected 2D positions in
-      Angstroms (n_points, n_tilts, 2) and must return an Angstrom-space
-      correction of the same shape (e.g. from patch-based local alignment)
     """
     images = load_tilt_series_images(tilt_series)
     if normalize:
@@ -149,7 +139,6 @@ def reconstruct_subvolume(
         points_zyx,
         sidelength,
         output_pixel_spacing=output_pixel_spacing,
-        local_shifts=local_shifts,
     )
 
 
@@ -174,7 +163,6 @@ def reconstruct_tomogram(
     batch_size: int | None = None,
     output_pixel_spacing: float | None = None,
     normalize: bool = True,
-    local_shifts: LocalShiftFn | None = None,
     blend_margin: int | None = None,
 ) -> torch.Tensor:
     """Reconstruct the full tomogram by tiling reconstructed patches in 3D."""
@@ -228,7 +216,6 @@ def reconstruct_tomogram(
             chunk_centers_ang,
             patch_sidelength,
             output_pixel_spacing=output_pixel_spacing,
-            local_shifts=local_shifts,
         ).cpu()
 
         for j in range(len(patches_batch)):

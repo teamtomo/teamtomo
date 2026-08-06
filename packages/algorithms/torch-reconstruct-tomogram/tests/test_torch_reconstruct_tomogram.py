@@ -101,18 +101,26 @@ def test_reconstruct_subvolume_local_shifts(device, tmp_path):
         return torch.zeros_like(projected_yx)
 
     subvolume_default = reconstruct_subvolume(tilt_series, point, sidelength=8)
-    subvolume_with_hook = reconstruct_subvolume(
-        tilt_series,
-        point,
-        sidelength=8,
-        local_shifts=zero_local_shifts,
-    )
+    tilt_series.local_shifts_2d = zero_local_shifts
+    subvolume_with_hook = reconstruct_subvolume(tilt_series, point, sidelength=8)
     assert torch.allclose(subvolume_default, subvolume_with_hook)
 
 
 def test_project_points_local_shifts_are_angstroms_not_pixels():
     # pixel_spacing != 1 so an Angstrom-space shift and a pixel-space shift
     # would disagree if local_shifts were (still) being applied in pixels.
+    shift_ang = torch.tensor([5.0, -3.0])
+
+    def shift_fn(projected_yx_ang):
+        return shift_ang.expand_as(projected_yx_ang)
+
+    tilt_series_shifted = TiltSeries(
+        tilt_angles=torch.tensor([0.0]),
+        tilt_axis_angle=torch.tensor(0.0),
+        sample_translations=torch.zeros((1, 2)),
+        pixel_spacing=2.0,
+        local_shifts_2d=shift_fn,
+    )
     tilt_series = TiltSeries(
         tilt_angles=torch.tensor([0.0]),
         tilt_axis_angle=torch.tensor(0.0),
@@ -120,12 +128,8 @@ def test_project_points_local_shifts_are_angstroms_not_pixels():
         pixel_spacing=2.0,
     )
     point = torch.tensor([[0.0, 0.0, 0.0]])
-    shift_ang = torch.tensor([5.0, -3.0])
 
-    def shift_fn(projected_yx_ang):
-        return shift_ang.expand_as(projected_yx_ang)
-
-    shifted_px = project_points(tilt_series, point, local_shifts=shift_fn)
+    shifted_px = project_points(tilt_series_shifted, point)
     unshifted_px = project_points(tilt_series, point)
     # shift is applied in Angstroms, then the whole result is divided by
     # pixel_spacing so the pixel-space delta is shift_ang / pixel_spacing,

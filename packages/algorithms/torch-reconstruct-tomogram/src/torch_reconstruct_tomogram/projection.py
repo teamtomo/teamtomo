@@ -1,7 +1,5 @@
 """Project 3D points into tilt images and crop patches for reconstruction."""
 
-from collections.abc import Callable
-
 import torch
 from torch_grid_utils import dft_center
 from torch_subpixel_crop import subpixel_crop_2d
@@ -12,14 +10,8 @@ from torch_reconstruct_tomogram.io import (
     normalize_on_central_crop,
 )
 
-LocalShiftFn = Callable[[torch.Tensor], torch.Tensor]
 
-
-def project_points(
-    tilt_series: TiltSeries,
-    points_zyx: torch.Tensor,
-    local_shifts: LocalShiftFn | None = None,
-) -> torch.Tensor:
+def project_points(tilt_series: TiltSeries, points_zyx: torch.Tensor) -> torch.Tensor:
     """Project 3D points to 2D image pixel coordinates.
 
     - points are 3D zyx coordinates in Angstroms, relative to the tomogram center
@@ -27,14 +19,8 @@ def project_points(
       works in Angstroms) and `tilt_series.pixel_spacing` (raises if unset),
       used to convert the projected Angstrom positions to pixels
     - projected 2D points are in pixels, relative to the center of each image
-    - local_shifts, if provided, is called with the projected points, in
-      Angstroms (n_points, n_tilts, 2), and must return a correction of the
-      same shape, in Angstroms, added before converting to pixels
     """
-    projected_yx_ang = tilt_series.project_points(points_zyx)
-    if local_shifts is not None:
-        projected_yx_ang = projected_yx_ang + local_shifts(projected_yx_ang)
-    return projected_yx_ang / tilt_series.pixel_spacing  # (points, tilts, yx)
+    return tilt_series.project_points(points_zyx) / tilt_series.pixel_spacing
 
 
 def _extract_particle_tilt_series(
@@ -43,10 +29,9 @@ def _extract_particle_tilt_series(
     points_zyx: torch.Tensor,
     sidelength: int,
     return_rfft: bool = True,
-    local_shifts: LocalShiftFn | None = None,
 ) -> torch.Tensor:
     """Extract a subtilt-series given already-loaded images."""
-    projected_yx = project_points(tilt_series, points_zyx, local_shifts=local_shifts)
+    projected_yx = project_points(tilt_series, points_zyx)
     projected_yx = projected_yx + dft_center(
         images.shape[-2:], rfft=False, fftshift=True, device=images.device
     )
@@ -65,7 +50,6 @@ def extract_particle_tilt_series(
     sidelength: int,
     return_rfft: bool = True,
     normalize: bool = True,
-    local_shifts: LocalShiftFn | None = None,
 ) -> torch.Tensor:
     """Extract a subtilt-series at 3D location(s) in the sample.
 
@@ -81,5 +65,4 @@ def extract_particle_tilt_series(
         points_zyx,
         sidelength,
         return_rfft=return_rfft,
-        local_shifts=local_shifts,
     )

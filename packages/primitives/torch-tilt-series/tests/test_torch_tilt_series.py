@@ -358,16 +358,39 @@ def test_project_points_output_zyxw_round_trips_to_sample_space():
 
 
 def test_project_points_local_shifts_applied_in_sample_space():
-    ts = make_tilt_series()
+    ts_shifted = make_tilt_series()
+    ts_unshifted = make_tilt_series()
     point = torch.tensor([[0.0, 7.0, -4.0]])
     shift = torch.tensor([1.0, -2.0, 3.0])
 
     def shift_fn(points_sample):
         return shift.expand_as(points_sample)
 
-    shifted = ts.project_points(point, local_shifts=shift_fn)
-    expected = ts.project_points(point + shift)
+    ts_shifted.local_shifts = shift_fn
+    shifted = ts_shifted.project_points(point)
+    expected = ts_unshifted.project_points(point + shift)
     assert torch.allclose(shifted, expected, atol=1e-5)
+
+
+def test_local_shifts_default_is_none():
+    ts = make_tilt_series()
+    assert ts.local_shifts is None
+    assert ts.local_shifts_2d is None
+
+
+def test_project_points_local_shifts_2d_applied_per_tilt():
+    ts_shifted = make_tilt_series()
+    ts_unshifted = make_tilt_series()
+    point = torch.tensor([[0.0, 7.0, -4.0]])
+    shift = torch.tensor([1.0, -2.0])
+
+    def shift_fn(projected_yx):
+        return shift.expand_as(projected_yx)
+
+    ts_shifted.local_shifts_2d = shift_fn
+    shifted = ts_shifted.project_points(point)
+    unshifted = ts_unshifted.project_points(point)
+    assert torch.allclose(shifted, unshifted + shift, atol=1e-5)
 
 
 def test_pixel_spacing_setter():
