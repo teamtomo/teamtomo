@@ -1,9 +1,9 @@
 """Loading and compilation of the Mojo extension module.
 
-The Mojo kernels live in a single module (`_mojo/projectors.mojo`) exposed to
-Python via Mojo's documented ``mojo.importer`` hook: importing ``projectors``
-compiles it with ``mojo build --emit shared-lib`` (cached in
-``_mojo/__mojocache__/``) and loads it.
+The Mojo kernels live in a single module (`_mojo/fourier_slice_kernels.mojo`)
+exposed to Python via Mojo's documented ``mojo.importer`` hook: importing
+``fourier_slice_kernels`` compiles it with ``mojo build --emit shared-lib``
+(cached in ``_mojo/__mojocache__/``) and loads it.
 
 The module is compiled + loaded **eagerly** when this module is first imported
 (i.e. when ``torch_fourier_slice.experimental`` is imported). If the optional
@@ -39,9 +39,9 @@ def _load():
             message=".*has no __module__ attribute",
             category=DeprecationWarning,
         )
-        import projectors
+        import fourier_slice_kernels
 
-    return projectors
+    return fourier_slice_kernels
 
 
 try:  # eager compile + load on first import of this module
@@ -51,7 +51,7 @@ except Exception as exc:
 
 
 def kernels():
-    """Return the loaded Mojo ``projectors`` module."""
+    """Return the loaded Mojo ``fourier_slice_kernels`` module."""
     if _LOAD_ERROR is not None:
         raise ImportError(
             "experimental Mojo kernels failed to load. Install the optional "

@@ -7,6 +7,8 @@ cube edge (``= h``) and ``sidelength_half = w`` the rfft width.
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import torch
 
 _INTERP_CODES = {"linear": 0, "cubic": 1}
@@ -20,6 +22,27 @@ def interp_code(interpolation: str) -> int:
             f"{interpolation!r}"
         )
     return _INTERP_CODES[interpolation]
+
+
+class KernelParams(NamedTuple):
+    """Scalar parameters passed to every kernel.
+
+    Read by NAME on the Mojo side (``params_obj.interp`` etc.) so there are no
+    positional/index conventions to keep in sync. One layout serves all kernels;
+    fields a given kernel doesn't use are 0 (e.g. ``has_weights`` /
+    ``friedel_double`` / ``skip_redundant`` are scatter-only). Shape-derived
+    params (bp, sidelength, batch sizes) are read from the tensors, not here.
+    """
+
+    oversampling: float
+    radius_cutoff_sq: float
+    has_shifts_2d: int
+    has_weights: int
+    friedel_double: int
+    skip_redundant: int
+    interp: int
+    ewald_curvature: float
+    has_shifts_3d: int
 
 
 def validate_reconstruction(
@@ -69,6 +92,72 @@ def prep_rotations(
     return rot, bv_rot, bp
 
 
+def prep_directions(
+    directions: torch.Tensor, bv: int, device: torch.device | str = "cpu"
+) -> tuple[torch.Tensor, int, int]:
+    """Normalise line directions to float32 ``(bv_dir, bp, 3)`` on ``device``.
+
+    A central *line* is posed by a direction on the sphere (a zyx vector), not a
+    rotation matrix. Accepts ``(3,)`` (one node), ``(bp, 3)`` or ``(bv_dir, bp,
+    3)``. Directions should be unit-norm; a non-unit vector rescales the line's
+    frequency sampling (not normalised here so the direction gradient stays exact).
+    """
+    d = directions
+    if d.dim() == 1:
+        d = d.reshape(1, 1, 3)
+    elif d.dim() == 2:
+        d = d.unsqueeze(0)
+    if d.dim() != 3 or d.shape[-1] != 3:
+        raise ValueError("directions must broadcast to (bv_dir, bp, 3)")
+    bv_dir = d.shape[0]
+    bp = d.shape[1]
+    if bv_dir not in (1, bv):
+        raise ValueError("directions batch must be 1 or match batch dimension")
+    return d.to(device=device, dtype=torch.float32).contiguous(), bv_dir, bp
+
+
+def prep_directions_2d(
+    directions: torch.Tensor, bv: int, device: torch.device | str = "cpu"
+) -> tuple[torch.Tensor, int, int]:
+    """Normalise 2D line directions to float32 ``(bv_dir, bp, 2)`` on ``device``.
+
+    A central line of a 2D image is posed by a direction on the circle (a yx unit
+    vector). Accepts ``(2,)``, ``(bp, 2)`` or ``(bv_dir, bp, 2)``. Should be
+    unit-norm (a non-unit vector rescales the line's frequency sampling).
+    """
+    d = directions
+    if d.dim() == 1:
+        d = d.reshape(1, 1, 2)
+    elif d.dim() == 2:
+        d = d.unsqueeze(0)
+    if d.dim() != 3 or d.shape[-1] != 2:
+        raise ValueError("directions must broadcast to (bv_dir, bp, 2)")
+    bv_dir = d.shape[0]
+    bp = d.shape[1]
+    if bv_dir not in (1, bv):
+        raise ValueError("directions batch must be 1 or match batch dimension")
+    return d.to(device=device, dtype=torch.float32).contiguous(), bv_dir, bp
+
+
+def validate_image_2d(image_rfft: torch.Tensor) -> tuple[torch.Tensor, int, int, int]:
+    """Check/normalise a 2D rfft image; return (3d, bv, sidelength, sidelength_half).
+
+    Expects rfft with DC at origin, shape ``(h, w)`` or ``(bv, h, w)``, square/even.
+    """
+    if not image_rfft.is_complex():
+        raise ValueError("image_rfft must be a complex tensor")
+    if image_rfft.dim() == 2:
+        image_rfft = image_rfft.unsqueeze(0)
+    if image_rfft.dim() != 3:
+        raise ValueError("image_rfft must be (h, w) or (bv, h, w)")
+    bv, h, w = image_rfft.shape
+    if h % 2 != 0 or h != (w - 1) * 2:
+        raise ValueError(
+            f"image must be square/even: h={h} must equal 2*(w-1)={2 * (w - 1)}"
+        )
+    return image_rfft, bv, h, w
+
+
 def prep_shifts_2d(
     shifts_2d: torch.Tensor | None,
     bv: int,
@@ -96,7 +185,7 @@ def prep_shifts_3d(
     bp: int,
     device: torch.device | str = "cpu",
 ) -> tuple[torch.Tensor, int]:
-    """Normalise 3D shifts to float32 ``(bv_shift_3d, bp, 3)`` zyx on ``device``; + flag."""
+    """Normalise 3D shifts to zyx float32 ``(bv_shift_3d, bp, 3)``; + a set flag."""
     if shifts_3d is None:
         return torch.zeros(1, bp, 3, dtype=torch.float32, device=device), 0
     s = shifts_3d
@@ -150,14 +239,23 @@ def prep_poses(
         else float(fourier_radius_cutoff)
     )
     proj_r = torch.zeros(
-        bv, bp, proj_sidelength, proj_sidelength_half, 2, dtype=torch.float32, device=device
+        bv,
+        bp,
+        proj_sidelength,
+        proj_sidelength_half,
+        2,
+        dtype=torch.float32,
+        device=device,
     )
-    params = (
-        float(oversampling),
-        float(radius * radius),
-        int(has_shifts_2d),
-        interp_code(interpolation),
-        float(ewald_curvature),
-        int(has_shifts_3d),
+    params = KernelParams(
+        oversampling=float(oversampling),
+        radius_cutoff_sq=float(radius * radius),
+        has_shifts_2d=int(has_shifts_2d),
+        has_weights=0,
+        friedel_double=0,
+        skip_redundant=0,
+        interp=interp_code(interpolation),
+        ewald_curvature=float(ewald_curvature),
+        has_shifts_3d=int(has_shifts_3d),
     )
     return rot, shifts_2d_t, shifts_3d_t, proj_r, params

@@ -1,241 +1,415 @@
-# torch_fourier_slice.experimental
+# `torch_fourier_slice.experimental` — Mojo kernels
 
-Experimental Mojo-backed kernels: the same Fourier-slice operators as the
-rest of `torch_fourier_slice`, with their compute kernels written in
-[Mojo](https://www.modular.com/mojo) (1.0.0b2) and exposed to Python via
-Mojo's Python interop.
+Fourier-space **extraction** (3D→2D central-slice) and **insertion** (2D→3D
+adjoint) for cryo-EM/ET, with the compute kernels written in
+[Mojo](https://www.modular.com/mojo) and called from PyTorch. These are the same
+operators as the rest of `torch_fourier_slice`, moved into Mojo.
 
-**APIs here are experimental and may change without notice.**
+**Experimental — APIs may change without notice.**
 
-## Status
+This README is written for a **PyTorch/Python programmer with some interest in
+HPC** who has not written GPU kernels before. It explains what the backend does,
+how the CPU and GPU paths relate, how data crosses the Python↔Mojo boundary, and
+why shipping *Mojo source that compiles on import* beats shipping per-platform
+CUDA/Metal binaries.
 
-| Op | Geometry | Device | Interp | Grad |
-|----|----------|--------|--------|------|
-| `project_3d_to_2d_forw` | 3D→2D forward (central slice) | CPU + GPU | linear, cubic | ✓ volume, rotations, shifts |
-| `backproject_2d_to_3d_forw` | 2D→3D adjoint (reconstruction) | CPU + GPU | linear, cubic | ✓ projections, weights, rotations, shifts |
+---
 
-Interpolation is selected with ``interpolation="linear"`` (trilinear, default) or
-``"cubic"`` (tricubic Catmull-Rom) on both functions.
+## 1. The one idea to take away
 
-The 2D→3D scatter is parallelized with atomic adds (Mojo `parallelize` on CPU,
-one thread per input rfft pixel on GPU); the device follows the input tensor.
+There is **one numeric core** — the Fourier-slice math — written once, in Mojo.
+It runs in three places from that single source:
 
-Importing `torch_fourier_slice.experimental` eagerly compiles and loads all Mojo
-kernel modules (via `mojo.importer`); `mojo_kernels_available()` reports success.
+```
+                         ┌───────────────────────────┐
+                         │  per-pixel numeric core    │   _pixel / _gather /
+                         │  (Mojo, written ONCE)      │   _scatter / _pose_grad
+                         └────────────┬──────────────┘
+             ┌────────────────────────┼─
+             ▼                        ▼            
+   CPU: one thread/pose      GPU (CUDA/AMD/Apple Silicon): one thread
+   `parallelize` over poses  per rfft pixel        
+             │                        │            
+   reads host memory         reads torch DEVICE memory in place (zero-copy)
+```
 
-### Differentiability
+You do **not** maintain a `.cpp`, `.cu` file *and* a `.metal` file *and* a CPU fallback.
+You maintain the math once; Mojo lowers it to CPU SIMD, NVIDIA PTX, and Apple
+Metal from the same code. That is the whole pitch, and §8 explains why it matters
+for distribution.
 
-Both ops are **fully differentiable**: the forward
-projection w.r.t. `reconstruction`, `rotations`, `shifts`; the backprojection
-w.r.t. `projections`, `weights`, `rotations`, `shifts`.
+---
 
-The *data* gradients use the adjoint relationship — the two ops are adjoints, so
-each one's data backward is the other's kernel: `d/d(volume)` of the projection
-is the scatter (pure adjoint), and `d/d(projections)` of the backprojection is
-the forward projection (with an exact correction for the Hermitian double-insert
-and the skipped x=0 line). These predict a linear loss change exactly (in-band;
-near the Nyquist boundary the forward *clamps* and the scatter *drops*
-out-of-range samples).
+## 2. Quick start
 
-The `rotations`/`shifts`/`weights` gradients are dedicated backward kernels
-(`_pose_grad.mojo`): the rotation grad chains the **analytical spatial gradient**
-of the interpolated field (`_gather_grad.mojo`, trilinear differences / tricubic
-`cubic_kernel_derivative`) through the rotated sample coordinate; the shift grad
-differentiates the phase ramp; the weight grad is the exact adjoint of the weight
-splat. The backprojection variants gather with *drop* boundary handling (the
-scatter's adjoint) rather than the forward gather's *clamp*. All are validated by
-finite differences (CPU and GPU, both interpolations).
+The backend **follows the input tensor's device**. 
+A CPU tensor runs the CPU kernel; an `mps`/`cuda` tensor runs the GPU
+kernel; the output comes back on the input's device.
+
+There are two layers. Reach for the **real-space** one unless you have a reason
+not to — it handles padding, the FFTs and the gridding correction (§7) for you:
 
 ```python
 import torch
 from torch_fourier_slice.experimental import (
-    project_3d_to_2d, backproject_2d_to_3d_forw,
+    project_3d_to_2d, backproject_2d_to_3d, mojo_kernels_available,
 )
 
-volume_rfft.requires_grad_(True)
-projections = project_3d_to_2d(volume_rfft, rotation_matrices)
-loss = (projections - target).abs().pow(2).sum()
-loss.backward()  # volume_rfft.grad is populated
+assert mojo_kernels_available()          # False if the `mojo` package is missing
 
-data_vol, weight_vol = backproject_2d_to_3d_forw(projections, rotation_matrices, weights=ctf2)
+volume = ...                             # real (d, d, d), even side
+rotations = ...                          # (bp, 3, 3) zyx rotation matrices
+
+images = project_3d_to_2d(volume, rotations)               # CPU  -> CPU kernel
+images = project_3d_to_2d(volume.to("cuda"), rotations)    # CUDA -> GPU kernel
+recon  = backproject_2d_to_3d(images, rotations)           # the adjoint, real out
+
+# everything is differentiable (see §11):
+volume.requires_grad_(True)
+loss = (project_3d_to_2d(volume, rotations) - target).pow(2).sum()
+loss.backward()                          # volume.grad populated
 ```
 
-**The backend follows the input tensor's device** — there is no `backend`
-argument. A CPU `reconstruction` runs the CPU kernel; an `mps`/`cuda`
-`reconstruction` runs the GPU kernel. Output is returned on the input's device.
+The **Fourier** layer is the same operators with the transforms left to you —
+rfft in, rfft out, DC at the origin. Use it when you are already working in
+Fourier space and don't want a round trip per call:
 
 ```python
-from torch_fourier_slice.experimental import project_3d_to_2d
+from torch_fourier_slice.experimental import extract_central_slices_rfft_3d
 
-imgs = project_3d_to_2d(volume_rfft, rotations)  # CPU -> CPU kernel
-imgs = project_3d_to_2d(volume_rfft.to("mps"), rotations)  # MPS -> GPU kernel
+volume_rfft = torch.fft.rfftn(torch.fft.fftshift(volume, dim=(-3, -2, -1)),
+                              dim=(-3, -2, -1))
+slices = extract_central_slices_rfft_3d(volume_rfft.contiguous(), rotations)
 ```
 
-The kernels form a single extension module (`_mojo/projectors.mojo`, compiled on
-first import) whose per-pixel math is written once and shared by the CPU and GPU
-paths. It is split into grouped files imported by the entry module:
+Interpolation: `interpolation="linear"` (trilinear, default) or `"cubic"`
+(tricubic Catmull-Rom) — selected at **compile time** per call (§6). The
+real-space layer's gridding correction follows this choice (§7).
+
+---
+
+## 3. What "projection" means here (30 seconds of theory)
+
+By the **Fourier-slice theorem**, a 2D projection image of a 3D volume equals a
+central planar slice through the volume's 3D Fourier transform, oriented by the
+projection direction. So:
+
+- **Forward (project):** for each 2D output pixel, rotate its frequency
+  coordinate into the volume, **sample+interpolate** the 3D rfft volume there,
+  apply any shift phase. This is a **gather** (each output reads a few inputs).
+- **Backward (backproject):** for each 2D input pixel, rotate into the volume and
+  **splat+accumulate** its value into the nearby voxels. This is a **scatter**
+  (each input writes a few outputs, hence atomics).
+
+Everything is done in **rfft layout with DC at the origin** (real volume →
+`torch.fft.rfftn`, non-redundant half, complex stored as a trailing `2`
+dimension via `torch.view_as_real`). See §10 and the layout note at the end.
+
+The **central-line** ops apply the same theorem once more: a line through the
+origin of a central slice is a line through the origin of the 3D transform, so a
+1D central line is the degenerate central slice whose in-plane axis has collapsed
+to its DC row. A line is therefore posed by a bare **direction** rather than a
+rotation matrix — rotating about the line's own axis is a gauge its values are
+blind to. Same gather/scatter kernels, one dimension lower.
+
+---
+
+## 4. Repository map
+
+Python side (`experimental/`):
+
+| file | role |
+|------|------|
+| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` (+ `_multivolume`) — padding, FFTs, gridding correction |
+| `slice_extraction.py`, `slice_insertion.py` | Fourier API: 3D volume ↔ 2D central slices, posed by a rotation matrix |
+| `line_extraction.py`, `line_insertion.py` | Fourier API: 3D volume ↔ 1D central lines, posed by a direction |
+| `line_extraction_2d.py`, `line_insertion_2d.py` | Fourier API: 2D image ↔ 1D central lines |
+| `_gridding.py` | the de-apodization correction for each interpolation kernel (§7) |
+| `_autograd.py` | torch `autograd.Function`s wiring forward/backward |
+| `_ops.py` | orchestration: validate → build buffers + `KernelParams` → call a kernel |
+| `_validation.py` | shape checks, `prep_*`, `interp_code`, the **`KernelParams`** carrier |
+| `_gpu.py` | device addresses (CUDA VA / Metal `gpuAddress`), Metal heap residency, launch prep |
+| `_kernels.py` | compiles + loads the Mojo module on import; `mojo_kernels_available()` |
+
+Mojo kernels (`experimental/_mojo/`) — one extension module split into grouped
+files, all compiled together on first import:
 
 | file | contents |
 |------|----------|
-| `_common.mojo` | types/constants, `FourierSliceParams`, small geometry/complex helpers |
-| `_gather.mojo` | sample + interpolate (forward) — linear & cubic |
-| `_gather_grad.mojo` | interpolate + analytical spatial gradient — linear & cubic |
-| `_scatter.mojo` | atomic accumulate + splat (backward) — linear & cubic |
-| `_pixel.mojo` | the per-pixel forward/scatter ops shared by CPU loops and GPU threads |
+| `_common.mojo` | shared types & constants: `Float32Ptr`, `FourierSliceParams`, the per-kernel **buffer structs**, `C2`/`C8` complex SIMD, `LINEAR`/`CUBIC`, geometry/complex helpers, `_ptr`/`_dptr` |
+| `_gather.mojo` | **sample + interpolate** the rfft volume (extraction) — linear & cubic |
+| `_gather_grad.mojo` | interpolate **+ analytical spatial gradient** (for pose grads) |
+| `_scatter.mojo` | **atomic accumulate + splat** into the rfft volume (insertion) |
+| `_pixel.mojo` | `_project_pixel` / `_scatter_pixel` — the **per-output-element op**, shared by CPU loops and GPU threads |
 | `_pose_grad.mojo` | per-pixel rotation/shift/weight gradient ops (shared CPU/GPU) |
-| `_device.mojo` | GPU host↔device transfer, kernels, launchers |
-| `projectors.mojo` | the Python-facing entry points + `FourierSliceParams` construction |
+| `_line.mojo`, `_line_grad.mojo` | the 3D↔1D central-line per-pixel ops and their direction/shift/weight gradients |
+| `_line2d.mojo`, `_line2d_grad.mojo` | the same, one dimension lower (2D image ↔ 1D line) |
+| `_device.mojo` | GPU kernels (one thread per pixel) + their launchers |
+| `fourier_slice_kernels.mojo` | Python-facing entry points (CPU + GPU) + `PyInit_fourier_slice_kernels` + `DeviceSession` |
 
-Naming: integer **volume voxel** indices are `z, y, x`; projection **pixel**
-indices are `i_h, i_w`; batch axes are `i_bv, i_bp`; the continuous rotated
-sample coordinate is `kz, ky, kx`. The complex Fourier volume/projection data is
-read and written through a per-volume 4D `TileTensor` view `[d, h, w, 2]` over the
-zero-copy pointer (`_load_c2` / `_store_c2` in `_common.mojo`); atomic scatter
-accumulation and the real weight bookkeeping stay on raw pointers.
+**The numeric core is `_gather` / `_scatter` / `_pixel` / `_pose_grad` (plus the
+`_line*` analogues).** Those files never mention CPU or GPU — they are just math
+over pointers and indices. `fourier_slice_kernels.mojo` (CPU) and `_device.mojo`
+(GPU) are the two *drivers* that call into that core.
 
-> Editing a non-entry `.mojo` file may not invalidate the `__mojocache__` (the
-> import hook tracks `projectors.mojo`), so clear `_mojo/__mojocache__/` after
-> changing a helper file. It is always safe to delete.
+---
 
-**CPU** runs one thread per projection via Mojo's `parallelize`
-(`num_physical_cores()` workers); poses are independent and write disjoint
-output blocks (scatter uses atomic adds).
+## 5. CPU vs GPU: same math, different execution strategy
 
-**GPU** runs one thread per rfft pixel via Mojo's `DeviceContext`; works on any
-GPU Mojo supports (NVIDIA / AMD / Apple),
-developed and validated on Apple Silicon. (The kernel currently manages its own
-device memory and bridges through the host, so a GPU input is materialised on
-the CPU for the upload and the result is moved back to the input device; output
-matches the CPU path bit-exactly without shifts, ~1e-5 with shifts due to GPU
-transcendental precision.)
+**What they share:** every per-pixel computation. Both paths ultimately call the
+*same* `_project_pixel[interp](...)` / `_scatter_pixel[interp](...)`. If you fix a
+bug in the interpolation, both devices get the fix — there is no second copy.
 
-For projecting one volume at many orientations, the upload is **cached
-transparently** — keyed by the volume tensor's identity + version — and reused
-when you pass the same tensor again, removing the otherwise per-call transfer:
+**What differs is the parallelism model and where memory lives:**
 
-```python
-imgs_a = project_3d_to_2d_forw(volume_rfft.to("mps"), rotations_a)  # uploads
-imgs_b = project_3d_to_2d_forw(volume_rfft.to("mps"), rotations_b)  # reused
+| | CPU (`fourier_slice_kernels.mojo`) | GPU (`_device.mojo`) |
+|---|---|---|
+| parallel unit | **one thread per projection (pose)** via Mojo `parallelize`, `num_physical_cores()` workers; each worker loops over that pose's pixels | **one thread per rfft output pixel** via a `DeviceContext` kernel launch (`grid_dim × block_dim`) |
+| memory | host tensors, pointer from `data_ptr()` (`_ptr`) | torch **device** tensors, read/written **in place** via raw device addresses (`_dptr`) — no host round-trip |
+| scatter safety | atomic adds (poses write overlapping voxels) | atomic adds (adjacent pixels write overlapping voxels) |
+| params on device | `FourierSliceParams` used directly | `FourierSliceParams` isn't `DevicePassable`, so the kernel takes its primitive fields as scalars and **rebuilds** it on-device |
+
+Why thread-per-pose on CPU but thread-per-pixel on GPU? A CPU has ~10s of fat
+cores that like coarse, cache-friendly chunks of work (a whole pose); a GPU has
+~1000s of thin lanes that want the finest independent unit (one pixel) to stay
+occupied. Same math, mapped to the hardware's grain.
+
+---
+
+## 6. Compile-time interpolation (`comptime`)
+
+`interpolation="linear"|"cubic"` is resolved **at compile time**, not per voxel.
+The interpolation kind is a Mojo `comptime` parameter threaded through the core
+(`_interp3d[interp]`, `_project_pixel[interp]`, the kernels). At the Python→Mojo
+boundary the runtime code (`KernelParams.interp`, `0`/`1`) is read **once** and
+dispatched to the specialized build:
+
+```mojo
+if p.interp == CUBIC: _launch_project[CUBIC](...)   # a kernel with NO interp branch,
+else:                 _launch_project[LINEAR](...)  # cubic/linear baked in
 ```
 
-Note `.to("mps")` returns a *new* tensor each call (different identity), so cache
-it once: `vol = volume_rfft.to("mps")` then reuse `vol`. The cache invalidates on
-in-place edits (the tensor's `_version` bumps) and frees the device buffer when
-the source tensor is garbage-collected. `clear_resident_volume_cache()` frees
-eagerly; `reuse_volume=False` disables caching (re-upload every call).
+So the hot loop over millions of voxels never asks "linear or cubic?" — that
+decision was compiled away. This is a small taste of the bigger Mojo idea:
+parameters you know at build time become *specializations*, not runtime branches.
 
-### Performance note (Apple M4 Pro, box 256, validated bit-exact)
+---
 
-| N projections | CPU (14 threads) | GPU stateless | GPU resident |
-|---------------|------------------|---------------|--------------|
-| 10            | 0.5 ms           | 15.3 ms       | 3.2 ms       |
-| 100           | 8.2 ms           | 36.2 ms       | 23.1 ms      |
-| 1000          | 77.7 ms          | 258.9 ms      | 247.5 ms     |
+## 7. Gridding correction (why the real-space layer divides by `K`)
 
-The volume-resident path removes a constant ~13 ms upload vs stateless. The GPU
-is output-transfer bound here (the per-pixel compute is light and results are
-copied back to host every call), so the multithreaded CPU is fastest on this
-hardware; the GPU is expected to win when results stay on-device for downstream
-GPU work or with heavier per-pixel compute (e.g. cubic interpolation).
+Sampling the rfft volume at a non-integer coordinate is a **convolution with the
+interpolation kernel** `k`. A convolution in Fourier space is a multiplication in
+real space by `K`, the continuous Fourier transform of `k`. So an extracted
+projection is really the projection of `volume × K`, and an inserted
+reconstruction comes out as `reconstruction × K` — the volume is *apodized*,
+progressively damped away from the origin.
 
-### Future optimizations (scatter write contention)
+The fix is to **divide by `K`**: the volume on the way in to an extraction, the
+reconstruction on the way out of an insertion. Both directions divide; that is
+what `_gridding.py` supplies and what `project.py` / `backproject.py` apply.
 
-The 2D→3D scatter accumulates with atomics (`_atomic_add_at`). Contention is
-*structured*, which makes targeted optimizations possible — none implemented yet,
-profile first (the GPU path is currently host-transfer bound, not atomic bound):
+`K` depends on which kernel was used, so it has to follow `interpolation`:
 
-- **Low-k is hot, ~1/k.** Every central slice passes through the Fourier origin,
-  so a voxel at radius `k` receives ~`P·0.5/k` writes (`P` projections) — singular
-  at DC, negligible at high `k`. Contention lives in a small, known core, so a
-  cheap fix can special-case it and plain-atomic the bulk.
-- **Adjacent lanes collide deterministically.** A warp of consecutive threads is
-  consecutive `i_w` in one slice row (same rotation); their interpolation stencils
-  overlap (≈half at oversampling 1, less as oversampling grows). So the colliding
-  lanes are the *adjacent* ones — warp/stencil pre-aggregation (`warp.sum` → one
-  atomic) can cut atomics without runtime `match`/ballot.
-- **Replicated reconstructions (memory-budgeted).** Partition projections into
-  `G` groups, scatter each into its own volume, sum at the end. Memory is
-  `G × bv × volume`, so `G` is a budget knob, not a constant. Key point: a batch
-  of `bv` volumes multiplies *memory* but not *contention* — different volumes are
-  different buffers and never contend. So the regimes align favorably: with many
-  volumes (`bv ≥ workers`) skip replication and partition *volumes* across workers
-  for a contention-free scatter at no extra memory; with few volumes (esp.
-  `bv = 1`) replication is both most needed and cheapest (`G × volume`). For the
-  tight middle and GPU-with-large-`bv`, replicate only the hot low-`k` core (a
-  small cube around DC): `bv × volume` shared + `G × bv × tiny`, getting the relief
-  exactly where ~`1/k` says it lives for almost no memory. Pick
-  `G = clamp(free_mem / (bv · replica_bytes), 1, workers)`, degrading to plain
-  atomics when even `G = 2` won't fit. Composes with the two above.
+| interpolation | kernel | `K(ν)` | `K(0.25)` |
+|---|---|---|---|
+| `"linear"` | tent | `sinc²(ν)` | 0.81 |
+| `"cubic"` | Catmull-Rom (Keys, `a = −1/2`) | `sinc³(ν)·(3·sinc(ν) − 2cos(πν))` | 0.94 |
 
-The three above reorder the float32 summation, trading the current exact CPU/GPU
-bit-match for ~1e-6 drift.
+The cubic form is obtained by integrating the kernel directly; the test suite
+re-derives it against numerical quadrature. It apodizes less than the tent, as
+you'd expect of the more accurate interpolant — so applying `sinc²` to a cubic
+projection *over*-corrects and throws away cubic's advantage entirely.
 
-A fourth, more invasive option is **loop inversion (gather backprojection)** —
-contention-free *and* deterministic, but a different operator:
+Both kernels are separable, so the 3D correction is the outer product of the
+per-axis 1D transforms, not a function of the frequency magnitude `|ν|`.
 
-- Make the backprojection **voxel-parallel** instead of pixel-parallel: each
-  thread owns one output voxel, finds the projection pixels whose central slice
-  passes within interpolation support of it (`|v·n_p| ≤ support`), and sums them.
-  One write per voxel → **no atomics, no replication memory, fixed reduction order
-  → bit-reproducible**. (It mirrors how the forward projector already gathers.)
-- Cost 1 — *finding contributors*: the set of projections hitting voxel `v` is the
-  same ~`P/k` (1/k geometry), but a naive per-voxel scan over all `P` is
-  `O(P·K³)`, a factor ~`K` worse than the scatter's `O(P·K²)`. It needs an
-  orientation index / binning (test only the band of normals ⊥ `v`) to match the
-  scatter's work.
-- Cost 2 — *kernel shape*: the volume-grid interp kernel is axis-aligned, not
-  plane-separable, so the gather must sum the actual pixels whose 3D sample lands
-  in `v`'s stencil (careful bookkeeping rather than a clean 2D interp).
-- Caveat — *it moves the scatter, doesn't remove it*: there's a "conservation of
-  scatter" — exactly one of {forward, adjoint} is a clean gather and the other a
-  scatter. A gather backprojection's adjoint scatters into the **projections**
-  (2D, cooler) instead of the **volume** (3D, low-`k`-hot), which is a net win, but
-  it means re-establishing the adjoint pair (new matching forward + tests) rather
-  than dropping into the existing scatter. Most appealing on GPU for occupancy +
-  determinism, once the indexing is solved.
+Measured on an isotropic blob, whose analytic projection is the same at every
+orientation and so is an exact ground truth (relative RMS error, 64³ box):
 
-## Requirements
+| | no correction | `sinc²` | matched `K` |
+|---|---|---|---|
+| linear | 7.8e-4 | — | **1.6e-4** |
+| cubic  | 1.6e-5 | 7.9e-4 | **1.4e-5** |
 
-These kernels need the optional `mojo` package:
+Getting the direction wrong (multiplying rather than dividing) roughly doubles
+the error instead of removing it.
+
+---
+
+## 8. Why Mojo-compiled-on-import beats shipping CUDA/Metal binaries
+
+This is the part most relevant to a Python/torch author who has fought
+`pip install`.
+
+**The traditional way** to ship a GPU-accelerated Python package is to write the
+kernels in CUDA C++ (`.cu`) — and, for Apple, again in Metal — plus C++/pybind
+glue, then **precompile binaries** and publish wheels. The problem is the binary
+matrix:
+
+```
+{CUDA 11.8, 12.1, 12.4, 12.6, 12.8, 13.0, …}   (must match the user's DRIVER)
+        ×  {linux x86_64, aarch64, macOS arm64, win}   (manylinux, etc.)
+        ×  {py3.9 … 3.13}   ×   ABI
+```
+
+That is why torch has a **CUDA-specific index URL** (`pip install torch
+--index-url https://download.pytorch.org/whl/cu128`), and why picking the wrong
+one silently fails: a wheel built for CUDA 13.0 won't initialize on a machine
+whose driver only supports 12.8. (We hit exactly this during development — the
+default wheel pulled `cu130`, the box driver capped at 12.8, and it reported
+`cuda: False` until we forced the `cu128` build.) You, the package author, own
+that whole build+test+publish matrix forever, and your users own the
+index-URL-matching ritual.
+
+**The Mojo way:** ship **source** (the `.mojo` text). On first `import`, Mojo's
+importer runs `mojo build --emit shared-lib` and compiles the kernels **for the
+exact machine they're on** — targeting whatever GPU is present (NVIDIA PTX / AMD
+/ Apple Metal) and whatever CUDA toolkit is installed — then caches the `.so`
+under `_mojo/__mojocache__/` (keyed by a source hash; gitignored). Concretely:
+
+- **No binary matrix.** One text source, compiled locally to the actual target.
+  No `cuXXX` wheels, no manylinux, no per-arch/per-Python builds to publish.
+- **No driver/toolkit version roulette.** It compiles against the local toolchain,
+  so it targets the CUDA that's actually there — no index-URL to match.
+- **Portable from one codebase.** The *same* `.mojo` produces the CPU path, the
+  Metal path, and the CUDA path. This package was developed on Apple Silicon and
+  runs unchanged on an A100 — no `#ifdef __CUDACC__` fork.
+- **Readable & hackable.** The "kernel" is Python-like Mojo you can open, read,
+  and edit — not opaque `.cu`/PTX. A newcomer can change the interpolation or add
+  an op and just re-import. (Contrast: patch a CUDA kernel → rebuild the wheel
+  matrix → republish.)
+- **One language across the host/device seam.** No Python↔C++↔CUDA FFI layers to
+  keep in sync; host orchestration and device kernels are both Mojo.
+
+**Costs, honestly:** the first import pays a one-time compile (seconds; cached
+after); the `mojo` toolchain (`pip install "mojo==1.0.0b2" --prerelease allow`)
+must be present; Mojo is early/beta; and on some setups the NVIDIA PTX assembler
+path must be pointed at `ptxas`
+(`export MODULAR_NVPTX_COMPILER_PATH=$(command -v ptxas)`) before the CUDA build
+succeeds. For a research backend that wants to run on a laptop *and* a cloud
+A100 without a release-engineering department, the trade is very favorable.
 
 ```bash
-pip install "mojo==1.0.0b2" --prerelease allow
-# or: uv add "mojo==1.0.0b2" --prerelease allow
+pip install "mojo==1.0.0b2" --prerelease allow    # or: uv add ...
+python -c "from torch_fourier_slice.experimental import mojo_kernels_available as a; print(a())"
 ```
 
-Probe support at runtime with `mojo_kernels_available()`. The Mojo source in
-`_mojo/projectors.mojo` is JIT-compiled on first use (cached under
-`_mojo/__mojocache__/`, gitignored) via `mojo.importer`.
+> Editing a **non-entry** `.mojo` helper may not invalidate `__mojocache__` (the
+> import hook tracks `fourier_slice_kernels.mojo`), so delete `_mojo/__mojocache__/` after
+> changing a helper. It's always safe to delete.
 
-## How it works
+---
 
-The Python wrapper (`project.py`) prepares contiguous CPU tensors, viewing
-complex tensors as interleaved real (`torch.view_as_real`), and passes their raw
-`data_ptr()` addresses to the Mojo kernel. The kernel reconstructs typed
-`UnsafePointer`s and runs the projection loop in native Mojo — **zero-copy**, no
-data marshalling. All shapes/scalars are extracted from Python once up front so
-the hot loops never call back into Python.
+## 9. How data crosses the boundary (zero-copy)
+
+All complex tensors are viewed as interleaved real (`torch.view_as_real`:
+`complex64` → trailing dim `2`) and made contiguous, so the kernels see plain
+`float32` buffers. **Shapes and scalars are read into Python once** and passed as
+a named `KernelParams`, so the hot loops never call back into Python.
+
+**CPU path** (`extract_central_slices_rfft_3d` / `insert_...`):
+
+```
+torch tensors ──(data_ptr, _ptr)──▶ Float32Ptr ──▶ parallelize workers ──▶ _project_pixel[interp]
+KernelParams  ──(read by name)────▶ FourierSliceParams
+```
+
+**GPU path** — **no host round-trip**; the kernel reads/writes the memory backing
+the torch device tensors directly:
+
+```
+place inputs + PRE-ZEROED outputs on device
+        │
+        ├─ device addresses:  CUDA → data_ptr() is already a device VA
+        │                     Metal → data_ptr() is an MTLBuffer object ptr, so
+        │                             recover the real VA = [MTLBuffer gpuAddress]
+        │                             + storage_offset   (_gpu.py)
+        ├─ stream address:    CUDA → torch's current stream (kernel enqueues on it,
+        │                            so it's ordered with surrounding torch ops)
+        │                     Metal → 0 (own DeviceContext stream; entry point syncs)
+        ▼
+Mojo entry point:  _dptr(addr) → build a per-kernel buffer struct (ProjectBuffers …)
+                   dispatch _launch_project[LINEAR|CUBIC](ctx, buffers=…, params=…, stream=…)
+                   → one GPU thread per rfft pixel → _project_pixel[interp]
+```
+
+Two device-specific wrinkles handled in `_gpu.py`:
+
+- **Metal heap residency.** macOS evicts idle GPU heaps after ~1–1.5 s, and Mojo
+  doesn't declare foreign (torch-owned) buffers to its command encoder — a kernel
+  pointing at an evicted heap silently reads zeros. `revive_heaps()` touches each
+  tensor with a tiny torch op right before dispatch to keep it resident.
+- **Shared `DeviceContext`.** One process-wide `DeviceSession` holds a single
+  `DeviceContext`; constructing one per call leaks the underlying Metal command
+  queue and crashes long loops after ~1000 steps.
+
+---
+
+## 10. Naming conventions
+
+Consistent across Python and Mojo:
+
+| name | meaning |
+|------|---------|
+| `bv` | batch of **v**olumes |
+| `bp` | batch of **p**rojections (poses) per volume |
+| `bv_rot`, `bv_shift_2d`, `bv_shift_3d` | broadcast batch of rotations / 2D shift / 3D shift |
+| `d, h, w` | volume axes (depth, height, width); cubic, so `d == h` |
+| `sidelength` | cube edge (`= h = d`); `sidelength_half = w = h//2 + 1` (rfft width) |
+| `z, y, x` | integer **voxel** indices into the volume |
+| `kz, ky, kx` | the continuous **rotated sample coordinate** (a frequency) |
+| `i_bv, i_bp` | batch indices; `i_h, i_w` projection pixel indices |
+| rotations | `(bv_rot, bp, 3, 3)`, **zyx** convention (poses a central *slice*) |
+| directions | `(bv_rot, bp, 3)` zyx (or `(…, 2)` yx in 2D) unit vectors — poses a central *line*, which has no in-plane gauge to fix |
+| `Float32Ptr` | raw pointer into a contiguous float32 buffer (CPU or GPU); grouped into buffer structs where several travel together |
+| `C2` / `C6` / `C8` | complex `(re, im)` SIMD / value + 2 spatial gradients (2D) / value + 3 spatial gradients (3D) |
+| `KernelParams` (Python) ↔ `FourierSliceParams` (Mojo) | the scalar parameters, read by **name** across the boundary (no positional index conventions) |
+| `ProjectBuffers`, `ScatterBuffers`, `…GradBuffers` | per-kernel bundles naming exactly the buffers that kernel uses |
+| `LINEAR` / `CUBIC` | the comptime interpolation kinds |
+
+Complex volume/projection data is read/written through a per-volume 4D
+`TileTensor` view `[d, h, w, 2]` over the zero-copy pointer (`_load_c2` /
+`_store_c2`); atomic scatter accumulation stays on raw pointers.
+
+---
+
+## 11. Differentiability
+
+Every op is **fully differentiable**: the extraction w.r.t. `reconstruction`,
+`rotations` (or `directions`), `shifts`; the insertion w.r.t. `projections`,
+`weights`, `rotations` (or `directions`), `shifts`.
+
+The **data** gradients use the adjoint relationship — each extraction/insertion
+pair are adjoints, so each one's data-backward is the *other* op's kernel
+(`d/d(volume)` of an extraction is the scatter; `d/d(projections)` of an
+insertion is the gather, with an exact correction for the Hermitian
+double-insert and the skipped `x=0` line). The pose / `shifts` / `weights`
+gradients are dedicated backward kernels (`_pose_grad.mojo`, `_line_grad.mojo`,
+`_line2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
+the interpolated field (`_gather_grad.mojo`) through the rotated sample
+coordinate; the shift grad differentiates the phase ramp; the weight grad is the
+exact adjoint of the weight splat. All are validated by finite differences (CPU
+and GPU, both interpolations).
+
+---
 
 ## Layout note
 
-`project_3d_to_2d_forw` operates on volumes in **rfft layout with DC at the
-origin** (`[..., 0, 0, 0]`, unshifted). This is
-the *same operation* as `torch_fourier_slice.extract_central_slices_rfft_3d`,
-which uses an `fftshift`ed rfft layout (DC centered on the z/y axes). Bridge
-between them with a single `fftshift`/`ifftshift` over the non-redundant dims:
+This applies to the **Fourier layer** only — the real-space layer takes and
+returns real tensors, so there is no layout to match.
+
+The Fourier ops use **rfft layout with DC at the origin** (`[..., 0, 0, 0]`,
+unshifted). This is the same operation as
+`torch_fourier_slice.extract_central_slices_rfft_3d`, which uses an `fftshift`ed
+layout (DC centered). Bridge with a single `ifftshift`/`fftshift` over the
+non-redundant dims:
 
 ```python
-import torch
-from torch_fourier_slice.experimental import project_3d_to_2d
-
-# volume_rfft is in teamtomo (fftshifted) layout -> convert to DC-at-origin rfft
-rfft = torch.fft.ifftshift(volume_rfft, dim=(-3, -2))
-proj_rfft = project_3d_to_2d(rfft, rotation_matrices)
-# back to teamtomo layout if desired
-proj = torch.fft.fftshift(proj_rfft, dim=-2)
+rfft = torch.fft.ifftshift(volume_rfft, dim=(-3, -2))   # teamtomo -> DC-at-origin
+slices = extract_central_slices_rfft_3d(rfft.contiguous(), rotations)
+slices = torch.fft.fftshift(slices, dim=-2)             # back to teamtomo layout
 ```
 
-Within the Nyquist band the two produce identical results (bit-exact for
-non-interpolating rotations); they differ only in how out-of-Nyquist corner
-samples are extrapolated (the canonical kernel zero-pads, these kernels
-clamp to the edge voxel).
+Within the Nyquist band the two are identical (bit-exact for non-interpolating
+rotations); they differ only in how out-of-Nyquist corner samples are handled
+(the canonical kernel zero-pads, these kernels clamp to the edge voxel).

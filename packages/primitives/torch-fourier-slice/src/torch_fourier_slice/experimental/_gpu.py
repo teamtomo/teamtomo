@@ -8,9 +8,9 @@ heap resident and the two command queues synchronised.
 Two backends:
 
 * **CUDA** -- ``tensor.data_ptr()`` is already a CUDA device VA, so it is
-  passed straight through. Ordering between torch and the Mojo kernel is
-  enforced by a full device sync around the launch (correct, if not maximally
-  concurrent -- a torch-stream handoff is a later optimisation).
+  passed straight through. Ordering between torch and the Mojo kernel is the
+  stream's job: the launch is enqueued on torch's own current stream (see
+  :func:`stream_address`), so no device-wide synchronisation is needed.
 * **Metal (MPS)** -- ``tensor.data_ptr()`` is the ``id<MTLBuffer>`` Obj-C
   object pointer, *not* a GPU VA (verified: ``object_getClassName`` reports
   ``AGXG...Buffer``). We recover the real VA the same way Mojo does
@@ -113,8 +113,9 @@ _revive_stamp: dict[int, float] = {}
 
 
 def revive_heaps(*tensors: torch.Tensor | None) -> None:
-    """Touch each MPS tensor with a tiny GPU op so its ``MTLHeap`` is resident
-    when the Mojo kernel dispatches. No-op for empty/None tensors.
+    """Keep each MPS tensor's ``MTLHeap`` resident for the coming dispatch.
+
+    Touches each tensor with a tiny GPU op; a no-op for empty/None tensors.
 
     torch MPS tensors are sub-allocations of hazard-tracked ``MTLHeap``s, and
     Mojo's Metal backend only declares resources it allocated itself to its
@@ -156,3 +157,16 @@ def pre_launch_sync(device: torch.device, *tensors: torch.Tensor | None) -> None
     if device.type == "mps":
         revive_heaps(*tensors)
         torch.mps.synchronize()
+
+
+def prepare_launch(device: torch.device, bufs: tuple[torch.Tensor, ...]) -> tuple:
+    """Make ``bufs`` launch-safe and return the address tuple Mojo expects.
+
+    Every GPU entry point takes one ``addrs`` tuple: the raw device address of
+    each buffer in order, then torch's stream address as the trailing element.
+    (The stream is folded in here rather than passed as its own argument to stay
+    under Mojo's ``def_function`` arity cap.)
+    """
+    addrs = (*(device_address(t) for t in bufs), stream_address(device))
+    pre_launch_sync(device, *bufs)
+    return addrs

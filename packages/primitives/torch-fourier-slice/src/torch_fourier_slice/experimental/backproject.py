@@ -1,90 +1,179 @@
-"""Experimental Mojo-backed 2D->3D Fourier-space backprojection.
+"""Experimental Mojo-backed real-space backprojection: 2D images -> 3D volume.
 
-The adjoint/transpose of the forward central-slice projection: scatters 2D rfft
-slices into a 3D rfft volume (Hermitian, DC at origin), optionally accumulating
-per-pixel weights for later Wiener-style normalization.
+The real-space layer over :mod:`.slice_insertion`, and the adjoint of
+:mod:`.project`: pad, ``rfftn`` over the spatial dims, insert central slices with
+the Mojo kernel, normalise by the accumulated density, ``irfftn`` back, correct
+for the interpolation kernel, unpad.
 
-The backend follows the input device (GPU inputs are materialised on the CPU and
-the result returned on the input device). Differentiable w.r.t. ``projections``,
-``weights``, ``rotations`` and ``shifts_2d``.
+Mirrors :func:`torch_fourier_slice.backproject_2d_to_3d`, but the compute backend
+follows the input tensor's device: a CPU tensor runs the multithreaded Mojo CPU
+kernel, an ``mps`` / ``cuda`` tensor runs the Mojo GPU kernel.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import torch
+import torch.nn.functional as F
 
-from ._autograd import BackprojectForward
+from ._gridding import gridding_correction
+from .project import _pad_width
+from .slice_insertion import (
+    insert_central_slices_rfft_3d,
+    insert_central_slices_rfft_3d_multivolume,
+)
 
-if TYPE_CHECKING:
-    import torch
+
+def _backproject(
+    images: torch.Tensor,
+    rotations: torch.Tensor,
+    shifts_3d: torch.Tensor | None,
+    shifts_2d: torch.Tensor | None,
+    weights: torch.Tensor | None,
+    pad_factor: float,
+    fourier_radius_cutoff: float | None,
+    interpolation: str,
+    ewald_curvature: float,
+    insert_fn,
+) -> torch.Tensor:
+    """Shared pipeline; ``insert_fn`` picks the single / multivolume rank form."""
+    pad = _pad_width(images.shape[-1], pad_factor)
+    if pad > 0:
+        images = F.pad(images, pad=[pad] * 4)
+    box = images.shape[-1]
+
+    image_rfft = torch.fft.rfftn(
+        torch.fft.fftshift(images, dim=(-2, -1)), dim=(-2, -1)
+    ).contiguous()
+
+    # unit weights accumulate the sampling density; any caller weights modulate it
+    density = torch.ones(
+        image_rfft.shape, dtype=torch.float32, device=image_rfft.device
+    )
+    if weights is not None:
+        density = density * weights
+    volume_rfft, weight_volume = insert_fn(
+        image_rfft,
+        rotations,
+        shifts_3d=shifts_3d,
+        shifts_2d=shifts_2d,
+        weights=density,
+        fourier_radius_cutoff=fourier_radius_cutoff,
+        interpolation=interpolation,
+        ewald_curvature=ewald_curvature,
+    )
+    # clamped so sparsely sampled high frequencies are not amplified into noise
+    volume_rfft = volume_rfft / torch.clamp(weight_volume, min=1.0)
+
+    volume = torch.fft.fftshift(
+        torch.fft.irfftn(volume_rfft, dim=(-3, -2, -1), s=(box, box, box)),
+        dim=(-3, -2, -1),
+    )
+    # undo the apodization the interpolation kernel imposed during insertion
+    volume = volume / gridding_correction(box, interpolation, volume.device)
+    if pad > 0:
+        volume = F.pad(volume, pad=[-pad] * 6)
+    return volume
 
 
-def backproject_2d_to_3d_forw(
-    projections: torch.Tensor,
+def backproject_2d_to_3d(
+    images: torch.Tensor,
     rotations: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
-    oversampling: float = 1.0,
+    pad_factor: float = 2.0,
     fourier_radius_cutoff: float | None = None,
     interpolation: str = "linear",
     ewald_curvature: float = 0.0,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Backproject 2D rfft slices into a 3D rfft volume (Mojo scatter kernel).
+) -> torch.Tensor:
+    """Reconstruct a real cubic volume from real 2D images (Mojo kernel).
 
-    The pose arguments are ordered ``rotations, shifts_3d, shifts_2d`` to mirror
-    the forward projector this is the adjoint of.
+    Density-weighted backprojection: each voxel is the sampling-weighted average
+    of the slices that touch it, then corrected for the interpolation kernel.
 
     Parameters
     ----------
-    projections : torch.Tensor
-        Complex ``(bp, h, w)`` or ``(bv, bp, h, w)`` rfft slices (DC at origin),
-        square with even side (``w = h//2+1``).
+    images : torch.Tensor
+        Real ``(bp, d, d)`` square projection images with an even side length.
+        Their device selects the CPU/GPU backend.
     rotations : torch.Tensor
-        Real ``(3, 3)``, ``(bp, 3, 3)`` or ``(bv_rot, bp, 3, 3)`` zyx rotation
-        matrices (same convention as the forward projector).
+        Real ``(3, 3)`` or ``(bp, 3, 3)`` **zyx** rotation matrices, the same
+        convention as :func:`.project_3d_to_2d`.
     shifts_3d : torch.Tensor | None
-        Optional ``(..., P, 3)`` 3D shifts (zyx, volume frame); the conjugate
-        phase ramp is applied (adjoint of the forward 3D shift).
+        Optional ``(..., bp, 3)`` zyx shifts in the volume frame; the conjugate
+        phase ramp is applied (adjoint of the forward shift).
     shifts_2d : torch.Tensor | None
-        Optional ``(..., P, 2)`` 2D shifts (yx); the conjugate phase ramp is
-        applied (adjoint of the forward shift).
+        Optional ``(..., bp, 2)`` yx image-plane shifts; likewise conjugated.
     weights : torch.Tensor | None
-        Optional real per-pixel weights (e.g. CTF^2) matching ``projections``;
-        accumulated into a separate weight volume for downstream normalization.
-    oversampling : float
-        Coordinate scaling factor; the output volume is cubic with side
-        ``ceil(h * oversampling)`` rounded up to even.
+        Optional real per-pixel weights (e.g. CTF^2) on the *padded* rfft
+        slices, modulating each sample's contribution to the density.
+    pad_factor : float
+        Real-space padding applied before the transform; ``2.0`` (default)
+        doubles the box. Must be ``>= 1.0``.
     fourier_radius_cutoff : float | None
-        Frequency radius (cycles) beyond which input pixels are ignored.
-        Defaults to ``h / 2`` (Nyquist).
+        Frequency radius in cycles beyond which input pixels are ignored.
+        Defaults to Nyquist for the padded box.
     interpolation : str
         ``"linear"`` (trilinear, default) or ``"cubic"`` (tricubic Catmull-Rom).
+        The gridding correction follows this choice.
     ewald_curvature : float
-        Signed Ewald-sphere curvature coefficient. ``0.0`` (default) keeps the
-        slice flat; positive / negative bends it onto the sphere (slice z-offset
-        ``ewald_curvature * |k_xy|^2``). Must match the value used in the forward
-        projection it is the adjoint of.
+        Signed Ewald-sphere curvature coefficient; must match the value used in
+        the projection this is the adjoint of.
 
     Returns
     -------
-    (data_volume, weight_volume) : complex ``(bv, d, h, w)`` accumulated data,
-    and real ``(bv, d, h, w)`` accumulated weights if ``weights`` was given
-    (else ``None``). On the same device as ``projections``.
+    volume : torch.Tensor
+        Real ``(d, d, d)`` reconstruction, on the input device.
     """
-    # The autograd Function is the functional entry point: its forward runs the
-    # scatter kernel, its backward the forward-projection + pose/shift/weight
-    # kernels. torch builds no graph when nothing requires grad, so this is also
-    # the non-differentiable path.
-    data_vol, weight_vol = BackprojectForward.apply(
-        projections,
-        weights,
+    if images.dim() != 3:
+        raise ValueError(
+            "images must be (bp, d, d); use backproject_2d_to_3d_multivolume for "
+            "(bp, bv, d, d)"
+        )
+    return _backproject(
+        images,
         rotations,
-        shifts_2d,
         shifts_3d,
-        oversampling,
+        shifts_2d,
+        weights,
+        pad_factor,
         fourier_radius_cutoff,
         interpolation,
         ewald_curvature,
+        insert_central_slices_rfft_3d,
     )
-    return data_vol, (weight_vol if weights is not None else None)
+
+
+def backproject_2d_to_3d_multivolume(
+    images: torch.Tensor,
+    rotations: torch.Tensor,
+    shifts_3d: torch.Tensor | None = None,
+    shifts_2d: torch.Tensor | None = None,
+    weights: torch.Tensor | None = None,
+    pad_factor: float = 2.0,
+    fourier_radius_cutoff: float | None = None,
+    interpolation: str = "linear",
+    ewald_curvature: float = 0.0,
+) -> torch.Tensor:
+    """Reconstruct a batch of real cubic volumes from real 2D images.
+
+    ``images`` is ``(bp, bv, d, d)`` (pose-major). Rotations are shared across
+    volumes (``(bp, 3, 3)``) or per-volume (``(bv, bp, 3, 3)``). See
+    :func:`backproject_2d_to_3d` for the shared parameters.
+
+    Returns real ``(bv, d, d, d)`` reconstructions on the input device.
+    """
+    if images.dim() != 4:
+        raise ValueError("images must be (bp, bv, d, d) for multi-volume")
+    return _backproject(
+        images,
+        rotations,
+        shifts_3d,
+        shifts_2d,
+        weights,
+        pad_factor,
+        fourier_radius_cutoff,
+        interpolation,
+        ewald_curvature,
+        insert_central_slices_rfft_3d_multivolume,
+    )

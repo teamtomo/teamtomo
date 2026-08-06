@@ -103,3 +103,11 @@ ENV/
 .vscode/
 
 lightning_logs/
+
+# Mojo extension compile cache (experimental torch-fourier-slice kernels)
+__mojocache__/
+*.mojopkg
+# experimental demo outputs
+packages/primitives/torch-fourier-slice/examples/*.npz
+packages/primitives/torch-fourier-slice/examples/*.png
+packages/primitives/torch-fourier-slice/examples/*.gif

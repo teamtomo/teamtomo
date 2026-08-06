@@ -1,10 +1,10 @@
-"""Tests for the experimental Mojo-backed projectors.
+"""Tests for the experimental Mojo-backed central-slice kernels.
 
-The Mojo kernel works in rfft layout with DC at the origin. We validate it
-against the repo's
-own ``extract_central_slices_rfft_3d`` (fftshifted rfft layout) -- the two are
-the same operation differing only by an ``fftshift`` of the non-redundant dims,
-so within the Nyquist band they must agree.
+The Mojo kernels work in rfft layout with DC at the origin. We validate them
+against the package's own ``extract_central_slices_rfft_3d`` /
+``insert_central_slices_rfft_3d`` (fftshifted rfft layout) -- the same operations
+differing only by an ``fftshift`` of the non-redundant dims, so within the
+Nyquist band they must agree.
 """
 
 import numpy as np
@@ -18,6 +18,9 @@ from torch_fourier_slice.experimental import (
 )
 from torch_fourier_slice.slice_extraction import (
     extract_central_slices_rfft_3d as canonical_extract_central_slices_rfft_3d,
+)
+from torch_fourier_slice.slice_insertion import (
+    insert_central_slices_rfft_3d as canonical_insert_central_slices_rfft_3d,
 )
 
 
@@ -61,8 +64,8 @@ def _xyz_to_zyx(rot: torch.Tensor) -> torch.Tensor:
 
     Our kernel multiplies coordinate vectors ordered (z, y, x); reversing both
     the rows and the columns of an xyz matrix gives the matrix for the same
-    physical rotation acting on zyx-ordered vectors. Reference kernels here
-    (teamtomo's default) are xyz, so wrap our calls with this.
+    physical rotation acting on zyx-ordered vectors. The canonical reference
+    kernels take xyz matrices by default, so wrap our calls with this.
     """
     return torch.flip(rot, dims=(-2, -1)).contiguous()
 
@@ -78,8 +81,9 @@ def _radius_mask(boxsize: int, fftfreq_max: float) -> torch.Tensor:
 def test_identity_exact_in_band():
     """Identity rotation needs no interpolation -> in-band agreement is exact.
 
-    (Only the even-box Nyquist edge can differ, where teamtomo zero-pads
-    out-of-bounds samples while the Mojo kernel clamps to the edge voxel.)
+    (Only the even-box Nyquist edge can differ, where the canonical kernel
+    zero-pads out-of-bounds samples while the Mojo kernel clamps to the edge
+    voxel.)
     """
     torch.manual_seed(0)
     d = 32
@@ -248,6 +252,56 @@ def test_forward_projection_gradient():
 
     rec = torch.randn(d, d, d // 2 + 1, dtype=torch.complex64, requires_grad=True)
     assert _linear_grad_ratio_ok(loss, rec)
+
+
+def test_backprojection_matches_teamtomo_within_nyquist():
+    """The 2D->3D insertion agrees with the canonical kernel inside the band.
+
+    Slices are the rfft of real images, so they carry the Hermitian symmetry
+    both kernels assume on the kx=0 plane. The DC voxel is excluded: it picks up
+    an (unphysical) imaginary part from neighbouring samples splatting onto it,
+    and the two kernels distribute that differently.
+    """
+    from scipy.spatial.transform import Rotation
+
+    torch.manual_seed(0)
+    d = 24
+    P = 6
+    fftfreq_max = 0.4
+    rot = torch.tensor(
+        Rotation.random(P, random_state=1).as_matrix(), dtype=torch.float32
+    )
+    images = torch.randn(P, d, d, dtype=torch.float32)
+    proj = torch.fft.rfftn(images, dim=(-2, -1))  # Hermitian, DC at origin
+
+    mine, mine_w = insert_central_slices_rfft_3d(
+        proj,
+        rotations=_xyz_to_zyx(rot),
+        weights=torch.ones_like(proj, dtype=torch.float32),
+        fourier_radius_cutoff=fftfreq_max * d,
+    )
+    ref, ref_w = canonical_insert_central_slices_rfft_3d(
+        image_rfft=torch.fft.fftshift(proj, dim=-2),  # canonical: DC centred on h
+        volume_shape=(d, d, d),
+        rotation_matrices=rot,
+        fftfreq_max=fftfreq_max,
+    )
+    ref = torch.fft.ifftshift(ref, dim=(-3, -2))  # canonical -> DC at origin
+    ref_w = torch.fft.ifftshift(ref_w, dim=(-3, -2))
+    assert mine.shape == ref.shape
+
+    kz = torch.fft.fftfreq(d)[:, None, None]
+    ky = torch.fft.fftfreq(d)[None, :, None]
+    kx = torch.fft.rfftfreq(d)[None, None, :]
+    in_band = (kz**2 + ky**2 + kx**2).sqrt() < 0.3
+    in_band[0, 0, 0] = False  # DC, see docstring
+
+    scale = ref[in_band].abs().mean()
+    assert (mine - ref).abs()[in_band].max() < 5e-3 * scale
+    # the accumulated density (weights of ones) must match closely everywhere
+    assert torch.allclose(mine_w[in_band], ref_w[in_band], atol=1e-4)
+
+
 def test_backprojection_gradient_and_weights():
     """Backprojection grad (exact adjoint = forward projection) and weight output."""
     from scipy.spatial.transform import Rotation
@@ -382,6 +436,48 @@ def test_invalid_interpolation_raises():
         extract_central_slices_rfft_3d(
             rfft, rotations=torch.eye(3).reshape(1, 3, 3), interpolation="nope"
         )
+
+
+def test_cubic_is_more_accurate_than_linear():
+    """Tricubic interpolation beats trilinear against an exact ground truth.
+
+    The rfft of an isotropic blob is itself isotropic, so its exact central slice
+    is the *same* for every rotation -- and the identity rotation samples the
+    volume on integer coordinates, i.e. with no interpolation at all. That makes
+    the identity slice an exact reference, and any deviation of a rotated slice
+    from it pure interpolation error.
+    """
+    from scipy.spatial.transform import Rotation
+
+    d = 48
+    axis = torch.arange(d, dtype=torch.float32) - d // 2
+    zz, yy, xx = torch.meshgrid(axis, axis, axis, indexing="ij")
+    volume = torch.exp(-(zz**2 + yy**2 + xx**2) / (2 * 3.0**2))
+    rfft, _ = _rfft_layouts(volume)
+    cutoff = d / 4  # stay well inside the band, away from the boundary clamp
+
+    truth = extract_central_slices_rfft_3d(
+        rfft, rotations=torch.eye(3).reshape(1, 3, 3), fourier_radius_cutoff=cutoff
+    )[0]
+    rotations = torch.tensor(
+        Rotation.random(8, random_state=5).as_matrix(), dtype=torch.float32
+    )
+
+    errors = {}
+    for interpolation in ("linear", "cubic"):
+        out = extract_central_slices_rfft_3d(
+            rfft,
+            rotations=rotations,
+            fourier_radius_cutoff=cutoff,
+            interpolation=interpolation,
+        )
+        errors[interpolation] = (out - truth[None]).abs().mean()
+
+    scale = truth.abs().mean()
+    assert errors["cubic"] < 0.01 * scale
+    assert 3 * errors["cubic"] < errors["linear"]
+
+
 def test_cubic_gradients():
     """Tricubic forward and backprojection gradients are exact."""
     from scipy.spatial.transform import Rotation

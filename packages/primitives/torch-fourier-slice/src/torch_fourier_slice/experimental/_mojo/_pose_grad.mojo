@@ -19,7 +19,8 @@ from layout import TileTensor, row_major
 
 from _common import (
     C2,
-    FP,
+    CUBIC,
+    Float32Ptr,
     FourierSliceParams,
     _cmul,
     _cubic_kernel,
@@ -40,8 +41,8 @@ def _redot(a: C2, b: C2) -> Float32:
 
 @always_inline
 def _phase_factor(
-    shifts_2d: FP,
-    shifts_3d: FP,
+    shifts_2d: Float32Ptr,
+    shifts_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     coord_y: Float32,
@@ -62,9 +63,9 @@ def _phase_factor(
 
 @always_inline
 def _accumulate_pose_grads(
-    grad_rot: FP,
-    grad_shift: FP,
-    grad_shift_3d: FP,
+    grad_rot: Float32Ptr,
+    grad_shift: Float32Ptr,
+    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     coord_y: Float32,
@@ -133,7 +134,7 @@ def _accumulate_pose_grads(
 
 @always_inline
 def _couple_shift3d(
-    shifts_3d: FP,
+    shifts_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     val: C2,
@@ -160,15 +161,17 @@ def _couple_shift3d(
 
 
 @always_inline
-def _forward_pose_grad_pixel(
-    rec: FP,
-    rot: FP,
-    shifts_2d: FP,
-    shifts_3d: FP,
-    grad_proj: FP,
-    grad_rot: FP,
-    grad_shift: FP,
-    grad_shift_3d: FP,
+def _forward_pose_grad_pixel[
+    interp: Int
+](
+    rec: Float32Ptr,
+    rot: Float32Ptr,
+    shifts_2d: Float32Ptr,
+    shifts_3d: Float32Ptr,
+    grad_proj: Float32Ptr,
+    grad_rot: Float32Ptr,
+    grad_shift: Float32Ptr,
+    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
@@ -190,7 +193,7 @@ def _forward_pose_grad_pixel(
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad(rec_b, k[0], k[1], k[2], p.interp, 0)
+    var vg = _interp3d_with_grad[interp](rec_b, k[0], k[1], k[2], 0)
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
@@ -238,15 +241,17 @@ def _forward_pose_grad_pixel(
 
 
 @always_inline
-def _backproject_pose_grad_pixel(
-    grad_rec: FP,
-    rot: FP,
-    shifts_2d: FP,
-    shifts_3d: FP,
-    proj: FP,
-    grad_rot: FP,
-    grad_shift: FP,
-    grad_shift_3d: FP,
+def _backproject_pose_grad_pixel[
+    interp: Int
+](
+    grad_rec: Float32Ptr,
+    rot: Float32Ptr,
+    shifts_2d: Float32Ptr,
+    shifts_3d: Float32Ptr,
+    proj: Float32Ptr,
+    grad_rot: Float32Ptr,
+    grad_shift: Float32Ptr,
+    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
@@ -271,7 +276,7 @@ def _backproject_pose_grad_pixel(
         grad_rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad(grad_rec_b, k[0], k[1], k[2], p.interp, 1)
+    var vg = _interp3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2], 1)
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
@@ -323,7 +328,7 @@ def _backproject_pose_grad_pixel(
 
 @always_inline
 def _gather_weight_grad(
-    gwvol: FP,
+    gwvol: Float32Ptr,
     i_bv: Int,
     sidelength: Int,
     z_in: Int,
@@ -370,15 +375,17 @@ def _gather_weight_grad(
 
 
 @always_inline
-def _g(gwvol: FP, i_bv: Int, p: FourierSliceParams, z: Int, y: Int, x: Int) -> Float32:
+def _g(gwvol: Float32Ptr, i_bv: Int, p: FourierSliceParams, z: Int, y: Int, x: Int) -> Float32:
     return _gather_weight_grad(gwvol, i_bv, p.sidelength, z, y, x, p.friedel_double)
 
 
 @always_inline
-def _weight_grad_pixel(
-    gwvol: FP,
-    rot: FP,
-    grad_weight: FP,
+def _weight_grad_pixel[
+    interp: Int
+](
+    gwvol: Float32Ptr,
+    rot: Float32Ptr,
+    grad_weight: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
@@ -409,7 +416,7 @@ def _weight_grad_pixel(
     var fy = ky - ky_floor
     var fx = kx - kx_floor
     var acc: Float32 = 0.0
-    if p.interp == 1:
+    comptime if interp == CUBIC:
         for oz in range(-1, 3):
             var wz = _cubic_kernel(fz - Float32(oz))
             for oy in range(-1, 3):

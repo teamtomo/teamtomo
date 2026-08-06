@@ -79,8 +79,15 @@ def insert_central_slices_rfft_3d(
             "insert_central_slices_rfft_3d_multivolume for (bp, bv, h, w)"
         )
     data, weight_vol = _insert(
-        image_rfft, weights, rotations, shifts_3d, shifts_2d,
-        oversampling, fourier_radius_cutoff, interpolation, ewald_curvature,
+        image_rfft,
+        weights,
+        rotations,
+        shifts_3d,
+        shifts_2d,
+        oversampling,
+        fourier_radius_cutoff,
+        interpolation,
+        ewald_curvature,
     )
     if weights is None:
         return data.squeeze(0), None
@@ -113,7 +120,14 @@ def insert_central_slices_rfft_3d_multivolume(
     imgs = image_rfft.transpose(0, 1).contiguous()  # (bp, bv, ...) -> (bv, bp, ...)
     w = weights.transpose(0, 1).contiguous() if weights is not None else None
     data, weight_vol = _insert(
-        imgs, w, rotations, shifts_3d, shifts_2d,
-        oversampling, fourier_radius_cutoff, interpolation, ewald_curvature,
+        imgs,
+        w,
+        rotations,
+        shifts_3d,
+        shifts_2d,
+        oversampling,
+        fourier_radius_cutoff,
+        interpolation,
+        ewald_curvature,
     )
     return data, (weight_vol if weights is not None else None)

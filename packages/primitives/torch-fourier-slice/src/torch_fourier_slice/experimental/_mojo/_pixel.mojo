@@ -11,7 +11,7 @@ from layout import TileTensor, row_major
 
 from _common import (
     C2,
-    FP,
+    Float32Ptr,
     FourierSliceParams,
     _cmul,
     _ewald_sz,
@@ -27,12 +27,14 @@ from _scatter import _splat
 
 
 @always_inline
-def _project_pixel(
-    rec: FP,
-    rot: FP,
-    shifts_2d: FP,
-    shifts_3d: FP,
-    proj: FP,
+def _project_pixel[
+    interp: Int
+](
+    rec: Float32Ptr,
+    rot: Float32Ptr,
+    shifts_2d: Float32Ptr,
+    shifts_3d: Float32Ptr,
+    proj: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
@@ -57,7 +59,7 @@ def _project_pixel(
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var val = _interp3d(rec_b, k[0], k[1], k[2], p.interp)
+    var val = _interp3d[interp](rec_b, k[0], k[1], k[2])
 
     if p.has_shifts_2d != 0 or p.has_shifts_3d != 0:
         var phase = _shift_phase(
@@ -75,14 +77,16 @@ def _project_pixel(
 
 
 @always_inline
-def _scatter_pixel(
-    inp: FP,
-    weights: FP,
-    rot: FP,
-    shifts_2d: FP,
-    shifts_3d: FP,
-    vol: FP,
-    wvol: FP,
+def _scatter_pixel[
+    interp: Int
+](
+    inp: Float32Ptr,
+    weights: Float32Ptr,
+    rot: Float32Ptr,
+    shifts_2d: Float32Ptr,
+    shifts_3d: Float32Ptr,
+    vol: Float32Ptr,
+    wvol: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
@@ -146,4 +150,4 @@ def _scatter_pixel(
         wvol + i_bv * p.sidelength * p.sidelength * half,
         row_major(p.sidelength, p.sidelength, half),
     )
-    _splat(vol_b, wvol_b, p, k[0], k[1], k[2], vre, vim, wval)
+    _splat[interp](vol_b, wvol_b, p, k[0], k[1], k[2], vre, vim, wval)

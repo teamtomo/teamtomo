@@ -11,10 +11,25 @@ from std.python import PythonObject
 from layout import Coord, TensorLayout, TileTensor
 
 comptime C2 = SIMD[DType.float32, 2]  # a complex value as (re, im)
-comptime C8 = SIMD[DType.float32, 8]  # value + 3 spatial gradients, each (re, im)
-comptime FP = UnsafePointer[Scalar[DType.float32], MutAnyOrigin]
+comptime C6 = SIMD[
+    DType.float32, 6
+]  # value + 2 spatial gradients, each (re, im) -- 2D interp-with-grad
+comptime C8 = SIMD[
+    DType.float32, 8
+]  # value + 3 spatial gradients, each (re, im)
+# Raw pointer into a contiguous float32 buffer (a torch tensor viewed as real float32,
+# on CPU or GPU). Grouped into `Buffers` where several travel together; used bare only
+# where a single buffer is passed. Origin erased (MutAnyOrigin) as it aliases foreign
+# torch memory the kernels read/write in place.
+comptime Float32Ptr = UnsafePointer[Scalar[DType.float32], MutAnyOrigin]
 comptime BLOCK = 256
 comptime PI: Float32 = 3.14159265358979323846
+
+# Interpolation kind — a COMPILE-TIME parameter of the gather/pixel/kernel chain, so each
+# variant is specialised (no per-voxel runtime branch). The runtime `KernelParams.interp`
+# code is read once at the entry-point boundary to pick the specialisation.
+comptime LINEAR = 0
+comptime CUBIC = 1
 
 
 @always_inline
@@ -41,7 +56,7 @@ struct FourierSliceParams(Copyable, Movable):
     var oversampling: Float32
     var radius_cutoff_sq: Float32
     var has_shifts_2d: Int
-    var interp: Int  # 0 = trilinear, 1 = tricubic
+    var interp: Int  # LINEAR / CUBIC code; read once at the boundary to pick the comptime kernel
     var has_weights: Int  # scatter only
     var friedel_double: Int  # scatter only
     var skip_redundant: Int  # scatter only
@@ -70,14 +85,194 @@ struct FourierSliceParams(Copyable, Movable):
         return -2.0 * PI / Float32(self.sidelength)
 
 
+# --------------------------------------------------------------------------
+# Per-kernel buffer bundles
+#
+# One struct per kernel naming exactly the buffers it uses, so the launchers and
+# entry points pass a single named bundle instead of a positional pointer list.
+# Built from torch tensors (`_ptr`, CPU) or raw device addresses (`_dptr`, GPU).
+# --------------------------------------------------------------------------
+
+
+@fieldwise_init
+struct ProjectBuffers(Copyable, Movable):
+    var rec: Float32Ptr
+    var rot: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var proj: Float32Ptr
+
+
+@fieldwise_init
+struct ScatterBuffers(Copyable, Movable):
+    var inp: Float32Ptr
+    var weights: Float32Ptr
+    var rot: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var vol: Float32Ptr
+    var wvol: Float32Ptr
+
+
+@fieldwise_init
+struct ProjectLineBuffers(Copyable, Movable):
+    """Forward central-*line* extraction (3D volume -> 1D lines).
+
+    Poses are per-node *directions* `(bv_dir, bp, 3)` (zyx unit vectors), not
+    rotation matrices -- a bare line carries no gauge (in-plane) freedom and no
+    2D image-plane shift.
+    """
+
+    var rec: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var line: Float32Ptr
+
+
+@fieldwise_init
+struct ScatterLineBuffers(Copyable, Movable):
+    """Central-*line* insertion (1D lines -> 3D volume + weights). Directions in.
+    """
+
+    var inp: Float32Ptr
+    var weights: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var vol: Float32Ptr
+    var wvol: Float32Ptr
+
+
+@fieldwise_init
+struct ForwardGradBuffers(Copyable, Movable):
+    var rec: Float32Ptr
+    var rot: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var grad_proj: Float32Ptr
+    var grad_rot: Float32Ptr
+    var grad_shift: Float32Ptr
+    var grad_shift_3d: Float32Ptr
+
+
+@fieldwise_init
+struct ProjectLine2DBuffers(Copyable, Movable):
+    """Forward 2D->1D central-line extraction (2D image -> 1D lines).
+
+    Poses are per-node directions `(bv_dir, bp, 2)`; `shifts_2d` is an optional yx
+    image translation `(bv_shift, bp, 2)` (phase ramp).
+    """
+
+    var img: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var line: Float32Ptr
+
+
+@fieldwise_init
+struct ScatterLine2DBuffers(Copyable, Movable):
+    """2D->1D central-line insertion (1D lines -> 2D image + weights)."""
+
+    var inp: Float32Ptr
+    var weights: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var vol: Float32Ptr
+    var wvol: Float32Ptr
+
+
+@fieldwise_init
+struct ForwardLine2DGradBuffers(Copyable, Movable):
+    """Forward 2D->1D line pose grad: direction + 2D-shift grads."""
+
+    var img: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var grad_line: Float32Ptr
+    var grad_dir: Float32Ptr
+    var grad_shift: Float32Ptr
+
+
+@fieldwise_init
+struct BackprojectLine2DGradBuffers(Copyable, Movable):
+    """2D->1D line insertion pose grad: direction + 2D-shift grads."""
+
+    var grad_img: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var lines: Float32Ptr
+    var grad_dir: Float32Ptr
+    var grad_shift: Float32Ptr
+
+
+@fieldwise_init
+struct WeightLine2DGradBuffers(Copyable, Movable):
+    """2D->1D line insertion weight grad: adjoint of the real weight splat."""
+
+    var gwimg: Float32Ptr
+    var direction: Float32Ptr
+    var grad_weight: Float32Ptr
+
+
+@fieldwise_init
+struct ForwardLineGradBuffers(Copyable, Movable):
+    """Forward line pose grad: direction + 3D-shift grads (no 2D shift)."""
+
+    var rec: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var grad_line: Float32Ptr
+    var grad_dir: Float32Ptr
+    var grad_shift_3d: Float32Ptr
+
+
+@fieldwise_init
+struct BackprojectLineGradBuffers(Copyable, Movable):
+    """Line insertion pose grad: direction + 3D-shift grads (no 2D shift)."""
+
+    var grad_rec: Float32Ptr
+    var direction: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var lines: Float32Ptr
+    var grad_dir: Float32Ptr
+    var grad_shift_3d: Float32Ptr
+
+
+@fieldwise_init
+struct WeightLineGradBuffers(Copyable, Movable):
+    """Line insertion weight grad: adjoint of the real weight splat."""
+
+    var gwvol: Float32Ptr
+    var direction: Float32Ptr
+    var grad_weight: Float32Ptr
+
+
+@fieldwise_init
+struct BackprojectGradBuffers(Copyable, Movable):
+    var grad_rec: Float32Ptr
+    var rot: Float32Ptr
+    var shifts_2d: Float32Ptr
+    var shifts_3d: Float32Ptr
+    var proj: Float32Ptr
+    var grad_rot: Float32Ptr
+    var grad_shift: Float32Ptr
+    var grad_shift_3d: Float32Ptr
+
+
+@fieldwise_init
+struct WeightGradBuffers(Copyable, Movable):
+    var gwvol: Float32Ptr
+    var rot: Float32Ptr
+    var grad_weight: Float32Ptr
+
+
 @always_inline
-def _ptr(t: PythonObject) raises -> FP:
+def _ptr(t: PythonObject) raises -> Float32Ptr:
     """Typed float32 pointer to a contiguous CPU tensor's buffer."""
-    return FP(unsafe_from_address=Int(py=t.data_ptr()))
+    return Float32Ptr(unsafe_from_address=Int(py=t.data_ptr()))
 
 
 @always_inline
-def _dptr(addr: PythonObject) raises -> FP:
+def _dptr(addr: PythonObject) raises -> Float32Ptr:
     """Typed float32 pointer into GPU memory, from a raw device virtual address.
 
     The GPU entry points read/write the memory backing torch device tensors
@@ -86,7 +281,7 @@ def _dptr(addr: PythonObject) raises -> FP:
     since torch's MPS ``data_ptr()`` is an ``MTLBuffer`` object pointer, not a
     VA) -- and this rebuilds a device pointer the kernels can dereference.
     """
-    return FP(unsafe_from_address=Int(py=addr))
+    return Float32Ptr(unsafe_from_address=Int(py=addr))
 
 
 @always_inline
@@ -98,7 +293,8 @@ def _cmul(a: C2, b: C2) -> C2:
 def _load_c2[
     L: TensorLayout
 ](t: TileTensor[DType.float32, L, MutAnyOrigin], i: Int, j: Int, k: Int) -> C2:
-    """Load a complex value (re, im) from a 4D `[.., .., .., 2]` tile at (i, j, k)."""
+    """Load a complex value (re, im) from a 4D `[.., .., .., 2]` tile at (i, j, k).
+    """
     comptime assert t.flat_rank == 4, "complex tile must be 4D [.., .., .., 2]"
     return C2(
         rebind[Scalar[DType.float32]](t[i, j, k, 0]),
@@ -110,18 +306,46 @@ def _load_c2[
 def _store_c2[
     L: TensorLayout
 ](t: TileTensor[DType.float32, L, MutAnyOrigin], i: Int, j: Int, k: Int, v: C2):
-    """Store a complex value (re, im) into a 4D `[.., .., .., 2]` tile at (i, j, k)."""
+    """Store a complex value (re, im) into a 4D `[.., .., .., 2]` tile at (i, j, k).
+    """
     comptime assert t.flat_rank == 4, "complex tile must be 4D [.., .., .., 2]"
     t[i, j, k, 0] = rebind[t.ElementType](v[0])
     t[i, j, k, 1] = rebind[t.ElementType](v[1])
 
 
 @always_inline
+def _load_c2_line[
+    L: TensorLayout
+](t: TileTensor[DType.float32, L, MutAnyOrigin], i: Int, j: Int) -> C2:
+    """Load a complex value (re, im) from a 3D `[.., .., 2]` line tile at (i, j).
+
+    A central *line* node has no y axis, so its stack view is one rank lower than
+    a central-slice stack (`[bp, w, 2]` rather than `[bp, h, w, 2]`).
+    """
+    comptime assert t.flat_rank == 3, "complex line tile must be 3D [.., .., 2]"
+    return C2(
+        rebind[Scalar[DType.float32]](t[i, j, 0]),
+        rebind[Scalar[DType.float32]](t[i, j, 1]),
+    )
+
+
+@always_inline
+def _store_c2_line[
+    L: TensorLayout
+](t: TileTensor[DType.float32, L, MutAnyOrigin], i: Int, j: Int, v: C2):
+    """Store a complex value (re, im) into a 3D `[.., .., 2]` line tile at (i, j).
+    """
+    comptime assert t.flat_rank == 3, "complex line tile must be 3D [.., .., 2]"
+    t[i, j, 0] = rebind[t.ElementType](v[0])
+    t[i, j, 1] = rebind[t.ElementType](v[1])
+
+
+@always_inline
 def _atomic_add_at[
     L: TensorLayout
-](t: TileTensor[DType.float32, L, MutAnyOrigin], coord: Coord[...], v: Float32) where (
-    coord.flat_rank == t.flat_rank
-):
+](
+    t: TileTensor[DType.float32, L, MutAnyOrigin], coord: Coord[...], v: Float32
+) where (coord.flat_rank == t.flat_rank):
     """Atomically add `v` into `t` at `coord` (addressed through the layout).
 
     Works for any rank/layout: `ptr_at_offset` resolves the element address via
@@ -151,8 +375,8 @@ def _ewald_sz(p: FourierSliceParams, sx: Float32, sy: Float32) -> Float32:
 @always_inline
 def _shift_phase(
     p: FourierSliceParams,
-    shifts_2d: FP,
-    shifts_3d: FP,
+    shifts_2d: Float32Ptr,
+    shifts_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     coord_y: Float32,
@@ -184,8 +408,98 @@ def _shift_phase(
 
 
 @always_inline
+def _line_k(
+    direction: Float32Ptr, base: Int, sx: Float32
+) -> SIMD[DType.float32, 4]:
+    """3D sample coordinate `k = s_x * u` for a line pixel.
+
+    A central line is sampled along a direction `u = (u_z, u_y, u_x)` on the
+    sphere (a zyx unit vector, the real-space line direction; the same vector in
+    Fourier space since rotation commutes with the transform). Only the scalar
+    frequency `s_x` varies along the node, so `k = s_x * u`; there is no gauge
+    (in-plane) degree of freedom to carry, unlike a 2D slice's rotation matrix.
+
+    Returns the sample coordinate (kz, ky, kx) in lanes 0..2 (lane 3 unused).
+    """
+    return SIMD[DType.float32, 4](
+        sx * direction[base + 0],
+        sx * direction[base + 1],
+        sx * direction[base + 2],
+        0.0,
+    )
+
+
+@always_inline
+def _line_k_2d(
+    direction: Float32Ptr, base: Int, sx: Float32
+) -> SIMD[DType.float32, 2]:
+    """2D sample coordinate `k = s_x * u` for a 2D->1D line pixel.
+
+    A central line of a 2D image is sampled along a direction `u = (u_y, u_x)` on
+    the circle (a yx unit vector, the real-space line direction; same in Fourier
+    space). Only the scalar frequency `s_x` varies along the node, so `k = s_x*u`.
+
+    Returns the sample coordinate (ky, kx).
+    """
+    return SIMD[DType.float32, 2](
+        sx * direction[base + 0], sx * direction[base + 1]
+    )
+
+
+@always_inline
+def _line2d_shift_phase(
+    p: FourierSliceParams,
+    shifts_2d: Float32Ptr,
+    i_bv: Int,
+    i_bp: Int,
+    ky: Float32,
+    kx: Float32,
+) -> Float32:
+    """Shift phase for a 2D->1D line: the yx image-translation ramp.
+
+    A 2D shift `t = (t_y, t_x)` translates the image, putting `exp(-2*pi*i/N *
+    (k . t))` on its FT. Sampled along the line `k = s*u`, this is the per-node
+    `s * (u . t)` ramp (the 2D analogue of the 3D line's volume-frame shift).
+    """
+    if p.has_shifts_2d == 0:
+        return 0.0
+    var sb = 0 if p.bv_shift_2d == 1 else i_bv
+    var s2 = (sb * p.bp + i_bp) * 2
+    return (
+        ky * shifts_2d[s2] + kx * shifts_2d[s2 + 1]
+    ) * p.two_pi_over_sidelength()
+
+
+@always_inline
+def _line_shift_phase(
+    p: FourierSliceParams,
+    shifts_3d: Float32Ptr,
+    i_bv: Int,
+    i_bp: Int,
+    kz: Float32,
+    ky: Float32,
+    kx: Float32,
+) -> Float32:
+    """Shift phase for a central *line*: the 3D (zyx, volume-frame) ramp only.
+
+    A bare line has no image plane, so the 2D projection-plane shift is dropped
+    (see the slice kernel's `_shift_phase`). The 3D shift `t` is applied in the
+    volume frame before rotation, so its ramp uses the rotated sample coordinate
+    `k = s*u`; for a line this collapses to the design's per-node scalar slope
+    `s*(u . t)`.
+    """
+    if p.has_shifts_3d == 0:
+        return 0.0
+    var sb3 = 0 if p.bv_shift_3d == 1 else i_bv
+    var s3 = (sb3 * p.bp + i_bp) * 3
+    return (
+        kz * shifts_3d[s3] + ky * shifts_3d[s3 + 1] + kx * shifts_3d[s3 + 2]
+    ) * p.two_pi_over_sidelength()
+
+
+@always_inline
 def _rotated_coord(
-    rot: FP, rot_base: Int, sx: Float32, sy: Float32, sz: Float32
+    rot: Float32Ptr, rot_base: Int, sx: Float32, sy: Float32, sz: Float32
 ) -> SIMD[DType.float32, 4]:
     """Rotate a central-slice frequency (z=sz, y=sy, x=sx) into a volume coordinate.
 
@@ -196,9 +510,15 @@ def _rotated_coord(
 
     Returns the sample coordinate (kz, ky, kx) in lanes 0..2 (lane 3 unused).
     """
-    var kz = rot[rot_base + 0] * sz + rot[rot_base + 1] * sy + rot[rot_base + 2] * sx
-    var ky = rot[rot_base + 3] * sz + rot[rot_base + 4] * sy + rot[rot_base + 5] * sx
-    var kx = rot[rot_base + 6] * sz + rot[rot_base + 7] * sy + rot[rot_base + 8] * sx
+    var kz = (
+        rot[rot_base + 0] * sz + rot[rot_base + 1] * sy + rot[rot_base + 2] * sx
+    )
+    var ky = (
+        rot[rot_base + 3] * sz + rot[rot_base + 4] * sy + rot[rot_base + 5] * sx
+    )
+    var kx = (
+        rot[rot_base + 6] * sz + rot[rot_base + 7] * sy + rot[rot_base + 8] * sx
+    )
     return SIMD[DType.float32, 4](kz, ky, kx, 0.0)
 
 
@@ -216,7 +536,8 @@ def _cubic_kernel(s_in: Float32) -> Float32:
 
 @always_inline
 def _cubic_kernel_derivative(s_in: Float32) -> Float32:
-    """d/ds of `_cubic_kernel` (needed for spatial gradients of tricubic interp)."""
+    """d/ds of `_cubic_kernel` (needed for spatial gradients of tricubic interp).
+    """
     var sign: Float32 = -1.0 if s_in < 0 else 1.0
     var s = -s_in if s_in < 0 else s_in
     var a: Float32 = -0.5

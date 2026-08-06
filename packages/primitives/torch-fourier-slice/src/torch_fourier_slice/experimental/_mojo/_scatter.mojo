@@ -10,7 +10,7 @@ from std.math import floor
 
 from layout import Coord, TensorLayout, TileTensor
 
-from _common import FourierSliceParams, _atomic_add_at, _cubic_kernel
+from _common import CUBIC, FourierSliceParams, _atomic_add_at, _cubic_kernel
 
 
 @always_inline
@@ -25,7 +25,8 @@ def _accumulate_3d[
     vim: Float32,
     friedel_double: Int,
 ):
-    """Atomically add a complex value into the rfft volume with Friedel symmetry."""
+    """Atomically add a complex value into the rfft volume with Friedel symmetry.
+    """
     comptime assert vol.flat_rank == 4, "volume view must be 4D [d, h, w, 2]"
     var sidelength = Int(vol.dim[0]())
     var sidelength_half = Int(vol.dim[2]())
@@ -74,7 +75,8 @@ def _accumulate_weight[
     w: Float32,
     friedel_double: Int,
 ):
-    """Atomically add a real weight into the (real) weight volume with symmetry."""
+    """Atomically add a real weight into the (real) weight volume with symmetry.
+    """
     comptime assert wvol.flat_rank == 3, "weight view must be 3D [d, h, w]"
     var sidelength = Int(wvol.dim[0]())
     var sidelength_half = Int(wvol.dim[2]())
@@ -194,12 +196,14 @@ def _splat_cubic[
             var wzy = wz * _cubic_kernel(fy - Float32(oy))
             for ox in range(-1, 3):
                 var w = wzy * _cubic_kernel(fx - Float32(ox))
-                _splat_one(vol, wvol, p, z + oz, y + oy, x + ox, w, vre, vim, wval)
+                _splat_one(
+                    vol, wvol, p, z + oz, y + oy, x + ox, w, vre, vim, wval
+                )
 
 
 @always_inline
 def _splat[
-    Lv: TensorLayout, Lw: TensorLayout
+    Lv: TensorLayout, Lw: TensorLayout, //, interp: Int
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
     wvol: TileTensor[DType.float32, Lw, MutAnyOrigin],
@@ -211,8 +215,198 @@ def _splat[
     vim: Float32,
     wval: Float32,
 ):
-    """Splat a complex value (p.interp: 0 = trilinear, 1 = tricubic)."""
-    if p.interp == 1:
+    """Splat a complex value (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
+    """
+    comptime if interp == CUBIC:
         _splat_cubic(vol, wvol, p, kz, ky, kx, vre, vim, wval)
     else:
         _splat_linear(vol, wvol, p, kz, ky, kx, vre, vim, wval)
+
+
+# ===========================================================================
+# 2D image scatter (splat into a 2D rfft image; used by the 2D->1D line kernels)
+#
+# The image / weight image are per-image `TileTensor` views (`[h, w, 2]` and
+# `[h, w]`); integer pixel indices are `(y, x)`, sample coord `(ky, kx)`.
+# ===========================================================================
+
+
+@always_inline
+def _accumulate_2d[
+    L: TensorLayout
+](
+    img: TileTensor[DType.float32, L, MutAnyOrigin],
+    y_in: Int,
+    x_in: Int,
+    vre: Float32,
+    vim: Float32,
+    friedel_double: Int,
+):
+    """Atomically add a complex value into the rfft image with Friedel symmetry.
+    """
+    comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
+    var sidelength = Int(img.dim[0]())
+    var sidelength_half = Int(img.dim[1]())
+    var y = y_in
+    var x = x_in
+    var need_conj = False
+    if x < 0:
+        x = -x
+        y = -y
+        need_conj = True
+    if x >= sidelength_half:
+        return
+    var hi = sidelength // 2
+    var lo = -sidelength // 2 + 1
+    if y > hi or y < lo:
+        return
+    var y_eff = sidelength + y if y < 0 else y
+    if y_eff >= sidelength:
+        return
+    var fim = -vim if need_conj else vim
+    _atomic_add_at(img, Coord(y_eff, x, 0), vre)
+    _atomic_add_at(img, Coord(y_eff, x, 1), fim)
+    # On the x=0 column, also insert the Friedel-symmetric conjugate counterpart.
+    if friedel_double != 0 and x == 0:
+        var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
+        if y_eff2 >= sidelength:
+            return
+        if y_eff2 == y_eff:
+            return
+        _atomic_add_at(img, Coord(y_eff2, x, 0), vre)
+        _atomic_add_at(img, Coord(y_eff2, x, 1), -fim)
+
+
+@always_inline
+def _accumulate_weight_2d[
+    L: TensorLayout
+](
+    wimg: TileTensor[DType.float32, L, MutAnyOrigin],
+    y_in: Int,
+    x_in: Int,
+    w: Float32,
+    friedel_double: Int,
+):
+    """Atomically add a real weight into the (real) weight image with symmetry.
+    """
+    comptime assert wimg.flat_rank == 2, "weight image view must be 2D [h, w]"
+    var sidelength = Int(wimg.dim[0]())
+    var sidelength_half = Int(wimg.dim[1]())
+    var y = y_in
+    var x = x_in
+    if x < 0:
+        x = -x
+        y = -y
+    if x >= sidelength_half:
+        return
+    var hi = sidelength // 2
+    var lo = -sidelength // 2 + 1
+    if y > hi or y < lo:
+        return
+    var y_eff = sidelength + y if y < 0 else y
+    if y_eff >= sidelength:
+        return
+    _atomic_add_at(wimg, Coord(y_eff, x), w)
+    if friedel_double != 0 and x == 0:
+        var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
+        if y_eff2 >= sidelength:
+            return
+        if y_eff2 == y_eff:
+            return
+        _atomic_add_at(wimg, Coord(y_eff2, x), w)
+
+
+@always_inline
+def _splat2d_one[
+    Lv: TensorLayout, Lw: TensorLayout
+](
+    vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
+    wvol: TileTensor[DType.float32, Lw, MutAnyOrigin],
+    p: FourierSliceParams,
+    y: Int,
+    x: Int,
+    w: Float32,
+    vre: Float32,
+    vim: Float32,
+    wval: Float32,
+):
+    """Accumulate a single interpolation corner (data + optional weight)."""
+    _accumulate_2d(vol, y, x, vre * w, vim * w, p.friedel_double)
+    if p.has_weights != 0:
+        _accumulate_weight_2d(wvol, y, x, wval * w, p.friedel_double)
+
+
+@always_inline
+def _splat2d_linear[
+    Lv: TensorLayout, Lw: TensorLayout
+](
+    vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
+    wvol: TileTensor[DType.float32, Lw, MutAnyOrigin],
+    p: FourierSliceParams,
+    ky: Float32,
+    kx: Float32,
+    vre: Float32,
+    vim: Float32,
+    wval: Float32,
+):
+    """Bilinearly splat a complex value to the 4 surrounding pixels."""
+    var ky_floor = floor(ky)
+    var kx_floor = floor(kx)
+    var y = Int(ky_floor)
+    var x = Int(kx_floor)
+    var fy = ky - ky_floor
+    var fx = kx - kx_floor
+    var ify = 1.0 - fy
+    var ifx = 1.0 - fx
+    _splat2d_one(vol, wvol, p, y, x, ify * ifx, vre, vim, wval)
+    _splat2d_one(vol, wvol, p, y, x + 1, ify * fx, vre, vim, wval)
+    _splat2d_one(vol, wvol, p, y + 1, x, fy * ifx, vre, vim, wval)
+    _splat2d_one(vol, wvol, p, y + 1, x + 1, fy * fx, vre, vim, wval)
+
+
+@always_inline
+def _splat2d_cubic[
+    Lv: TensorLayout, Lw: TensorLayout
+](
+    vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
+    wvol: TileTensor[DType.float32, Lw, MutAnyOrigin],
+    p: FourierSliceParams,
+    ky: Float32,
+    kx: Float32,
+    vre: Float32,
+    vim: Float32,
+    wval: Float32,
+):
+    """Bicubically splat a complex value to the surrounding 4x4 pixels."""
+    var ky_floor = floor(ky)
+    var kx_floor = floor(kx)
+    var y = Int(ky_floor)
+    var x = Int(kx_floor)
+    var fy = ky - ky_floor
+    var fx = kx - kx_floor
+    for oy in range(-1, 3):
+        var wy = _cubic_kernel(fy - Float32(oy))
+        for ox in range(-1, 3):
+            var w = wy * _cubic_kernel(fx - Float32(ox))
+            _splat2d_one(vol, wvol, p, y + oy, x + ox, w, vre, vim, wval)
+
+
+@always_inline
+def _splat2d[
+    Lv: TensorLayout, Lw: TensorLayout, //, interp: Int
+](
+    vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
+    wvol: TileTensor[DType.float32, Lw, MutAnyOrigin],
+    p: FourierSliceParams,
+    ky: Float32,
+    kx: Float32,
+    vre: Float32,
+    vim: Float32,
+    wval: Float32,
+):
+    """Splat a complex value (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
+    """
+    comptime if interp == CUBIC:
+        _splat2d_cubic(vol, wvol, p, ky, kx, vre, vim, wval)
+    else:
+        _splat2d_linear(vol, wvol, p, ky, kx, vre, vim, wval)

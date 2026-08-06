@@ -1,107 +1,164 @@
-"""Experimental Mojo-backed forward 3D->2D Fourier-slice projection.
+"""Experimental Mojo-backed real-space projection: 3D volume -> 2D images.
 
-The forward 3D->2D Fourier-slice projection, with the
-inner loop written in Mojo (see ``_mojo/projectors.mojo``) and exposed to Python
-via Mojo's Python interop. It operates on volumes in **rfft layout, DC at origin**
-(unshifted).
+The real-space layer over :mod:`.slice_extraction`: pad, correct for the
+interpolation kernel, ``rfftn`` over the spatial dims, extract central slices
+with the Mojo kernel, ``irfftn`` back, unpad. Callers work entirely in real
+space; the rfft layout is an implementation detail.
 
-This differs from :func:`torch_fourier_slice.extract_central_slices_rfft_3d`
-*only* in array layout: that function expects an ``fftshift``ed rfft (DC centered
-on the z/y axes). Bridge between them with a single ``torch.fft.fftshift`` /
-``ifftshift`` over the non-redundant dims. Within the Nyquist band the two
-produce identical results.
+Mirrors :func:`torch_fourier_slice.project_3d_to_2d`, but the compute backend
+follows the input tensor's device: a CPU tensor runs the multithreaded Mojo CPU
+kernel, an ``mps`` / ``cuda`` tensor runs the Mojo GPU kernel.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import torch
+import torch.nn.functional as F
 
-from ._autograd import ProjectForward
+from ._gridding import gridding_correction
+from .slice_extraction import (
+    extract_central_slices_rfft_3d,
+    extract_central_slices_rfft_3d_multivolume,
+)
 
-if TYPE_CHECKING:
-    import torch
+
+def _pad_width(sidelength: int, pad_factor: float) -> int:
+    """Per-side padding for ``pad_factor``, matching the canonical layer."""
+    if pad_factor < 1.0:
+        raise ValueError("pad_factor must be >= 1.0")
+    if pad_factor == 1.0:
+        return 0
+    return int((sidelength * (pad_factor - 1.0)) // 2)
+
+
+def _project(
+    volume: torch.Tensor,
+    rotations: torch.Tensor,
+    shifts_3d: torch.Tensor | None,
+    shifts_2d: torch.Tensor | None,
+    pad_factor: float,
+    fourier_radius_cutoff: float | None,
+    interpolation: str,
+    ewald_curvature: float,
+    extract_fn,
+) -> torch.Tensor:
+    """Shared pipeline; ``extract_fn`` picks the single / multivolume rank form."""
+    pad = _pad_width(volume.shape[-1], pad_factor)
+    if pad > 0:
+        volume = F.pad(volume, pad=[pad] * 6)
+    box = volume.shape[-1]
+
+    # de-apodize *before* the transform so the interpolation puts it back
+    volume = volume / gridding_correction(box, interpolation, volume.device)
+
+    volume_rfft = torch.fft.rfftn(
+        torch.fft.fftshift(volume, dim=(-3, -2, -1)), dim=(-3, -2, -1)
+    )
+    slices = extract_fn(
+        volume_rfft.contiguous(),
+        rotations,
+        shifts_3d=shifts_3d,
+        shifts_2d=shifts_2d,
+        fourier_radius_cutoff=fourier_radius_cutoff,
+        interpolation=interpolation,
+        ewald_curvature=ewald_curvature,
+    )
+    images = torch.fft.fftshift(
+        torch.fft.irfftn(slices, dim=(-2, -1), s=(box, box)), dim=(-2, -1)
+    )
+    if pad > 0:
+        images = F.pad(images, pad=[-pad] * 4)
+    return images
 
 
 def project_3d_to_2d(
-    reconstruction: torch.Tensor,
+    volume: torch.Tensor,
     rotations: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
-    output_shape: tuple[int, int] | None = None,
-    oversampling: float = 1.0,
+    pad_factor: float = 2.0,
     fourier_radius_cutoff: float | None = None,
     interpolation: str = "linear",
     ewald_curvature: float = 0.0,
 ) -> torch.Tensor:
-    """Forward project a 3D rfft volume to 2D central slices (Mojo kernel).
-
-    The pose arguments are ordered ``rotations, shifts_3d, shifts_2d``. The
-    operations they parametrise compose as: a 3D shift in the volume frame
-    (``shifts_3d``, applied before the rotation), then the ``rotations``, then a
-    2D shift in the projection plane (``shifts_2d``, applied after).
-
-    The compute backend follows ``reconstruction.device``: a CPU tensor runs a
-    multithreaded Mojo CPU kernel; a GPU tensor (``mps`` / ``cuda``) runs a
-    Mojo GPU kernel. Output is returned on the same device as ``reconstruction``.
+    """Project a real cubic volume to real 2D images (Mojo kernel).
 
     Parameters
     ----------
-    reconstruction : torch.Tensor
-        Complex 3D Fourier volume in rfft layout (DC at origin), shape
-        ``(d, h, w)`` or batched ``(bv, d, h, w)`` where ``w = h//2+1``. ``h`` must
-        be even and equal to ``2*(w - 1)`` (cubic, even side). Its device selects
-        the backend.
+    volume : torch.Tensor
+        Real cubic volume ``(d, d, d)`` with an even side length. Its device
+        selects the CPU/GPU backend.
     rotations : torch.Tensor
-        Real ``(3, 3)``, ``(bp, 3, 3)`` or ``(bv_rot, bp, 3, 3)`` zyx rotation
-        matrices. ``bv_rot`` must be 1 or match ``bv``.
+        Real ``(3, 3)`` or ``(bp, 3, 3)`` **zyx** rotation matrices.
     shifts_3d : torch.Tensor | None
-        Optional real ``(..., P, 3)`` 3D shifts (zyx) in the volume reference
-        frame, applied *before* rotation (as a phase ramp on the rotated sample
-        coordinate). ``None`` (default) applies no 3D shift.
+        Optional ``(..., bp, 3)`` zyx shifts in the volume frame, applied before
+        the rotation.
     shifts_2d : torch.Tensor | None
-        Optional real ``(..., P, 2)`` 2D shifts (yx) in the projection plane,
-        applied as a Fourier-space phase ramp *after* rotation. ``None`` (default)
-        applies no shift.
-    output_shape : tuple[int, int] | None
-        ``(H_out, W_out)`` of the projection (square, even). Defaults to
-        ``(H, H)``.
-    oversampling : float
-        Coordinate scaling factor (>1 oversamples the volume). Default 1.0.
+        Optional ``(..., bp, 2)`` yx shifts in the image plane, applied after.
+    pad_factor : float
+        Real-space padding applied before the transform; ``2.0`` (default)
+        doubles the box. Must be ``>= 1.0``.
     fourier_radius_cutoff : float | None
-        Frequency radius (in cycles, i.e. ``fftfreq * sidelength``) beyond which
-        output pixels are left at zero. Defaults to ``output_sidelength / 2``
-        (Nyquist).
+        Frequency radius in cycles beyond which output pixels are left at zero.
+        Defaults to Nyquist for the padded box.
     interpolation : str
         ``"linear"`` (trilinear, default) or ``"cubic"`` (tricubic Catmull-Rom).
+        The gridding correction follows this choice.
     ewald_curvature : float
-        Signed Ewald-sphere curvature coefficient. ``0.0`` (default) keeps the
-        central slice flat; a positive / negative value bends it onto the sphere
-        (the slice z-offset is ``ewald_curvature * |k_xy|^2``). The magnitude
-        folds the wavelength / pixel-size constants; the sign selects the
-        diffraction half (none / positive / negative).
-
-    Differentiable w.r.t. ``reconstruction`` (adjoint = 2D->3D scatter),
-    ``rotations`` and ``shifts_2d`` (dedicated backward kernels), for both
-    interpolations and on CPU/GPU.
+        Signed Ewald-sphere curvature coefficient; ``0.0`` (default) keeps the
+        central slice flat.
 
     Returns
     -------
-    projections : torch.Tensor
-        Complex ``(bv, bp, h_out, w_out)`` central slices in rfft layout (DC at
-        origin), on the same device as ``reconstruction``.
+    images : torch.Tensor
+        Real ``(bp, d, d)`` projection images, on the input device.
     """
-    # The autograd Function is the functional entry point: its forward runs the
-    # projection kernel, its backward the adjoint (scatter) + pose/shift kernels.
-    # torch builds no graph when nothing requires grad, so this is also the
-    # non-differentiable path.
-    return ProjectForward.apply(
-        reconstruction,
+    if volume.dim() != 3:
+        raise ValueError(
+            "volume must be (d, d, d); use project_3d_to_2d_multivolume for "
+            "(bv, d, d, d)"
+        )
+    return _project(
+        volume,
         rotations,
-        shifts_2d,
         shifts_3d,
-        output_shape,
-        oversampling,
+        shifts_2d,
+        pad_factor,
         fourier_radius_cutoff,
         interpolation,
         ewald_curvature,
+        extract_central_slices_rfft_3d,
+    )
+
+
+def project_3d_to_2d_multivolume(
+    volume: torch.Tensor,
+    rotations: torch.Tensor,
+    shifts_3d: torch.Tensor | None = None,
+    shifts_2d: torch.Tensor | None = None,
+    pad_factor: float = 2.0,
+    fourier_radius_cutoff: float | None = None,
+    interpolation: str = "linear",
+    ewald_curvature: float = 0.0,
+) -> torch.Tensor:
+    """Project a batch of real cubic volumes to real 2D images (Mojo kernel).
+
+    ``volume`` is ``(bv, d, d, d)``. Rotations are shared across volumes
+    (``(bp, 3, 3)``) or per-volume (``(bv, bp, 3, 3)``). See
+    :func:`project_3d_to_2d` for the shared parameters.
+
+    Returns real ``(bp, bv, d, d)`` images (pose-major) on the input device.
+    """
+    if volume.dim() != 4:
+        raise ValueError("volume must be (bv, d, d, d) for multi-volume")
+    return _project(
+        volume,
+        rotations,
+        shifts_3d,
+        shifts_2d,
+        pad_factor,
+        fourier_radius_cutoff,
+        interpolation,
+        ewald_curvature,
+        extract_central_slices_rfft_3d_multivolume,
     )

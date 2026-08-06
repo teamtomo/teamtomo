@@ -85,8 +85,15 @@ def extract_central_slices_rfft_3d(
             "extract_central_slices_rfft_3d_multivolume for (bv, d, h, w)"
         )
     out = _extract(
-        volume_rfft, rotations, shifts_3d, shifts_2d, output_shape,
-        oversampling, fourier_radius_cutoff, interpolation, ewald_curvature,
+        volume_rfft,
+        rotations,
+        shifts_3d,
+        shifts_2d,
+        output_shape,
+        oversampling,
+        fourier_radius_cutoff,
+        interpolation,
+        ewald_curvature,
     )
     return out.squeeze(0)  # (1, bp, h, w) -> (bp, h, w)
 
@@ -114,7 +121,14 @@ def extract_central_slices_rfft_3d_multivolume(
     if volume_rfft.dim() != 4:
         raise ValueError("volume_rfft must be (bv, d, h, w) for multi-volume")
     out = _extract(
-        volume_rfft, rotations, shifts_3d, shifts_2d, output_shape,
-        oversampling, fourier_radius_cutoff, interpolation, ewald_curvature,
+        volume_rfft,
+        rotations,
+        shifts_3d,
+        shifts_2d,
+        output_shape,
+        oversampling,
+        fourier_radius_cutoff,
+        interpolation,
+        ewald_curvature,
     )
     return out.transpose(0, 1).contiguous()  # (bv, bp, ...) -> (bp, bv, ...)
