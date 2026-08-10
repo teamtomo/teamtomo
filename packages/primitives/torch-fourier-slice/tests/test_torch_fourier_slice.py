@@ -157,7 +157,7 @@ def test_3d_to_2d_projection_backprojection_cycle_multichannel(device):
 
 @pytest.mark.parametrize(
     "dtype, device",
-    ((p0, p1) for p0, p1 in zip([torch.float32, torch.float64], DEVICES, strict=False)),
+    [(p0, p1) for p0, p1 in zip([torch.float32, torch.float64], DEVICES, strict=False)],
 )
 def test_dtypes_slice_insertion(dtype, device):
     images = torch.rand((10, 28, 28), dtype=dtype, device=device)
