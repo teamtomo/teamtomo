@@ -36,7 +36,7 @@ def subpixel_crop_2d(
          rffts have their origin at (0, 0)
     decenter : bool, default False
         In case the patches are returned as rft, optionally also apply an
-         additional shift of sidelength / 2 so that the real space image has its origin
+         additional shift of sidelength // 2 so that the real space image has its origin
          at 0. NOTE: this does not change the origin in Fourier space, the rffts
          still have their origin at (0, 0)
 
@@ -146,7 +146,7 @@ def _extract_patches_batched(
         patches_dft = torch.fft.rfftn(patches, dim=(-2, -1))
 
         if decenter:
-            shifts = shifts + pw / 2
+            shifts = shifts + pw // 2
 
         # apply the subpixel shift
         patches_dft = fourier_shift_dft_2d(
