@@ -12,7 +12,7 @@ Accumulators are per pose, so contributions are added atomically. `Re[a conj(b)]
 for two complex `(re, im)` pairs is the lane dot product `a[0]b[0] + a[1]b[1]`.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.math import cos, floor, sin
 
 from layout import TileTensor, row_major
@@ -99,17 +99,17 @@ def _accumulate_pose_grads(
     var dx = _redot(rot_cotangent, gx)
     var dy = _redot(rot_cotangent, gy)
     var dz = _redot(rot_cotangent, gz)
-    _ = Atomic.fetch_add(grad_rot + rbase + 1, dz * sy)
-    _ = Atomic.fetch_add(grad_rot + rbase + 2, dz * sx)
-    _ = Atomic.fetch_add(grad_rot + rbase + 4, dy * sy)
-    _ = Atomic.fetch_add(grad_rot + rbase + 5, dy * sx)
-    _ = Atomic.fetch_add(grad_rot + rbase + 7, dx * sy)
-    _ = Atomic.fetch_add(grad_rot + rbase + 8, dx * sx)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 1, dz * sy)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 2, dz * sx)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 4, dy * sy)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 5, dy * sx)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 7, dx * sy)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 8, dx * sx)
     # z-input column: only non-zero when Ewald curvature bends the slice (sz != 0).
     if p.ewald_curvature != 0.0:
-        _ = Atomic.fetch_add(grad_rot + rbase + 0, dz * sz)
-        _ = Atomic.fetch_add(grad_rot + rbase + 3, dy * sz)
-        _ = Atomic.fetch_add(grad_rot + rbase + 6, dx * sz)
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 0, dz * sz)
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 3, dy * sz)
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 6, dx * sz)
 
     if p.has_shifts_2d != 0:
         var sb = 0 if p.bv_shift_2d == 1 else i_bv
@@ -117,8 +117,12 @@ def _accumulate_pose_grads(
         var scale = p.two_pi_over_proj_sidelength()
         var pgr = _cmul(C2(0.0, scale * coord_y), modulated)
         var pgc = _cmul(C2(0.0, scale * coord_x), modulated)
-        _ = Atomic.fetch_add(grad_shift + sbase + 0, _redot(shift_cotangent, pgr))
-        _ = Atomic.fetch_add(grad_shift + sbase + 1, _redot(shift_cotangent, pgc))
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift + sbase + 0, _redot(shift_cotangent, pgr)
+        )
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift + sbase + 1, _redot(shift_cotangent, pgc)
+        )
 
     if p.has_shifts_3d != 0:
         var sb3 = 0 if p.bv_shift_3d == 1 else i_bv
@@ -127,9 +131,15 @@ def _accumulate_pose_grads(
         var p3z = _cmul(C2(0.0, scale3 * kz), modulated)
         var p3y = _cmul(C2(0.0, scale3 * ky), modulated)
         var p3x = _cmul(C2(0.0, scale3 * kx), modulated)
-        _ = Atomic.fetch_add(grad_shift_3d + s3 + 0, _redot(shift_cotangent, p3z))
-        _ = Atomic.fetch_add(grad_shift_3d + s3 + 1, _redot(shift_cotangent, p3y))
-        _ = Atomic.fetch_add(grad_shift_3d + s3 + 2, _redot(shift_cotangent, p3x))
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift_3d + s3 + 0, _redot(shift_cotangent, p3z)
+        )
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift_3d + s3 + 1, _redot(shift_cotangent, p3y)
+        )
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift_3d + s3 + 2, _redot(shift_cotangent, p3x)
+        )
 
 
 @always_inline

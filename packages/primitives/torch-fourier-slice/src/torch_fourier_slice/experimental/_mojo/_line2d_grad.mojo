@@ -11,7 +11,7 @@ Reuses the 2D interpolation-with-spatial-gradient (`_interp2d_with_grad`) and th
 `_redot` helper; only the 1D line geometry and I/O differ.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.math import cos, floor, sin
 
 from layout import TileTensor, row_major
@@ -94,8 +94,12 @@ def _accumulate_line2d_pose_grads(
     var dbase = (db * p.bp + i_bp) * 2
     var dy = _redot(rot_cotangent, gy)
     var dx = _redot(rot_cotangent, gx)
-    _ = Atomic.fetch_add(grad_dir + dbase + 0, dy * sx)  # d/du_y
-    _ = Atomic.fetch_add(grad_dir + dbase + 1, dx * sx)  # d/du_x
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_y
+        grad_dir + dbase + 0, dy * sx
+    )
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_x
+        grad_dir + dbase + 1, dx * sx
+    )
 
     if p.has_shifts_2d != 0:
         var sb = 0 if p.bv_shift_2d == 1 else i_bv
@@ -103,8 +107,12 @@ def _accumulate_line2d_pose_grads(
         var scale = p.two_pi_over_sidelength()
         var p2y = _cmul(C2(0.0, scale * ky), modulated)
         var p2x = _cmul(C2(0.0, scale * kx), modulated)
-        _ = Atomic.fetch_add(grad_shift + s2 + 0, _redot(shift_cotangent, p2y))
-        _ = Atomic.fetch_add(grad_shift + s2 + 1, _redot(shift_cotangent, p2x))
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift + s2 + 0, _redot(shift_cotangent, p2y)
+        )
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
+            grad_shift + s2 + 1, _redot(shift_cotangent, p2x)
+        )
 
 
 @always_inline

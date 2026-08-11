@@ -11,7 +11,7 @@ coupling into the pose grad, and the weight-splat adjoint gather -- is reused
 verbatim from the slice kernels; only the 1D geometry and line I/O differ.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.math import cos, floor, sin
 
 from layout import TileTensor, row_major
@@ -78,9 +78,15 @@ def _accumulate_line_pose_grads(
     var dz = _redot(rot_cotangent, gz)
     var dy = _redot(rot_cotangent, gy)
     var dx = _redot(rot_cotangent, gx)
-    _ = Atomic.fetch_add(grad_dir + dbase + 0, dz * sx)  # d/du_z
-    _ = Atomic.fetch_add(grad_dir + dbase + 1, dy * sx)  # d/du_y
-    _ = Atomic.fetch_add(grad_dir + dbase + 2, dx * sx)  # d/du_x
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_z
+        grad_dir + dbase + 0, dz * sx
+    )
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_y
+        grad_dir + dbase + 1, dy * sx
+    )
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_x
+        grad_dir + dbase + 2, dx * sx
+    )
 
     if p.has_shifts_3d != 0:
         var sb3 = 0 if p.bv_shift_3d == 1 else i_bv
@@ -89,13 +95,13 @@ def _accumulate_line_pose_grads(
         var p3z = _cmul(C2(0.0, scale3 * kz), modulated)
         var p3y = _cmul(C2(0.0, scale3 * ky), modulated)
         var p3x = _cmul(C2(0.0, scale3 * kx), modulated)
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
             grad_shift_3d + s3 + 0, _redot(shift_cotangent, p3z)
         )
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
             grad_shift_3d + s3 + 1, _redot(shift_cotangent, p3y)
         )
-        _ = Atomic.fetch_add(
+        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
             grad_shift_3d + s3 + 2, _redot(shift_cotangent, p3x)
         )
 
