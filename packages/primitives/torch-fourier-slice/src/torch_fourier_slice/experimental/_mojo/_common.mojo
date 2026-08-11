@@ -5,7 +5,7 @@ the cube edge is `sidelength` (= h, = d) and `sidelength_half = w` is the rfft
 width. `bv` is the batch of volumes, `bp` the batch of projections.
 """
 
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.python import PythonObject
 
 from layout import Coord, TensorLayout, TileTensor
@@ -351,8 +351,17 @@ def _atomic_add_at[
     Works for any rank/layout: `ptr_at_offset` resolves the element address via
     the tensor's strides, and `Atomic.fetch_add` lowers to the right CPU/GPU
     atomic. Used by the scatter accumulation (volume + weight volume).
+
+    Explicit `ordering=RELAXED`: nothing else in the scatter synchronizes on
+    the order these adds land in (only the final sum matters), and Mojo's
+    default ordering for `fetch_add` on non-Apple GPU is SEQUENTIAL --
+    substantially more expensive than a relaxed RMW under the heavy
+    contention many overlapping central slices produce near the volume's DC
+    voxels. CUDA's own `atomicAdd` (e.g. torch-projectors' backprojection
+    kernel) has no such sequential-consistency guarantee, so this matches
+    that behaviour rather than requiring it.
     """
-    _ = Atomic.fetch_add(t.ptr_at_offset(coord), v)
+    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](t.ptr_at_offset(coord), v)
 
 
 @always_inline
