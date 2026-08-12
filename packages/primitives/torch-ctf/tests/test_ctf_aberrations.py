@@ -547,3 +547,22 @@ def test_odd_zernike_matches_relion_convention():
     expected = z33c * k_physical**3 * torch.cos(3 * torch.atan2(ky, kx))
 
     assert torch.allclose(phase, expected, atol=1e-4)
+
+
+def test_apply_even_zernikes_secondary_astigmatism():
+    """Z42c/Z42s share the Z44 radial form with cos/sin(2*theta)."""
+    even_zernikes = {"Z42c": torch.tensor(0.1), "Z42s": torch.tensor(0.2)}
+    total_phase_shift = torch.zeros((10, 10))
+    rho = torch.full((10, 10), 0.5)
+    theta = torch.linspace(0, 2 * torch.pi, 100).reshape(10, 10)
+
+    result = apply_even_zernikes(
+        even_zernikes=even_zernikes,
+        total_phase_shift=total_phase_shift,
+        rho=rho,
+        theta=theta,
+    )
+    expected = 0.1 * rho**4 * torch.cos(2 * theta) + 0.2 * rho**4 * torch.sin(2 * theta)
+
+    assert torch.allclose(result, expected)
+    assert torch.all(torch.isfinite(result))
