@@ -163,7 +163,7 @@ def _build_freq_grid(
         device=device,
         transform_matrix=transform_matrix,
     )
-    rho, theta = fftfreq_grid_polar(fft_freq_grid)
+    rho, theta = fftfreq_grid_polar(fft_freq_grid, normalize_rho=False)
     return fft_freq_grid, fft_freq_grid_squared, rho, theta
 
 
