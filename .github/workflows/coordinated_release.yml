@@ -44,7 +44,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Wait for CI to pass
-        uses: lewagon/wait-on-check-action@v1.9.0
+        uses: lewagon/wait-on-check-action@v1.9.1
         with:
           ref: ${{ github.sha }}
           check-name: "Test All Packages | Python 3.13"  # NOTE: Must match the CI job name for Python 3.13
