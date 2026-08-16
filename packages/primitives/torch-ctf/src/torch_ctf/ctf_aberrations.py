@@ -308,8 +308,11 @@ def apply_even_zernikes(
     Parameters
     ----------
     even_zernikes: dict
-        Even Zernike coefficients. Values can be floats or tensors.
-        Floats will be converted to tensors for differentiability.
+        Even Zernike coefficients, keyed by name. Supported names are
+        ``Z42c``/``Z42s`` (secondary astigmatism), ``Z44c``/``Z44s``
+        (four-fold astigmatism) and ``Z60`` (sixth-order spherical).
+        Values can be floats or tensors. Floats will be converted to
+        tensors for differentiability.
     total_phase_shift: torch.Tensor
         Total phase shift.
     rho: torch.Tensor
@@ -338,7 +341,11 @@ def apply_even_zernikes(
                 f"Zernike coefficient must be float or torch.Tensor, got {type(coeff)}"
             )
 
-        if name == "Z44c":  # 4-fold astigmatism
+        if name == "Z42c":  # secondary (2-fold) astigmatism
+            chi += coeff * rho**4 * torch.cos(2 * theta)
+        elif name == "Z42s":
+            chi += coeff * rho**4 * torch.sin(2 * theta)
+        elif name == "Z44c":  # 4-fold astigmatism
             chi += coeff * rho**4 * torch.cos(4 * theta)
         elif name == "Z44s":
             chi += coeff * rho**4 * torch.sin(4 * theta)

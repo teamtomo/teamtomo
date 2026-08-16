@@ -68,6 +68,34 @@ def test_subpixel_crop_single_2d_return_rfft_decenter():
     assert torch.allclose(cropped_image_decenter, cropped_image_real)
 
 
+def test_subpixel_crop_single_2d_return_rfft_decenter_odd_sidelength():
+    image = torch.zeros((10, 10))
+    image[4:6, 4:6] = 1
+
+    cropped_image_real = subpixel_crop_2d(
+        image=image,
+        positions=torch.tensor([5.5, 5.5]).float(),
+        sidelength=5
+    )
+
+    cropped_image_decenter = subpixel_crop_2d(
+        image=image,
+        positions=torch.tensor([5.5, 5.5]).float(),
+        sidelength=5,
+        return_rfft=True,
+        decenter=True,
+    )
+    cropped_image_decenter = torch.fft.irfftn(
+        cropped_image_decenter, s=(5, 5)
+    )
+    # for odd sidelengths, fftshift and ifftshift differ by one sample;
+    # decenter shifts by +(sidelength // 2), so ifftshift is the correct undo
+    cropped_image_decenter = (
+        torch.fft.ifftshift(cropped_image_decenter, dim=(-2, -1))
+    )
+    assert torch.allclose(cropped_image_decenter, cropped_image_real, atol=1e-5)
+
+
 def test_subpixel_crop_2d_with_fourier_shift():
     image = torch.zeros((10, 10))
     image[4:6, 4:6] = 1

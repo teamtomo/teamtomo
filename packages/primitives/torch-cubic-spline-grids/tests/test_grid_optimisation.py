@@ -1,5 +1,6 @@
 import einops
 import torch
+
 from torch_cubic_spline_grids import (
     CubicBSplineGrid1d,
     CubicBSplineGrid2d,
@@ -8,26 +9,34 @@ from torch_cubic_spline_grids import (
 )
 
 
+def _fit_lbfgs(grid, x, observations, loss_fn, max_iter):
+    optimiser = torch.optim.LBFGS(
+        grid.parameters(), lr=1.0, max_iter=max_iter, line_search_fn='strong_wolfe'
+    )
+
+    def closure():
+        optimiser.zero_grad()
+        prediction = grid(x).squeeze()
+        loss = loss_fn(prediction, observations)
+        loss.backward()
+        return loss
+
+    optimiser.step(closure)
+
+
 def test_1d_grid_optimisation():
     grid_resolution = 6
-    n_observations_per_iteration = 100
+    n_observations = 200
     grid = CubicBSplineGrid1d(resolution=grid_resolution, n_channels=1)
 
-    def f(x: torch.Tensor, add_noise: bool = False):
-        y = torch.sin(x * 2 * torch.pi)
-        if add_noise is True:
-            y += torch.normal(mean=torch.zeros(len(y)), std=0.3)
-        return y
+    def f(x: torch.Tensor):
+        return torch.sin(x * 2 * torch.pi)
 
-    optimiser = torch.optim.SGD(lr=0.1, params=grid.parameters())
-    for _i in range(5000):
-        x = torch.rand(size=(n_observations_per_iteration,))
-        observations = f(x, add_noise=True)
-        prediction = grid(x).squeeze()
-        loss = torch.mean(torch.abs(prediction - observations))
-        loss.backward()
-        optimiser.step()
-        optimiser.zero_grad()
+    x = torch.rand(size=(n_observations,))
+    observations = f(x)
+    _fit_lbfgs(
+        grid, x, observations, lambda p, o: torch.mean(torch.abs(p - o)), max_iter=20
+    )
 
     x = torch.linspace(0, 1, steps=100)
     ground_truth = f(x)
@@ -38,26 +47,19 @@ def test_1d_grid_optimisation():
 
 def test_1d_grid_optimization_decreasing():
     grid_resolution = 8
-    n_observations_per_iteration = 100
+    n_observations = 200
     grid = CubicBSplineGrid1d(
         resolution=grid_resolution, n_channels=1, monotonicity='decreasing'
     )
 
-    def f(x: torch.Tensor, add_noise: bool = False):
-        y = torch.exp(-5 * x)
-        if add_noise is True:
-            y += torch.normal(mean=torch.zeros(len(y)), std=0.4)
-        return y
+    def f(x: torch.Tensor):
+        return torch.exp(-5 * x)
 
-    optimiser = torch.optim.SGD(lr=0.1, params=grid.parameters())
-    for _i in range(5000):
-        x = torch.rand(size=(n_observations_per_iteration,))
-        observations = f(x, add_noise=True)
-        prediction = grid(x).squeeze()
-        loss = torch.mean(torch.abs(prediction - observations))
-        loss.backward()
-        optimiser.step()
-        optimiser.zero_grad()
+    x = torch.rand(size=(n_observations,))
+    observations = f(x)
+    _fit_lbfgs(
+        grid, x, observations, lambda p, o: torch.mean(torch.abs(p - o)), max_iter=15
+    )
 
     x = torch.linspace(0, 1, steps=100)
     prediction = grid(x).squeeze()
@@ -69,25 +71,18 @@ def test_1d_grid_optimization_decreasing():
 
 def test_2d_grid_optimisation():
     grid_resolution = (3, 3)
-    n_observations_per_iteration = 100
+    n_observations = 200
     grid = CubicBSplineGrid2d(resolution=grid_resolution, n_channels=1)
 
-    def f(x: torch.Tensor, add_noise: bool = False):
+    def f(x: torch.Tensor):
         centered = x - 0.5
-        y = torch.sqrt(torch.sum(centered**2, dim=-1))  # (x**2 + y**2) ** 0.5
-        if add_noise is True:
-            y += torch.normal(mean=torch.zeros(len(y)), std=0.3)
-        return y
+        return torch.sqrt(torch.sum(centered**2, dim=-1))  # (x**2 + y**2) ** 0.5
 
-    optimiser = torch.optim.SGD(lr=0.3, params=grid.parameters())
-    for _i in range(1000):
-        x = torch.rand(size=(n_observations_per_iteration, 2))
-        observations = f(x, add_noise=True)
-        prediction = grid(x).squeeze()
-        loss = torch.mean((prediction - observations) ** 2)
-        loss.backward()
-        optimiser.step()
-        optimiser.zero_grad()
+    x = torch.rand(size=(n_observations, 2))
+    observations = f(x)
+    _fit_lbfgs(
+        grid, x, observations, lambda p, o: torch.mean((p - o) ** 2), max_iter=15
+    )
 
     _x = torch.linspace(0, 1, steps=100)
     x = torch.meshgrid(_x, _x, indexing='xy')
@@ -100,25 +95,18 @@ def test_2d_grid_optimisation():
 
 def test_3d_grid_optimisation():
     grid_resolution = (3, 3, 3)
-    n_observations_per_iteration = 1000
+    n_observations = 1000
     grid = CubicBSplineGrid3d(resolution=grid_resolution, n_channels=1)
 
-    def f(x: torch.Tensor, add_noise: bool = False):
+    def f(x: torch.Tensor):
         centered = x - 0.5
-        y = torch.sqrt(torch.sum(centered**2, dim=-1))  # (x**2 + y**2 + z**2) ** 0.5
-        if add_noise is True:
-            y += torch.normal(mean=torch.zeros(len(y)), std=0.3)
-        return y
+        return torch.sqrt(torch.sum(centered**2, dim=-1))  # (x**2 + y**2 + z**2) ** 0.5
 
-    optimiser = torch.optim.SGD(lr=0.3, params=grid.parameters())
-    for _i in range(1000):
-        x = torch.rand(size=(n_observations_per_iteration, 3))
-        observations = f(x, add_noise=True)
-        prediction = grid(x).squeeze()
-        loss = torch.mean((prediction - observations) ** 2)
-        loss.backward()
-        optimiser.step()
-        optimiser.zero_grad()
+    x = torch.rand(size=(n_observations, 3))
+    observations = f(x)
+    _fit_lbfgs(
+        grid, x, observations, lambda p, o: torch.mean((p - o) ** 2), max_iter=10
+    )
 
     _x = torch.linspace(0, 1, steps=100)
     x = torch.meshgrid(_x, _x, _x, indexing='xy')
@@ -131,25 +119,18 @@ def test_3d_grid_optimisation():
 
 def test_4d_grid_optimisation():
     grid_resolution = (3, 3, 3, 3)
-    n_observations_per_iteration = 1000
+    n_observations = 1000
     grid = CubicBSplineGrid4d(resolution=grid_resolution, n_channels=1)
 
-    def f(x: torch.Tensor, add_noise: bool = False):
+    def f(x: torch.Tensor):
         centered = x - 0.5
-        y = torch.sqrt(torch.sum(centered**2, dim=-1))
-        if add_noise is True:
-            y += torch.normal(mean=torch.zeros(len(y)), std=0.3)
-        return y
+        return torch.sqrt(torch.sum(centered**2, dim=-1))
 
-    optimiser = torch.optim.SGD(lr=0.9, params=grid.parameters())
-    for _i in range(1000):
-        x = torch.rand(size=(n_observations_per_iteration, 4))
-        observations = f(x, add_noise=True)
-        prediction = grid(x).squeeze()
-        loss = torch.mean((prediction - observations) ** 2)
-        loss.backward()
-        optimiser.step()
-        optimiser.zero_grad()
+    x = torch.rand(size=(n_observations, 4))
+    observations = f(x)
+    _fit_lbfgs(
+        grid, x, observations, lambda p, o: torch.mean((p - o) ** 2), max_iter=15
+    )
 
     _x = torch.linspace(0, 1, steps=10)
     x = torch.meshgrid(_x, _x, _x, _x, indexing='xy')

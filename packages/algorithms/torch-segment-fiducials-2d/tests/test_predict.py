@@ -1,10 +1,13 @@
 import torch
 import warnings
 
+import pytest
+
 warnings.filterwarnings(action="ignore", category=UserWarning, module="tiler")
 from torch_segment_fiducials_2d import predict_fiducial_mask
 
 
+@pytest.mark.slow
 def test_predict_fiducial_mask():
     # smoke test, single image
     image = torch.rand((512, 512))

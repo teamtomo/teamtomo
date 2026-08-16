@@ -1,0 +1,96 @@
+# --- Coordinated release workflow for whole TeamTomo package ---
+#
+# This workflow triggers after CI completes successfully on the main branch.
+# It checks if the commit has a 'teamtomo@v*' tag, and if so, tags all workspace
+# packages with the same version to trigger individual deployment workflows.
+#
+# Steps:
+# 1. Waits for CI workflow to complete successfully
+# 2. Checks if the commit has a 'teamtomo@v*' tag
+# 3. If found, extracts the version and tags all workspace packages
+# 4. Pushes tags to trigger individual package deployments
+
+name: Coordinate Release
+
+on:
+  push:
+    tags:
+      - "teamtomo@v*"
+
+permissions:
+  contents: write
+
+jobs:
+  coordinate-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.TEAMTOMO_APP_ID }}
+          private-key: ${{ secrets.TEAMTOMO_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Wait for CI to pass
+        uses: lewagon/wait-on-check-action@v1.9.0
+        with:
+          ref: ${{ github.sha }}
+          check-name: "Test All Packages | Python 3.13"  # NOTE: Must match the CI job name for Python 3.13
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+
+      - name: Extract version from tag
+        id: check-tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#teamtomo@}
+          echo "Found release tag: $TAG"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update CITATION.cff authors
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          uv run python scripts/update_citation_authors.py
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add CITATION.cff
+          git diff --cached --quiet || git commit -m "update citation authors for ${{ steps.check-tag.outputs.version }} release"
+          git push origin HEAD:main
+
+      - name: Tag all workspace packages
+        run: |
+          VERSION=${{ steps.check-tag.outputs.version }}
+          echo "Coordinating release: $VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          PACKAGES=$(uv run python .github/scripts/get_all_packages.py)
+
+          for pkg_name in $PACKAGES; do
+            TAG="${pkg_name}@${VERSION}"
+            echo "Creating tag: $TAG"
+            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              git tag -a "$TAG" "${{ github.sha }}" -m "Release $VERSION"
+              git push origin "$TAG"
+            else
+              echo "Tag $TAG already exists, skipping"
+            fi
+          done
+
+          echo "✅ Tagged and pushed all packages individually. Deploy jobs will trigger per tag."

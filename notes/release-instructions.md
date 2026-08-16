@@ -11,69 +11,40 @@ git checkout main
 git pull upstream main
 ```
 
-### Check that the authors in `CITATION.cff` are up to date
-
-Before making a new release, run the following command to update the `CITATION.cff` file with the latest list of contributors:
-
-```bash
-uv run python scripts/update_citation_authors.py
-```
-
 ## Single Package Release
 
-To release a single package, create a GitHub Release on the tag matching `package-name@vX.Y.Z`:
+Push an annotated tag matching `package-name@vX.Y.Z`. The `Deploy` workflow triggers automatically on the tag push.
 
 ```bash
-# Create the tag
 git tag -a package-name@v3.4.5 -m "Release package-name@v3.4.5"
-git push upstream main --follow-tags
-
-# Create a GitHub release for the tag
-gh release create package-name@v3.4.5 \
-  --title "package-name@v3.4.5" \
-  --notes "Release package-name@v3.4.5"
-```
-
-For a pre-release, add the `--prerelease` flag:
-
-```bash
-gh release create package-name@v3.4.5 \
-  --title "package-name@v3.4.5" \
-  --notes "Release package-name@v3.4.5" \
-  --prerelease
+git push upstream package-name@v3.4.5
 ```
 
 **What happens next:**
 
-1. Publishing the release triggers the `Deploy` workflow automatically
+1. The `Deploy` workflow triggers on the tag push
 2. CI verification ensures tests passed on main
 3. The package is built and published to PyPI
-4. The release details are populated with built artifacts
+4. A GitHub Release is created with the built artifacts attached
 
 ## Coordinated Release (All Packages)
 
-To release all packages in the workspace with the same version, run the coordinated release script locally.
-
-For a final release:
+To release all packages in the workspace at the same version, run the coordinated release script:
 
 ```bash
 cd path/to/teamtomo
-./scripts/coordinated_release.sh v3.4.5
+./scripts/coordinated_release.sh vX.Y.Z
 ```
 
-For a pre-release (rc, beta, alpha, etc.):
+The script validates branch state, creates the `teamtomo@vX.Y.Z` tag, and pushes it. CI handles everything from there.
 
-```bash
-./scripts/coordinated_release.sh v3.4.5rc1 --prerelease
-```
+**What happens next:**
 
-**What the script does:**
+1. The `Coordinate Release` workflow triggers on the `teamtomo@vX.Y.Z` tag push
+2. It waits for CI to pass on that commit
+3. It updates `CITATION.cff` with the latest contributor list and commits to main
+4. It creates and pushes individual `package-name@vX.Y.Z` tags for every workspace package, one at a time
+5. Each tag push triggers an individual `Deploy` workflow run
+6. Each `Deploy` run verifies CI, builds the package, publishes to PyPI, and creates a GitHub Release
 
-1. Validates that no tags already exist for the version
-2. Creates annotated tags for `teamtomo@vX.Y.Z` and each package `package-name@vX.Y.Z`
-3. Pushes all tags to `upstream`
-4. Creates GitHub releases for each tag (marked as pre-release if `--prerelease` is used)
-5. Publishing the releases automatically triggers individual `Deploy` workflows for each package
-6. All packages are built and published to PyPI simultaneously
-
-**Note:** The coordinated release approach is recommended when you want to ensure version consistency across all packages in the TeamTomo workspace.
+**Note:** The `CITATION.cff` update happens automatically as part of step 3 — you do not need to run `update_citation_authors.py` manually before a coordinated release.

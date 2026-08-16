@@ -1,3 +1,5 @@
+"""Utility functions for Fourier rescaling operations."""
+
 import numbers
 
 import numpy as np
@@ -89,12 +91,15 @@ def fourier_rescale_dimension(
             return F.pad(dft, pad_spec, mode="constant", value=0)
     else:
         # For regular FFT dimensions (full frequency spectrum)
+        # NOTE: DC bin for fftshift'd array expected at index `N // 2`. Cropping and
+        #       padding must preserve position in new array (position `target // 2`).
+        #       New code here fixes previous bug where DC was placed at
+        #       `(source - target) // 2` from start which is wrong when source and
+        #       target have different parity.
         if target_dim_length < source_dim_length:
-            # Crop: Remove frequencies symmetrically from both ends
-            total_crop = current_dft_size - target_dim_length
-            crop_start = total_crop // 2
-            crop_end = total_crop - crop_start
-
+            # Crop: keep central target_dim_length samples around the DC.
+            crop_start = current_dft_size // 2 - target_dim_length // 2
+            crop_end = current_dft_size - target_dim_length - crop_start
             indices = [slice(None)] * dft.ndim
             if crop_end > 0:
                 indices[dim] = slice(crop_start, -crop_end)
@@ -102,16 +107,13 @@ def fourier_rescale_dimension(
                 indices[dim] = slice(crop_start, None)
             return dft[tuple(indices)]
         else:
-            # Pad: Add zeros symmetrically
-            total_pad = target_dim_length - current_dft_size
-            pad_start = total_pad // 2
-            pad_end = total_pad - pad_start
+            # Pad: zero-pad symmetrically so the original DC ends up at
+            # target // 2 of the padded array.
+            pad_start = target_dim_length // 2 - current_dft_size // 2
+            pad_end = (target_dim_length - current_dft_size) - pad_start
 
-            # Adjust for odd source size
-            if source_dim_length % 2 == 1:
-                pad_end = pad_end - 1
-
-            # Create padding specification (PyTorch F.pad expects pairs from last to first dim)
+            # PyTorch F.pad expects [pad_left, pad_right] pairs from the
+            # last dim to the first, hence the leading zero pairs.
             pad_spec = [0, 0] * (dft.ndim - dim - 1)
             pad_spec.extend([pad_start, pad_end])
             pad_spec.extend([0, 0] * dim)

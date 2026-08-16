@@ -105,6 +105,7 @@ class ResidualUNet18(L.LightningModule):
         self.validation_step_outputs.append(dice)
         return dice
 
+    @torch.no_grad()
     def predict_step(
         self,
         image: torch.Tensor,  # (h, w)

@@ -72,7 +72,7 @@ def backproject_2d_to_3d(
     volume_shape = (w, w, w)
 
     # calculate DFTs of images
-    images = torch.fft.fftshift(images, dim=(-2, -1))  # volume center to array origin
+    images = torch.fft.ifftshift(images, dim=(-2, -1))  # volume center to array origin
     images = torch.fft.rfftn(images, dim=(-2, -1))
     images = torch.fft.fftshift(images, dim=(-2,))  # actual fftshift
 
@@ -97,14 +97,17 @@ def backproject_2d_to_3d(
 
     # back to real space
     dft = torch.fft.ifftshift(dft, dim=(-3, -2))  # actual ifftshift
-    dft = torch.fft.irfftn(dft, dim=(-3, -2, -1))
-    dft = torch.fft.ifftshift(dft, dim=(-3, -2, -1))  # center in real space
+    dft = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=volume_shape)
+    dft = torch.fft.fftshift(dft, dim=(-3, -2, -1))  # center in real space
 
-    # correct for convolution with linear interpolation kernel
+    # correct for convolution with linear interpolation kernel. The kernel is
+    # separable per-axis, so the correction is a product of 1D sincs, not
+    # the sinc of the radial frequency. See issue #65 for more info.
     grid = fftfreq_grid(
-        image_shape=dft.shape, rfft=False, fftshift=True, norm=True, device=dft.device
+        image_shape=dft.shape, rfft=False, fftshift=True, norm=False, device=dft.device
     )
-    dft = dft / torch.sinc(grid) ** 2
+    sinc = torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1]) * torch.sinc(grid[..., 2])
+    dft = dft / sinc**2
 
     # unpad
     if pad_factor > 1.0:
@@ -177,7 +180,7 @@ def backproject_2d_to_3d_multichannel(
     volume_shape = (w, w, w)
 
     # calculate DFTs of images
-    images = torch.fft.fftshift(images, dim=(-2, -1))  # volume center to array origin
+    images = torch.fft.ifftshift(images, dim=(-2, -1))  # volume center to array origin
     images = torch.fft.rfftn(images, dim=(-2, -1))
     images = torch.fft.fftshift(images, dim=(-2,))  # actual fftshift
 
@@ -202,18 +205,21 @@ def backproject_2d_to_3d_multichannel(
 
     # back to real space
     dft = torch.fft.ifftshift(dft, dim=(-3, -2))  # actual ifftshift
-    dft = torch.fft.irfftn(dft, dim=(-3, -2, -1))
-    dft = torch.fft.ifftshift(dft, dim=(-3, -2, -1))  # center in real space
+    dft = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=volume_shape)
+    dft = torch.fft.fftshift(dft, dim=(-3, -2, -1))  # center in real space
 
-    # correct for convolution with linear interpolation kernel
+    # correct for convolution with linear interpolation kernel. The kernel is
+    # separable per-axis, so the correction is a product of 1D sincs, not
+    # the sinc of the radial frequency. See issue #65 for more info.
     grid = fftfreq_grid(
         image_shape=dft.shape[-3:],
         rfft=False,
         fftshift=True,
-        norm=True,
+        norm=False,
         device=dft.device,
     )
-    dft = dft / torch.sinc(grid) ** 2
+    sinc = torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1]) * torch.sinc(grid[..., 2])
+    dft = dft / sinc**2
 
     # unpad
     if pad_factor > 1.0:

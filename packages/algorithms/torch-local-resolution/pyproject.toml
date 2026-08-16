@@ -52,5 +52,14 @@ homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
 
 # https://coverage.readthedocs.io/
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+dev = [
+    { include-group = "test" },
+    "ipython",
+    "mypy",
+    "ruff",
+]
+
 [tool.coverage.run]
 source = ["torch_local_resolution"]

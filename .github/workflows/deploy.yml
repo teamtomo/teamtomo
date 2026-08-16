@@ -1,7 +1,7 @@
 # --- Deployment workflow for a single package in TeamTomo ---
 #
-# Workflow will be triggered on pushes to tags matching the pattern "*@v*" (e.g., "package@v1.0.0"),
-# but excluding tags starting with "teamtomo@" which is reserved for a coordinated release process.
+# Triggers on any tag matching "*@v*" — both the root "teamtomo@v*" meta-package tag pushed
+# by the developer and the per-package tags created by coordinated_release.yml.
 # The workflow performs the following steps:
 # 1. Verifies that the tag is on the main branch to ensure only stable code is deployed.
 # 2. Checks that the CI tests have passed for the commit associated with the tag.
@@ -12,8 +12,9 @@
 name: Deploy
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - '*@v*'
   workflow_dispatch:
     inputs:
       release_name:
@@ -33,10 +34,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - uses: astral-sh/setup-uv@v7
@@ -58,6 +59,7 @@ jobs:
 
           # Query check runs (GitHub Actions reports as check runs, not commit statuses)
           CI_CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/$COMMIT_SHA/check-runs" \
+            --paginate \
             --jq '.check_runs[] | select(.name | startswith("Test All Packages")) | .conclusion' \
             | sort -u)
 
@@ -78,9 +80,9 @@ jobs:
       - name: Extract package name from tag
         id: info
         run: |
-          # Get tag name from release event or workflow dispatch input
-          TAG_NAME="${{ github.event.release.tag_name }}"
-          if [[ -z "$TAG_NAME" ]]; then
+          # On tag push github.ref_name is the tag; on workflow_dispatch fall back to input
+          TAG_NAME="${{ github.ref_name }}"
+          if [[ -z "$TAG_NAME" || "$TAG_NAME" == "${{ github.event.repository.default_branch }}" ]]; then
             TAG_NAME="${{ inputs.release_name }}"
           fi
           if [[ -z "$TAG_NAME" ]]; then
@@ -88,9 +90,13 @@ jobs:
             exit 1
           fi
           PKG_NAME=${TAG_NAME%@*}
-          echo "pkg_name=$PKG_NAME" >> $GITHUB_OUTPUT
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "Deploying package: $PKG_NAME"
+          # Strip the "<pkg>@v" prefix to get the PEP 440 version (e.g. 0.5.2, 0.5.2rc1)
+          VERSION=${TAG_NAME#*@}
+          VERSION=${VERSION#v}
+          echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Deploying package: $PKG_NAME (version $VERSION)"
 
       - name: Install package dependencies
         run: |
@@ -99,8 +105,8 @@ jobs:
       - name: Find package directory
         id: pkg-dir
         run: |
-          PKG_DIR=$(python .github/scripts/get_all_packages.py ${{ steps.info.outputs.pkg_name }})
-          echo "pkg_dir=$PKG_DIR" >> $GITHUB_OUTPUT
+          PKG_DIR=$(uv run python .github/scripts/get_all_packages.py ${{ steps.info.outputs.pkg_name }})
+          echo "pkg_dir=$PKG_DIR" >> "$GITHUB_OUTPUT"
           echo "Package directory: $PKG_DIR"
 
       - name: Test package before deployment
@@ -109,13 +115,25 @@ jobs:
             --cov=${{ steps.pkg-dir.outputs.pkg_dir }} --cov-report=xml
 
       - name: Build package
+        # The deploy is triggered by the package's release tag, so the version is
+        # already known unambiguously. Pin it explicitly so the build is immune to
+        # git working-tree state: a dirty tree would otherwise make hatch-vcs
+        # (setuptools-scm) emit a "guess-next-dev" version like 0.5.3.dev0+g<sha>.d<date>,
+        # which PyPI rejects for its local-version segment.
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.info.outputs.version }}
         run: uv build --package ${{ steps.info.outputs.pkg_name }}
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Make re-runs idempotent: if a package version was already uploaded in a
+          # previous (partial) fan-out, skip it instead of failing with a 400.
+          skip-existing: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ steps.info.outputs.tag_name }}
           generate_release_notes: true
           files: './dist/*'

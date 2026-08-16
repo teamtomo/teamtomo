@@ -57,6 +57,11 @@ except ImportError:
     torch_image_interpolation = None
 
 try:
+    import torch_scattering
+except ImportError:
+    torch_scattering = None
+
+try:
     import torch_so3
 except ImportError:
     torch_so3 = None
@@ -71,6 +76,11 @@ try:
 except ImportError:
     torch_transform_image = None
 
+try:
+    import torch_tilt_series
+except ImportError:
+    torch_tilt_series = None
+
 __all__ = [
     "torch_affine_utils",
     "torch_ctf",
@@ -83,7 +93,9 @@ __all__ = [
     "torch_fourier_slice",
     "torch_grid_utils",
     "torch_image_interpolation",
+    "torch_scattering",
     "torch_so3",
     "torch_subpixel_crop",
+    "torch_tilt_series",
     "torch_transform_image",
 ]

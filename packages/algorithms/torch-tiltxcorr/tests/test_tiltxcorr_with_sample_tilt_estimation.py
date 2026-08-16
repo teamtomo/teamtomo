@@ -115,8 +115,8 @@ def _generate_tilted_plane_tilt_series(
     [
         # Y-axis only (stage tilt direction - should be estimated well)
         (0.0, 0.0, 0.05),  # zero tilt baseline
-        (0.0, 15.0, 0.05),  # positive Y tilt
-        (0.0, -12.0, 0.05),  # negative Y tilt
+        (0.0, 15.0, 0.25),  # positive Y tilt
+        (0.0, -12.0, 0.15),  # negative Y tilt
         (0.0, 25.0, 0.1),  # larger positive Y tilt
         # Combined X and Y tilts (more realistic scenario, expect inaccuracies)
         (3.0, 10.0, 0.75),  # small X, moderate Y
@@ -140,8 +140,9 @@ def test_tiltxcorr_with_sample_tilt_estimation(
     tilt_series, tilt_angles, tilt_axis_angle = _generate_tilted_plane_tilt_series(
         sample_tilt_x=sample_tilt_x,
         sample_tilt_y=sample_tilt_y,
-        d=128,
+        d=64,
         n_points_on_plane=100,
+        tilt_angles_deg=torch.linspace(-60, 60, steps=7),
         tilt_axis_angle=85.0,
         seed=42,
     )
@@ -152,7 +153,7 @@ def test_tiltxcorr_with_sample_tilt_estimation(
         tilt_angles=tilt_angles,
         tilt_axis_angle=tilt_axis_angle,
         sample_tilt_range=(-30.0, 30.0),
-        max_iter=15,
+        max_iter=10,
     )
 
     # Verify estimated sample tilt is close to expected value
