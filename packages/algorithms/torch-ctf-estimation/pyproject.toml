@@ -1,0 +1,144 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^torch-ctf-estimation@v(?P<version>.+)$"
+fallback-version = "0.5.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+tag_regex = "^torch-ctf-estimation@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-ctf-estimation@v[0-9]*.[0-9]*.[0-9]*'"
+
+# read more about configuring hatch at:
+# https://hatch.pypa.io/latest/config/build/
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "torch-ctf-estimation"
+dynamic = ["version"]
+description = "Contrast transfer function estimation for cryo-EM images in PyTorch"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "Alister Burt", email = "alisterburt@gmail.com" },
+    { name = "Josh Dickerson", email = "jdickerson@berkeley.edu" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "einops",
+    "numpy",
+    "pydantic>=2.0,<3",
+    "scipy",
+    "teamtomo-basemodel",
+    "torch",
+    "torch-ctf",
+    "torch-cubic-spline-grids",
+    "torch-fourier-filter",
+    "torch-fourier-rescale",
+    "torch-grid-utils",
+    "torch-image-interpolation",
+    "torchvision",
+]
+
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+dev = [
+    { include-group = "test" },
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "pre-commit",
+    "rich",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = [
+    "E",
+    "W",
+    "F",
+    "D",
+    "D417",
+    "I",
+    "UP",
+    "C4",
+    "B",
+    "A001",
+    "RUF",
+    "TCH",
+    "TID",
+]
+ignore = [
+    "D401",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+files = "src/**/"
+strict = true
+disallow_any_generics = false
+disallow_subclassing_any = false
+show_error_codes = true
+pretty = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+    "ignore:CUDA initialization:UserWarning",
+    "ignore:Linear defocus gradient from 1D fits:UserWarning",
+    "ignore:Linear defocus gradient angle was NaN:UserWarning",
+]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "except ImportError",
+    "\\.\\.\\.",
+    "raise NotImplementedError()",
+    "pass",
+]
+
+[tool.coverage.run]
+source = ["torch_ctf_estimation"]
+
+[tool.check-manifest]
+ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]

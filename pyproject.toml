@@ -32,6 +32,7 @@ dependencies = [
     "torch-segment-fiducials-2d",
     "torch-tiltxcorr",
     "torch-local-resolution",
+    "torch-ctf-estimation",
     "teamtomo-basemodel",
 ]
 
@@ -62,6 +63,7 @@ torch-refine-tilt-axis-angle = { workspace = true }
 torch-segment-fiducials-2d = { workspace = true }
 torch-tiltxcorr = { workspace = true }
 torch-local-resolution = { workspace = true }
+torch-ctf-estimation = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 
 [tool.uv.workspace]

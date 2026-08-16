@@ -14,6 +14,7 @@ members = [
     "torch-affine-utils",
     "torch-cryoeraser",
     "torch-ctf",
+    "torch-ctf-estimation",
     "torch-cubic-spline-grids",
     "torch-find-peaks",
     "torch-fourier-filter",
@@ -3744,6 +3745,7 @@ dependencies = [
     { name = "torch-affine-utils" },
     { name = "torch-cryoeraser" },
     { name = "torch-ctf" },
+    { name = "torch-ctf-estimation" },
     { name = "torch-cubic-spline-grids" },
     { name = "torch-find-peaks" },
     { name = "torch-fourier-filter" },
@@ -3791,6 +3793,7 @@ requires-dist = [
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-cryoeraser", editable = "packages/algorithms/torch-cryoeraser" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-ctf-estimation", editable = "packages/algorithms/torch-ctf-estimation" },
     { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
     { name = "torch-find-peaks", editable = "packages/primitives/torch-find-peaks" },
     { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
@@ -4185,6 +4188,74 @@ requires-dist = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-ctf-estimation"
+source = { editable = "packages/algorithms/torch-ctf-estimation" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "pydantic" },
+    { name = "scipy" },
+    { name = "teamtomo-basemodel" },
+    { name = "torch" },
+    { name = "torch-ctf" },
+    { name = "torch-cubic-spline-grids" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-fourier-rescale" },
+    { name = "torch-grid-utils" },
+    { name = "torch-image-interpolation" },
+    { name = "torchvision" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "scipy" },
+    { name = "teamtomo-basemodel", editable = "packages/utils/teamtomo-basemodel" },
+    { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+    { name = "torchvision" },
 ]
 
 [package.metadata.requires-dev]
