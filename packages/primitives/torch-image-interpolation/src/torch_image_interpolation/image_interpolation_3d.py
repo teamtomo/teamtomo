@@ -47,7 +47,6 @@ def sample_image_3d(
     # setup coordinates for sampling image with torch.nn.functional.grid_sample
     # shape (..., 3) -> (b, 3)
     coordinates, ps = einops.pack([coordinates], pattern='* zyx')
-    n_samples = coordinates.shape[0]
 
     # handle complex input
     if input_image_is_complex:
@@ -57,12 +56,16 @@ def sample_image_3d(
         image = torch.view_as_real(image)
         image = einops.rearrange(image, 'c d h w complex -> (complex c) d h w')
 
-    # torch.nn.functional.grid_sample is set up for sampling grids
-    # here we view our volume as a batch of n_samples multi-channel volumes
-    # then sample a batch of (1x1x1) grids
-    # this enables sampling arbitrarily shaped arrays of coords
-    image = einops.repeat(image, 'c d h w -> b c d h w', b=n_samples)
-    coordinates = einops.rearrange(coordinates, 'b zyx -> b 1 1 1 zyx')  # b d h w zyx
+    # torch.nn.functional.grid_sample is set up for sampling grids, so we sample
+    # a single grid of shape (1, 1, n) containing all n coordinates.
+    #
+    # the sample points belong in the *grid's* spatial dimensions. broadcasting the
+    # image to (n, c, d, h, w) also produces correct results, but makes the backward
+    # pass materialise a dense (n, c, d, h, w) input-gradient before the broadcast
+    # sums it away - so peak memory and runtime scale with n * image_elems rather
+    # than with n. see https://github.com/teamtomo/teamtomo/issues/117
+    image = einops.rearrange(image, 'c d h w -> 1 c d h w')
+    coordinates = einops.rearrange(coordinates, 'b zyx -> 1 1 1 b zyx')  # b d h w zyx
 
     # take the samples
     interpolation = 'bilinear' if interpolation == 'trilinear' else interpolation
@@ -76,13 +79,13 @@ def sample_image_3d(
 
     # reconstruct complex valued samples if required
     if input_image_is_complex is True:
-        samples = einops.rearrange(samples, 'b (complex c) 1 1 1 -> b c complex', complex=2)
+        samples = einops.rearrange(samples, '1 (complex c) 1 1 b -> b c complex', complex=2)
         samples = utils.view_as_complex(samples.contiguous())  # (b, c)
     else:
-        samples = einops.rearrange(samples, 'b c 1 1 1 -> b c')
+        samples = einops.rearrange(samples, '1 c 1 1 b -> b c')
 
     # set samples from outside of volume to zero
-    coordinates = einops.rearrange(coordinates, 'b 1 1 1 zyx -> b zyx')
+    coordinates = einops.rearrange(coordinates, '1 1 1 b zyx -> b zyx')
     volume_shape = torch.as_tensor(image.shape[-3:]).to(device)
     inside = torch.logical_and(coordinates >= 0, coordinates <= volume_shape - 1)
     inside = torch.all(inside, dim=-1)  # (b, d, h, w)
