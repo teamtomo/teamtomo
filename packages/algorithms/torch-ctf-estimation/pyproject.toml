@@ -58,6 +58,9 @@ dependencies = [
     "torchvision",
 ]
 
+[project.optional-dependencies]
+plot = ["matplotlib"]
+
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
