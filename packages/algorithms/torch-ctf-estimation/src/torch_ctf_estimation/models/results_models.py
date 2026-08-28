@@ -319,7 +319,7 @@ class Defocus1DResults(BaseModel):
     )
 
     frequencies_1d: torch.Tensor
-    powerspectrum_1d: torch.Tensor = None
+    powerspectrum_1d: torch.Tensor | None = None
     background_model: CubicBSplineGrid1d | None = None
     test_defoci: torch.Tensor | None = None
     cross_correlations: torch.Tensor | None = None

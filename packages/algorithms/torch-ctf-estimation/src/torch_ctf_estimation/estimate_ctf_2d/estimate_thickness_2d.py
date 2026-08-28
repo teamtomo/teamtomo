@@ -230,7 +230,7 @@ def estimate_thickness_2d(
         if len(loss_t_list) == 0:
             continue
 
-        total_loss = sum(loss_t_list) / T
+        total_loss = sum(loss_t_list) / len(loss_t_list)
         total_loss.backward()
         mean_loss = (sum(loss_t_list) / len(loss_t_list)).detach().cpu().item()
         if math.isnan(mean_loss) or math.isinf(mean_loss):

@@ -26,6 +26,7 @@ def normalize_image(image: torch.Tensor) -> torch.Tensor:
 
     # calculate mean and std
     std, mean = torch.std_mean(image_center, dim=(-3, -2, -1))
+    std = torch.clamp(std, min=1e-8)
 
     # normalize
     image = (image - mean) / std  # (t, h, w)

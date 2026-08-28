@@ -94,6 +94,9 @@ def test_equiphase_negative_kx_hermitian_fold():
     i = int((fx - q0).abs().argmin().item())
     # Folding keeps samples on the ring (~1). Clamping half the angles to kx=0 → ~0.5.
     assert float(epa[i].item()) > 0.75
+
+
+def test_equiphase_astigmatism_differs_from_circular_average():
     """Nonzero astigmatism should change the 1D reduction vs circular averaging."""
     h = 48
     torch.manual_seed(0)

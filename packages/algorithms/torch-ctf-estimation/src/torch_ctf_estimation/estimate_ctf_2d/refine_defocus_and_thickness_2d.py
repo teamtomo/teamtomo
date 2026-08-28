@@ -232,7 +232,7 @@ def refine_defocus_and_thickness_2d(
             )
         if not loss_t_list:
             continue
-        total_loss = sum(loss_t_list) / T
+        total_loss = sum(loss_t_list) / len(loss_t_list)
         if torch.isnan(total_loss) or torch.isinf(total_loss):
             continue
         total_loss.backward()
