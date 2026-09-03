@@ -1,4 +1,4 @@
-"""Extract 2D/3D subimages with subpixel precision in PyTorch"""
+"""Extract 2D/3D subimages with subpixel precision in PyTorch."""
 
 from importlib.metadata import PackageNotFoundError, version
 
@@ -11,3 +11,5 @@ __email__ = "alisterburt@gmail.com"
 
 from .subpixel_crop_2d import subpixel_crop_2d
 from .subpixel_crop_3d import subpixel_crop_3d
+
+__all__ = ["subpixel_crop_2d", "subpixel_crop_3d"]

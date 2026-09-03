@@ -187,3 +187,7 @@ ignore = [
 # https://github.com/crate-ci/typos/blob/master/docs/reference.md
 [tool.typos.default]
 extend-ignore-identifiers-re = []
+
+[tool.typos.default.extend-words]
+perview = "perview"
+writeable = "writeable"

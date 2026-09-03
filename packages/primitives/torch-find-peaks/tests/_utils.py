@@ -4,7 +4,12 @@ from torch_grid_utils import coordinate_grid
 from torch_find_peaks.gaussians import Gaussian2D, Gaussian3D
 
 
-def create_test_image(size:int=100, peaks: torch.tensor = torch.tensor([]), noise_level=0.1, seed: int = 42):
+def create_test_image(
+    size: int = 100,
+    peaks: torch.Tensor | None = None,
+    noise_level=0.1,
+    seed: int = 42,
+):
     """
     Create a test image with known Gaussian peaks.
 
@@ -18,6 +23,8 @@ def create_test_image(size:int=100, peaks: torch.tensor = torch.tensor([]), nois
     Returns:
         - Image tensor with Gaussian peaks
     """
+    if peaks is None:
+        peaks = torch.tensor([])
     # Create a blank image
     generator = torch.Generator().manual_seed(seed)
     image = torch.randn((size, size), generator=generator) * noise_level
@@ -30,20 +37,27 @@ def create_test_image(size:int=100, peaks: torch.tensor = torch.tensor([]), nois
         sigma_x=peaks[:, 4],
     )
 
-    grid = coordinate_grid((size,size))
+    grid = coordinate_grid((size, size))
 
     # Add Gaussian peaks to the image
     image += gaussian_model(grid).sum(dim=0)
 
     return image
 
-def create_test_volume(size:int=100, peaks: torch.tensor = torch.tensor([]), noise_level=0.1, seed: int = 42):
+
+def create_test_volume(
+    size: int = 100,
+    peaks: torch.Tensor | None = None,
+    noise_level=0.1,
+    seed: int = 42,
+):
     """
     Create a test volume with known Gaussian peaks.
 
     Args:
         size: Size of the cube volume
-        peaks: (n,7) tensor of peak parameters (amplitude, z, y, x, sigma_z, sigma_y, sigma_x)
+        peaks: (n,7) tensor of peak parameters
+            (amplitude, z, y, x, sigma_z, sigma_y, sigma_x)
         noise_level: Level of noise to add
         seed: Seed for the noise generator, applied at generation time so the
             result doesn't depend on RNG draws from other tests
@@ -51,6 +65,8 @@ def create_test_volume(size:int=100, peaks: torch.tensor = torch.tensor([]), noi
     Returns:
         - Volume tensor with Gaussian peaks
     """
+    if peaks is None:
+        peaks = torch.tensor([])
     # Create a blank volume
     generator = torch.Generator().manual_seed(seed)
     image = torch.randn((size, size, size), generator=generator) * noise_level
@@ -65,7 +81,7 @@ def create_test_volume(size:int=100, peaks: torch.tensor = torch.tensor([]), noi
         sigma_x=peaks[:, 6],
     )
 
-    grid = coordinate_grid((size,size,size))
+    grid = coordinate_grid((size, size, size))
 
     # Add Gaussian peaks to the volume
     image += gaussian_model(grid).sum(dim=0)

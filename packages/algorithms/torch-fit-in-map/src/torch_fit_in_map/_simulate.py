@@ -35,13 +35,13 @@ class DensitySimulator(Protocol):
 
         import mmdf
 
+
         class MySimulator:
-            def simulate(self, atoms, pixel_size, box_size, device=None):
-                ...
+            def simulate(self, atoms, pixel_size, box_size, device=None): ...
+
 
         atoms = mmdf.read("model.pdb")
-        result = fit_pdb_in_map(atoms, density, 1.5, 128,
-                                simulator=MySimulator())
+        result = fit_pdb_in_map(atoms, density, 1.5, 128, simulator=MySimulator())
     """
 
     def simulate(

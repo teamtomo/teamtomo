@@ -16,7 +16,6 @@ def erase_region_2d(
 ) -> torch.Tensor:
     """Inpaint image(s) with gaussian noise matching local image mean and std.
 
-
     Parameters
     ----------
     image: torch.Tensor
@@ -33,9 +32,9 @@ def erase_region_2d(
     Returns
     -------
     erased_image: torch.Tensor
-        `(..., h, w)` or `(h, w)` array containing image data inpainted in the foreground pixels of the mask
-        with gaussian noise matching the local mean and global standard deviation of the image
-        for background pixels.
+        `(..., h, w)` or `(h, w)` array containing image data inpainted in the
+        foreground pixels of the mask with gaussian noise matching the local mean
+        and global standard deviation of the image for background pixels.
     """
     # coerce to tensor
     image = torch.as_tensor(image)
@@ -91,9 +90,9 @@ def _erase_single_image(
     Returns
     -------
     inpainted_image: torch.Tensor
-        `(h, w)` array containing image data inpainted in the foreground pixels of the mask
-        with gaussian noise matching the local mean and global standard deviation of the image
-        for background pixels.
+        `(h, w)` array containing image data inpainted in the foreground pixels of
+        the mask with gaussian noise matching the local mean and global standard
+        deviation of the image for background pixels.
     """
     inpainted_image = torch.clone(torch.as_tensor(image))
     local_mean = estimate_local_mean(

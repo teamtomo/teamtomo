@@ -1,9 +1,9 @@
 import einops
 import numpy as np
-import torch
 import pytest
+import torch
 
-from torch_image_interpolation import sample_image_1d, insert_into_image_1d
+from torch_image_interpolation import insert_into_image_1d, sample_image_1d
 
 
 def test_sample_image_1d():
@@ -16,13 +16,20 @@ def test_sample_image_1d():
 
     # sample
     for interpolation in ("nearest", "linear", "cubic"):
-        samples = sample_image_1d(image=image, coordinates=coords, interpolation=interpolation)
+        samples = sample_image_1d(
+            image=image, coordinates=coords, interpolation=interpolation
+        )
     assert samples.shape == (6, 7, 8)
 
 
 def test_sample_image_1d_complex_input():
     # basic sanity check only
-    image = torch.complex(real=torch.rand((28,)), imag=torch.rand(28, ))
+    image = torch.complex(
+        real=torch.rand((28,)),
+        imag=torch.rand(
+            28,
+        ),
+    )
 
     # make an arbitrary stack (..., 2) of 2d coords
     arbitrary_shape = (6, 7, 8)
@@ -51,8 +58,13 @@ def test_sample_image_1d_multichannel_complex_input():
     n_channels = 3
 
     # basic sanity check only
-    image = torch.complex(real=torch.rand((28,)), imag=torch.rand(28, ))
-    image = einops.repeat(image, 'w -> c w', c=n_channels)
+    image = torch.complex(
+        real=torch.rand((28,)),
+        imag=torch.rand(
+            28,
+        ),
+    )
+    image = einops.repeat(image, "w -> c w", c=n_channels)
 
     # make an arbitrary stack (..., 2) of 2d coords
     arbitrary_shape = (6, 7, 8)
@@ -71,10 +83,12 @@ def test_insert_into_image_1d():
     coordinate = torch.tensor([14.28])
 
     # sample
-    image, weights = insert_into_image_1d(value, coordinates=coordinate, image=image, interpolation="linear")
+    image, _weights = insert_into_image_1d(
+        value, coordinates=coordinate, image=image, interpolation="linear"
+    )
 
     # check value (5) is evenly split over 2 nearest pixels
-    expected = torch.zeros((28, )).float()
+    expected = torch.zeros((28,)).float()
     expected[14] = 0.72
     expected[15] = 0.28
     assert torch.allclose(image, expected)
@@ -92,7 +106,9 @@ def test_insert_into_image_1d_multiple():
     coordinates = torch.tensor(np.random.randint(low=0, high=27, size=(6, 7, 8)))
 
     # sample
-    image, weights = insert_into_image_1d(values, coordinates=coordinates, image=image, interpolation="linear")
+    image, _weights = insert_into_image_1d(
+        values, coordinates=coordinates, image=image, interpolation="linear"
+    )
 
     # check for nonzero value at one point
     sample_point = coordinates[0, 0, 0]
@@ -106,10 +122,14 @@ def test_insert_multiple_values_into_multichannel_image_1d_bilinear():
     # multiple values
     arbitrary_shape = (6, 7, 8)
     values = torch.ones(size=(*arbitrary_shape, n_channels)).float()
-    coordinates = torch.tensor(np.random.randint(low=0, high=27, size=(*arbitrary_shape,)))
+    coordinates = torch.tensor(
+        np.random.randint(low=0, high=27, size=(*arbitrary_shape,))
+    )
 
     # sample
-    image, weights = insert_into_image_1d(values, coordinates=coordinates, image=image, interpolation="linear")
+    image, weights = insert_into_image_1d(
+        values, coordinates=coordinates, image=image, interpolation="linear"
+    )
 
     # check for nonzero value at one point
     sample_point = coordinates[0, 0, 0]
@@ -127,10 +147,14 @@ def test_insert_multiple_values_into_multichannel_image_2d_nearest():
     # multiple values
     arbitrary_shape = (6, 7, 8)
     values = torch.ones(size=(*arbitrary_shape, n_channels)).float()
-    coordinates = torch.tensor(np.random.randint(low=0, high=27, size=(*arbitrary_shape,)))
+    coordinates = torch.tensor(
+        np.random.randint(low=0, high=27, size=(*arbitrary_shape,))
+    )
 
     # sample
-    image, weights = insert_into_image_1d(values, coordinates=coordinates, image=image, interpolation="nearest")
+    image, weights = insert_into_image_1d(
+        values, coordinates=coordinates, image=image, interpolation="nearest"
+    )
 
     # check for nonzero value at one point
     sample_point = coordinates[0, 0, 0]
@@ -149,7 +173,9 @@ def test_insert_into_image_nearest_interp_2d():
     coordinate = torch.tensor([10.7])
 
     # sample
-    image, weights = insert_into_image_1d(value, coordinates=coordinate, image=image, interpolation='nearest')
+    image, _weights = insert_into_image_1d(
+        value, coordinates=coordinate, image=image, interpolation="nearest"
+    )
 
     # check value (5) is added at nearest pixel
     expected = torch.zeros((28,)).float()
@@ -158,8 +184,7 @@ def test_insert_into_image_nearest_interp_2d():
 
 
 @pytest.mark.parametrize(
-    "dtype",
-    [torch.float32, torch.float64, torch.complex64, torch.complex128]
+    "dtype", [torch.float32, torch.float64, torch.complex64, torch.complex128]
 )
 def test_insert_into_image_1d_type_consistency(dtype):
     image = torch.rand((4,), dtype=dtype)
@@ -167,7 +192,7 @@ def test_insert_into_image_1d_type_consistency(dtype):
     values = torch.rand(size=(3, 4), dtype=dtype)
     weights = torch.zeros_like(image, dtype=torch.float64)
 
-    for mode in ['linear', 'nearest']:
+    for mode in ["linear", "nearest"]:
         image, weights = insert_into_image_1d(
             values,
             image=image,

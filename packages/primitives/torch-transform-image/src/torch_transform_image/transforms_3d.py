@@ -99,7 +99,9 @@ def rotate_then_shift_image_3d(
             image_shape=(d, h, w), device=image.device, fftshift=True, rfft=False
         )
 
-    matrix = _build_rotate_shift_matrix_3d(rotate_zyx, shift_zyx, image_center, rotate_first=True)
+    matrix = _build_rotate_shift_matrix_3d(
+        rotate_zyx, shift_zyx, image_center, rotate_first=True
+    )
     return affine_transform_image_3d(
         image=image,
         matrices=matrix,
@@ -166,7 +168,9 @@ def shift_then_rotate_image_3d(
             image_shape=(d, h, w), device=image.device, fftshift=True, rfft=False
         )
 
-    matrix = _build_rotate_shift_matrix_3d(rotate_zyx, shift_zyx, image_center, rotate_first=False)
+    matrix = _build_rotate_shift_matrix_3d(
+        rotate_zyx, shift_zyx, image_center, rotate_first=False
+    )
     return affine_transform_image_3d(
         image=image,
         matrices=matrix,
@@ -174,11 +178,12 @@ def shift_then_rotate_image_3d(
         zyx_matrices=True,
     )
 
+
 def _build_rotate_shift_matrix_3d(
-        rotate_zyx: list[float | int] | tuple[float | int, ...],
-        shift_zyx: list[float | int] | tuple[float | int, ...],
-        image_center: torch.Tensor,
-        rotate_first: bool,
+    rotate_zyx: list[float | int] | tuple[float | int, ...],
+    shift_zyx: list[float | int] | tuple[float | int, ...],
+    image_center: torch.Tensor,
+    rotate_first: bool,
 ) -> torch.Tensor:
     if (num_angles := len(rotate_zyx)) != 3:
         e = f"3 angles (zyx) are required but {num_angles} were supplied: {rotate_zyx}."
@@ -188,10 +193,10 @@ def _build_rotate_shift_matrix_3d(
         raise ValueError(e)
 
     rotation_matrix = (
-            Rx(rotate_zyx[2], zyx=True)
-            @ Ry(rotate_zyx[1], zyx=True)
-            @ Rz(rotate_zyx[0], zyx=True)
-        )
+        Rx(rotate_zyx[2], zyx=True)
+        @ Ry(rotate_zyx[1], zyx=True)
+        @ Rz(rotate_zyx[0], zyx=True)
+    )
     translation_matrix = T(shift_zyx)
 
     if rotate_first:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 try:
     __version__ = version("torch-fit-in-map")
@@ -65,11 +65,13 @@ def fit_map_in_map(
         Optional ``(d, h, w)`` soft mask in ``[0, 1]``.
     pixel_size_angstroms : float or None
         When given, ``AlignmentResult.translation_angstroms`` is populated.
+    verbose : bool
+        Whether to print progress during the search and refinement.
 
     Returns
     -------
     AlignmentResult
-        Rotation matrix (3×3, zyx), translation in pixels (3,), NCC score, and
+        Rotation matrix (3x3, zyx), translation in pixels (3,), NCC score, and
         optionally translation in Angstroms.
     """
     if exhaustive_config is None:
@@ -90,7 +92,10 @@ def fit_map_in_map(
     result = candidates[0]
 
     if resolved_gradient is not None:
-        if resolved_gradient.pixel_size_angstroms is None and pixel_size_angstroms is not None:
+        if (
+            resolved_gradient.pixel_size_angstroms is None
+            and pixel_size_angstroms is not None
+        ):
             resolved_gradient = resolved_gradient.model_copy(
                 update={"pixel_size_angstroms": pixel_size_angstroms}
             )
@@ -122,12 +127,16 @@ def fit_map_in_map(
             r.rotation_matrix = r.rotation_matrix.to(reference_map.device)
             r.translation_pixels = r.translation_pixels.to(reference_map.device)
             if r.translation_angstroms is not None:
-                r.translation_angstroms = r.translation_angstroms.to(reference_map.device)
+                r.translation_angstroms = r.translation_angstroms.to(
+                    reference_map.device
+                )
             return r
 
         refined: list = []
         if verbose and n_start > 1:
-            pbar = tqdm(total=n_start, desc="Refining poses", unit="pose", dynamic_ncols=True)
+            pbar = tqdm(
+                total=n_start, desc="Refining poses", unit="pose", dynamic_ncols=True
+            )
         else:
             pbar = None
 
@@ -137,7 +146,9 @@ def fit_map_in_map(
 
             with ThreadPoolExecutor(max_workers=len(devices)) as executor:
                 futures = [
-                    executor.submit(_refine_worker, i, candidate, devices[i % len(devices)])
+                    executor.submit(
+                        _refine_worker, i, candidate, devices[i % len(devices)]
+                    )
                     for i, candidate in enumerate(candidates)
                 ]
                 for f in futures:
@@ -164,7 +175,7 @@ def fit_map_in_map(
 def apply_alignment(
     mobile: torch.Tensor,
     result: AlignmentResult,
-    interpolation: str = "trilinear",
+    interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> torch.Tensor:
     """Apply an :class:`AlignmentResult` transform to produce the aligned mobile volume.
 
@@ -204,7 +215,10 @@ def apply_alignment(
     # Combined: rotate around centre, then shift by t
     M_combined = M_rot @ T_t
     return affine_transform_image_3d(
-        mobile.float(), M_combined, interpolation=interpolation, zyx_matrices=True  # type: ignore[arg-type]
+        mobile.float(),
+        M_combined,
+        interpolation=interpolation,
+        zyx_matrices=True,  # type: ignore[arg-type]
     )
 
 
@@ -248,6 +262,8 @@ def fit_map_in_pdb(
         Refinement parameters.
     mask : torch.Tensor or None
         Optional ``(d, h, w)`` soft mask.
+    verbose : bool
+        Whether to print progress during the search and refinement.
 
     Returns
     -------
@@ -323,6 +339,8 @@ def fit_pdb_in_map(
         Refinement parameters.
     mask : torch.Tensor or None
         Optional ``(d, h, w)`` soft mask.
+    verbose : bool
+        Whether to print progress during the search and refinement.
 
     Returns
     -------

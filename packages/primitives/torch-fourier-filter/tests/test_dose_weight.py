@@ -14,9 +14,9 @@ def test_critical_exposure():
     fft_freq = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5])
     expected_output = torch.tensor([14.1383, 6.3823, 4.6287, 3.9365, 3.5869])
     output = critical_exposure(fft_freq)
-    assert torch.allclose(
-        output, expected_output, atol=1e-3
-    ), "critical_exposure output mismatch"
+    assert torch.allclose(output, expected_output, atol=1e-3), (
+        "critical_exposure output mismatch"
+    )
 
 
 def test_critical_exposure_bfactor():
@@ -24,9 +24,9 @@ def test_critical_exposure_bfactor():
     bfac = 1.0
     expected_output = torch.tensor([400.0, 100.0, 44.444, 25.0, 16.0])
     output = critical_exposure_bfactor(fft_freq, bfac)
-    assert torch.allclose(
-        output, expected_output, atol=1e-3
-    ), "critical_exposure_bfactor output mismatch"
+    assert torch.allclose(output, expected_output, atol=1e-3), (
+        "critical_exposure_bfactor output mismatch"
+    )
 
 
 def test_dose_weight_movie():
@@ -75,9 +75,9 @@ def test_dose_weight_movie():
     )
 
     # Results should be different due to voltage correction
-    assert not torch.allclose(
-        weighted_movie, weighted_movie_200kv
-    ), "200kV correction not applied"
+    assert not torch.allclose(weighted_movie, weighted_movie_200kv), (
+        "200kV correction not applied"
+    )
 
     # Test with 100kV voltage
     weighted_movie_100kv = dose_weight_movie(
@@ -92,9 +92,9 @@ def test_dose_weight_movie():
     )
 
     # Results should be different due to voltage correction
-    assert not torch.allclose(
-        weighted_movie, weighted_movie_100kv
-    ), "100kV correction not applied"
+    assert not torch.allclose(weighted_movie, weighted_movie_100kv), (
+        "100kV correction not applied"
+    )
 
     # Test with custom B-factor
     weighted_movie_bfactor = dose_weight_movie(
@@ -109,9 +109,9 @@ def test_dose_weight_movie():
     )
 
     # Results should be different with custom B-factor
-    assert not torch.allclose(
-        weighted_movie, weighted_movie_bfactor
-    ), "Custom B-factor not applied"
+    assert not torch.allclose(weighted_movie, weighted_movie_bfactor), (
+        "Custom B-factor not applied"
+    )
 
     # Test with full FFT (not rfft)
     movie_dft_full = torch.fft.fft2(real_frames)
@@ -125,9 +125,9 @@ def test_dose_weight_movie():
         device=device,
     )
 
-    assert (
-        weighted_movie_full.shape == movie_dft_full.shape
-    ), "Full FFT output shape mismatch"
+    assert weighted_movie_full.shape == movie_dft_full.shape, (
+        "Full FFT output shape mismatch"
+    )
 
     # Test device handling - movie on different device than specified
     if torch.cuda.is_available():
@@ -169,9 +169,9 @@ def test_dose_weight_movie():
         )
         raise AssertionError("Should have raised ValueError for invalid B-factor")
     except ValueError as e:
-        assert "B-factor must be positive" in str(
-            e
-        ), "Wrong error message for B-factor check"
+        assert "B-factor must be positive" in str(e), (
+            "Wrong error message for B-factor check"
+        )
 
 
 def test_dose_weight_frame_chunk_matches_dose_weight_movie():
@@ -290,9 +290,9 @@ def test_cumulative_dose_filter_3d():
 
     # Check if the values are within a reasonable range
     # TODO: Test these against known, static values rather than just range
-    assert torch.all(dose_filter >= 0) and torch.all(
-        dose_filter <= 1
-    ), "Dose filter values out of range"
+    assert torch.all(dose_filter >= 0) and torch.all(dose_filter <= 1), (
+        "Dose filter values out of range"
+    )
 
     # Test with different bfac values
     # TODO: Test these against known, static values rather than just range
@@ -307,9 +307,9 @@ def test_cumulative_dose_filter_3d():
             rfft=rfft,
             fftshift=fftshift,
         )
-        assert torch.all(dose_filter >= 0) and torch.all(
-            dose_filter <= 1
-        ), f"Dose filter values out of range for bfac={bfac}"
+        assert torch.all(dose_filter >= 0) and torch.all(dose_filter <= 1), (
+            f"Dose filter values out of range for bfac={bfac}"
+        )
 
 
 def test_memory_efficient_consistency():
@@ -352,9 +352,9 @@ def test_memory_efficient_consistency():
     )
 
     # Results should be identical
-    assert torch.allclose(
-        result_original, result_memory_efficient, atol=1e-6
-    ), "Memory-efficient method produces different results than original method"
+    assert torch.allclose(result_original, result_memory_efficient, atol=1e-6), (
+        "Memory-efficient method produces different results than original method"
+    )
 
     # Test with different voltage settings
     for voltage in [100.0, 200.0, 300.0]:
@@ -383,9 +383,9 @@ def test_memory_efficient_consistency():
             device=device,
         )
 
-        assert torch.allclose(
-            result_orig_voltage, result_mem_voltage, atol=1e-6
-        ), f"Memory-efficient method differs from original for voltage={voltage}"
+        assert torch.allclose(result_orig_voltage, result_mem_voltage, atol=1e-6), (
+            f"Memory-efficient method differs from original for voltage={voltage}"
+        )
 
     # Test with different chunk sizes to ensure chunking works correctly
     for chunk_size in [1, 2, 5, 8]:
@@ -401,6 +401,6 @@ def test_memory_efficient_consistency():
             device=device,
         )
 
-        assert torch.allclose(
-            result_original, result_chunked, atol=1e-6
-        ), f"Memory-efficient method differs with chunk_size={chunk_size}"
+        assert torch.allclose(result_original, result_chunked, atol=1e-6), (
+            f"Memory-efficient method differs with chunk_size={chunk_size}"
+        )

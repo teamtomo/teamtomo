@@ -32,7 +32,9 @@ def find_package_path(package_name: str) -> Path:
     """Find the workspace directory for a given package name."""
     packages = get_all_packages()
     if package_name not in packages:
-        print(f"ERROR: Package '{package_name}' not found in workspace", file=sys.stderr)
+        print(
+            f"ERROR: Package '{package_name}' not found in workspace", file=sys.stderr
+        )
         print(f"Available packages: {', '.join(packages.keys())}", file=sys.stderr)
         sys.exit(1)
     return packages[package_name]

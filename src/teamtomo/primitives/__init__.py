@@ -4,82 +4,82 @@
 try:
     import torch_affine_utils
 except ImportError:
-    torch_affine_utils = None
+    torch_affine_utils = None  # type: ignore[assignment]
 
 try:
     import torch_ctf
 except ImportError:
-    torch_ctf = None
+    torch_ctf = None  # type: ignore[assignment]
 
 try:
     import torch_cubic_spline_grids
 except ImportError:
-    torch_cubic_spline_grids = None
+    torch_cubic_spline_grids = None  # type: ignore[assignment]
 
 try:
     import torch_find_peaks
 except ImportError:
-    torch_find_peaks = None
+    torch_find_peaks = None  # type: ignore[assignment]
 
 try:
     import torch_fourier_filter
 except ImportError:
-    torch_fourier_filter = None
+    torch_fourier_filter = None  # type: ignore[assignment]
 
 try:
     import torch_fourier_rescale
 except ImportError:
-    torch_fourier_rescale = None
+    torch_fourier_rescale = None  # type: ignore[assignment]
 
 try:
     import torch_fourier_shell_correlation
 except ImportError:
-    torch_fourier_shell_correlation = None
+    torch_fourier_shell_correlation = None  # type: ignore[assignment]
 
 try:
     import torch_fourier_shift
 except ImportError:
-    torch_fourier_shift = None
+    torch_fourier_shift = None  # type: ignore[assignment]
 
 try:
     import torch_fourier_slice
 except ImportError:
-    torch_fourier_slice = None
+    torch_fourier_slice = None  # type: ignore[assignment]
 
 try:
     import torch_grid_utils
 except ImportError:
-    torch_grid_utils = None
+    torch_grid_utils = None  # type: ignore[assignment]
 
 try:
     import torch_image_interpolation
 except ImportError:
-    torch_image_interpolation = None
+    torch_image_interpolation = None  # type: ignore[assignment]
 
 try:
     import torch_scattering
 except ImportError:
-    torch_scattering = None
+    torch_scattering = None  # type: ignore[assignment]
 
 try:
     import torch_so3
 except ImportError:
-    torch_so3 = None
+    torch_so3 = None  # type: ignore[assignment]
 
 try:
     import torch_subpixel_crop
 except ImportError:
-    torch_subpixel_crop = None
+    torch_subpixel_crop = None  # type: ignore[assignment]
 
 try:
     import torch_transform_image
 except ImportError:
-    torch_transform_image = None
+    torch_transform_image = None  # type: ignore[assignment]
 
 try:
     import torch_tilt_series
 except ImportError:
-    torch_tilt_series = None
+    torch_tilt_series = None  # type: ignore[assignment]
 
 __all__ = [
     "torch_affine_utils",

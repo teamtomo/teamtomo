@@ -50,7 +50,7 @@ def tiltxcorr_no_stretch(
     idx_positive = torch.arange(transition_idx, b, device=tilt_series.device)
     idx_negative = torch.arange(0, transition_idx + 1, device=tilt_series.device)
 
-    # process positive branch: from least positive -> most positive (ascending abs angles)
+    # process positive branch: least positive -> most positive (ascending abs)
     positive_branch_shifts = _find_shifts_for_branch_no_stretch(
         tilt_series=sorted_tilt_series[idx_positive]
     )

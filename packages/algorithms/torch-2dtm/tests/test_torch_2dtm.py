@@ -22,7 +22,7 @@ def test_template_match_dft_2d():
         special_ortho_group.rvs(size=num_orientations, dim=3), dtype=torch.float32
     )
 
-    # 4. Create an arbitrary stack of Fourier space filters (identity filter in this example)
+    # 4. Create an arbitrary stack of Fourier space filters (identity filter here)
     # These filters operate on rffts of the 2D projection images
     # Filter shape: (..., h, w // 2 + 1)
     filters_shape = (5, 4, 3, template_size[0], template_size[1] // 2 + 1)

@@ -26,13 +26,13 @@ def transform_atoms(
     converts back to Angstroms:
 
     1. Atom Å → simulation voxels:
-       ``p_sim = (atom_Å_zyx − centroid_Å_zyx + box_centre_sim_Å) / pixel_size``
+       ``p_sim = (atom_Å_zyx - centroid_Å_zyx + box_centre_sim_Å) / pixel_size``
     2. Simulation voxels → cropped-box voxels (accounts for ``crop_or_pad_to_shape``):
-       ``p_mob = p_sim − crop_start_zyx``
+       ``p_mob = p_sim - crop_start_zyx``
     3. Apply alignment (rotation around box centre, then translate):
-       ``p_ref = R⁻¹ @ (p_mob − c) + c + t``
+       ``p_ref = R⁻¹ @ (p_mob - c) + c + t``
     4. Reference voxels → Å (adds MRC origin):
-       ``atom_ref_Å = p_ref × pixel_size + origin_Å``
+       ``atom_ref_Å = p_ref x pixel_size + origin_Å``
 
     Parameters
     ----------
@@ -88,11 +88,11 @@ def transform_atoms(
     origin_zyx = np.array([ref_origin_xyz[2], ref_origin_xyz[1], ref_origin_xyz[0]])
 
     R_inv = result.rotation_matrix.detach().cpu().numpy().T  # R orthogonal → R⁻¹ = Rᵀ
-    t = result.translation_pixels.detach().cpu().numpy()     # (3,) zyx
+    t = result.translation_pixels.detach().cpu().numpy()  # (3,) zyx
 
     # Atoms in ZYX Å; centroid over all atoms (same centroid used by the simulator)
     coords_zyx = atoms[["z", "y", "x"]].to_numpy(dtype=float)  # (N, 3) zyx
-    centroid_zyx = coords_zyx.mean(axis=0)                     # (3,) zyx, Å
+    centroid_zyx = coords_zyx.mean(axis=0)  # (3,) zyx, Å
 
     # Step 1: atom Å → simulation voxel space
     p_sim_vox = (coords_zyx - centroid_zyx + box_centre_sim_A) / pixel_size

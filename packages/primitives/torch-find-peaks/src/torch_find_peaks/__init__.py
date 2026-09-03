@@ -1,4 +1,4 @@
-"""Peak finding and fitting using torch"""
+"""Peak finding and fitting using torch."""
 
 from importlib.metadata import PackageNotFoundError, version
 

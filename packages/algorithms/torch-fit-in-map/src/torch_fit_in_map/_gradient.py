@@ -32,8 +32,8 @@ def _axis_angle_to_rotation_matrix_xyz(v: torch.Tensor) -> torch.Tensor:
             torch.stack([-k[1], k[0], torch.zeros_like(k[2])]),
         ]
     )  # (3, 3)
-    I = torch.eye(3, dtype=v.dtype, device=v.device)
-    return I + torch.sin(theta) * K + (1 - torch.cos(theta)) * (K @ K)
+    identity = torch.eye(3, dtype=v.dtype, device=v.device)
+    return identity + torch.sin(theta) * K + (1 - torch.cos(theta)) * (K @ K)
 
 
 def _rotation_matrix_xyz_to_axis_angle(R: torch.Tensor) -> torch.Tensor:
@@ -43,15 +43,14 @@ def _rotation_matrix_xyz_to_axis_angle(R: torch.Tensor) -> torch.Tensor:
     theta = torch.acos(cos_theta)
     if theta.abs() < 1e-6:
         return torch.zeros(3, dtype=R.dtype, device=R.device)
-    axis = (
-        torch.stack([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]])
-        / (2.0 * torch.sin(theta))
+    axis = torch.stack([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (
+        2.0 * torch.sin(theta)
     )
     return axis * theta
 
 
 def _flip_3x3(M: torch.Tensor) -> torch.Tensor:
-    """Convert between xyz and zyx 3×3 rotation matrices by flipping."""
+    """Convert between xyz and zyx 3x3 rotation matrices by flipping."""
     return torch.flip(M, dims=(-2, -1))
 
 
@@ -93,7 +92,9 @@ def _transform_volume(
 
     d, h, w = volume.shape
     with torch.no_grad():
-        grid = coordinate_grid(image_shape=(d, h, w), device=volume.device)  # (d, h, w, 3)
+        grid = coordinate_grid(
+            image_shape=(d, h, w), device=volume.device
+        )  # (d, h, w, 3)
 
     # Convention: output[p] = volume[R_zyx @ (p - t - c) + c]
     # Matches exhaustive search and apply_alignment: rotate around c, then shift by t.
@@ -126,9 +127,7 @@ def _ncc_loss(
     b_mean = b.sum() / n
     ac = a - a_mean
     bc = b - b_mean
-    ncc = (ac * bc).sum() / (
-        torch.sqrt((ac**2).sum() * (bc**2).sum() + 1e-8)
-    )
+    ncc = (ac * bc).sum() / (torch.sqrt((ac**2).sum() * (bc**2).sum() + 1e-8))
     return -ncc
 
 
@@ -176,11 +175,13 @@ def gradient_refine(
         Optimisation parameters.
     mask : torch.Tensor or None
         Optional ``(d, h, w)`` soft mask.
+    verbose : bool
+        Whether to print progress during optimisation.
 
     Returns
     -------
     AlignmentResult
-        Refined rotation matrix (3×3, zyx), translation in pixels (3,), and
+        Refined rotation matrix (3x3, zyx), translation in pixels (3,), and
         final NCC score.
     """
     if config is None:
@@ -217,7 +218,8 @@ def gradient_refine(
             line_search_fn="strong_wolfe",
         )
     else:
-        # Adam default lr is usually 1e-2; if user kept 1.0 (LBFGS default), it might be too high
+        # Adam default lr is usually 1e-2; if user kept 1.0 (LBFGS default), it
+        # might be too high
         lr = config.learning_rate
         if config.learning_rate == 1.0 and config.optimizer == "adam":
             lr = 1e-2
@@ -265,7 +267,7 @@ def gradient_refine(
         R_xyz_final = _axis_angle_to_rotation_matrix_xyz(v_param)
         transformed_final = _transform_volume(mob_norm, R_xyz_final, t_param, centre)
         final_loss = float(loss_fn(ref_norm, transformed_final, mask).item())
-        final_score = -final_loss if config.loss == "ncc" else -final_loss
+        final_score = -final_loss
 
         R_zyx_final = _flip_3x3(R_xyz_final)
         t_final = t_param.data.clone()

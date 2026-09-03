@@ -1,10 +1,10 @@
-import torch
 import pytest
+import torch
 
 from torch_grid_utils.shapes_2d import circle, rectangle, square, wedge
 
+dims = [5, (5,) * 2]
 
-dims = [5, (5, ) * 2]
 
 @pytest.mark.parametrize("image_shape", dims)
 def test_circle(image_shape):
@@ -25,6 +25,7 @@ def test_square(image_shape):
     # Test basic square creation
     result = square(sidelength=3.0, image_shape=image_shape)
     assert isinstance(result, torch.Tensor)
+
 
 @pytest.mark.parametrize("image_shape", dims)
 def test_wedge(image_shape):

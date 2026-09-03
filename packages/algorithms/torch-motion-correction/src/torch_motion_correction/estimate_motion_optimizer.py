@@ -92,7 +92,7 @@ def _prepare_patch_state(
     patch_shape = patch_sampling.patch_shape
     ph, pw = patch_shape
 
-    t, h, w = image.shape
+    _t, h, w = image.shape
     hl, hu = int(0.25 * h), int(0.75 * h)
     wl, wu = int(0.25 * w), int(0.75 * w)
     norm_std, norm_mean = torch.std_mean(image[:, hl:hu, wl:wu], dim=(-3, -2, -1))

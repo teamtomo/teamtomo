@@ -1,6 +1,6 @@
 """Fourier shell correlation between two 2D or 3D images."""
 
-from typing import Sequence
+from typing import Sequence, cast
 
 import torch
 from torch_grid_utils import fftfreq_grid
@@ -127,7 +127,7 @@ def fourier_correlation(
 
     # Compute frequency grid and prepare FFT data
     frequency_grid = fftfreq_grid(
-        image_shape=image_shape,
+        image_shape=cast("tuple[int, int] | tuple[int, int, int]", tuple(image_shape)),
         rfft=rfft,
         fftshift=False,
         norm=True,

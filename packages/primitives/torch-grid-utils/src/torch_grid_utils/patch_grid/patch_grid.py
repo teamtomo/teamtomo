@@ -43,15 +43,15 @@ def patch_grid(
     if ndim == 2:
         patches, patch_centers = _patch_grid_2d(
             images=images,
-            patch_shape=cast(tuple[int, int], patch_shape),
-            patch_step=cast(tuple[int, int], patch_step),
+            patch_shape=cast("tuple[int, int]", patch_shape),
+            patch_step=cast("tuple[int, int]", patch_step),
             distribute_patches=distribute_patches,
         )
     elif ndim == 3:
         patches, patch_centers = _patch_grid_3d(
             images=images,
-            patch_shape=cast(tuple[int, int, int], patch_shape),
-            patch_step=cast(tuple[int, int, int], patch_step),
+            patch_shape=cast("tuple[int, int, int]", patch_shape),
+            patch_step=cast("tuple[int, int, int]", patch_step),
             distribute_patches=distribute_patches,
         )
     else:
@@ -100,7 +100,7 @@ def _patch_grid_2d(
         distribute_patches=distribute_patches,
         device=images.device,
     )
-    patch_idx_h, patch_idx_w = cast(tuple[torch.Tensor, torch.Tensor], indices_result)
+    patch_idx_h, patch_idx_w = cast("tuple[torch.Tensor, torch.Tensor]", indices_result)
     patches = images[..., patch_idx_h, patch_idx_w]
     return patches, patch_centers
 
@@ -147,7 +147,7 @@ def _patch_grid_3d(
         device=images.device,
     )
     patch_idx_d, patch_idx_h, patch_idx_w = cast(
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor], indices_result
+        "tuple[torch.Tensor, torch.Tensor, torch.Tensor]", indices_result
     )
     patches = images[..., patch_idx_d, patch_idx_h, patch_idx_w]
     return patches, patch_centers
@@ -208,7 +208,7 @@ class LazyPatchGrid:
                 device=images.device,
             )
             self.patch_idx_h, self.patch_idx_w = cast(
-                tuple[torch.Tensor, torch.Tensor], indices_result
+                "tuple[torch.Tensor, torch.Tensor]", indices_result
             )
 
             # Store grid dimensions
@@ -231,7 +231,7 @@ class LazyPatchGrid:
                 device=images.device,
             )
             self.patch_idx_d, self.patch_idx_h, self.patch_idx_w = cast(
-                tuple[torch.Tensor, torch.Tensor, torch.Tensor], indices_result
+                "tuple[torch.Tensor, torch.Tensor, torch.Tensor]", indices_result
             )
 
             # Store grid dimensions
@@ -420,7 +420,7 @@ class LazyPatchGrid:
         # (gd, 1, 1, pd, 1, 1), (1, gh, 1, 1, ph, 1), etc.
 
         # Build the indexing arrays properly
-        gd, gh, gw = self.grid_shape
+        _gd, _gh, _gw = self.grid_shape
 
         # Handle the complex indexing by creating the right selection
         if isinstance(gd_key, torch.Tensor):
@@ -502,7 +502,7 @@ class LazyPatchGrid:
             patches_list = []
             centers_list = []
 
-            patch_shape_2d = cast(tuple[int, int], self.patch_shape)
+            patch_shape_2d = cast("tuple[int, int]", self.patch_shape)
             ph, pw = patch_shape_2d
 
             for i in range(n_patches):
@@ -537,7 +537,7 @@ class LazyPatchGrid:
             patches_list = []
             centers_list = []
 
-            patch_shape_3d = cast(tuple[int, int, int], self.patch_shape)
+            patch_shape_3d = cast("tuple[int, int, int]", self.patch_shape)
             pd, ph, pw = patch_shape_3d
 
             for i in range(n_patches):
@@ -613,7 +613,7 @@ class LazyPatchGrid:
             patches_list = []
             centers_list = []
 
-            patch_shape_2d = cast(tuple[int, int], self.patch_shape)
+            patch_shape_2d = cast("tuple[int, int]", self.patch_shape)
             ph, pw = patch_shape_2d
 
             for i in range(len(idx_gh)):
@@ -647,7 +647,7 @@ class LazyPatchGrid:
             patches_list = []
             centers_list = []
 
-            patch_shape_3d = cast(tuple[int, int, int], self.patch_shape)
+            patch_shape_3d = cast("tuple[int, int, int]", self.patch_shape)
             pd, ph, pw = patch_shape_3d
 
             for i in range(len(idx_gh)):

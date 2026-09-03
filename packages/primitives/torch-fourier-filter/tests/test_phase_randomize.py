@@ -117,7 +117,10 @@ def _max_circular_nn_distance(a: torch.Tensor, b: torch.Tensor) -> float:
     and cyclically shift every other bin's sorted rank, producing a large
     spurious diff. Nearest-neighbor circular distance sidesteps that.
     """
-    circular_diff = torch.remainder(a.unsqueeze(1) - b.unsqueeze(0) + math.pi, 2 * math.pi) - math.pi
+    circular_diff = (
+        torch.remainder(a.unsqueeze(1) - b.unsqueeze(0) + math.pi, 2 * math.pi)
+        - math.pi
+    )
     dist = circular_diff.abs()
     return max(dist.min(dim=1).values.max().item(), dist.min(dim=0).values.max().item())
 

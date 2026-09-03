@@ -154,5 +154,6 @@ def test_tiltxcorr_shift_estimation(shift_magnitude: float, max_error: float):
         f"Shift estimation failed:\n"
         f"  Shift magnitude: {shift_magnitude} pixels\n"
         f"  Max error: {error:.3f} pixels (max allowed: {max_error} pixels)\n"
-        f"  Mean error: {torch.abs(estimated_shifts - ground_truth_shifts).mean():.3f} pixels"
+        f"  Mean error: "
+        f"{torch.abs(estimated_shifts - ground_truth_shifts).mean():.3f} pixels"
     )

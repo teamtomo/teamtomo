@@ -14,23 +14,26 @@ def test_refine_peaks_2d_basic():
     # peak_coords in [y, x] order
     fitted_params = refine_peaks_2d(
         data,
-        peak_coords=torch.tensor([[45, 49],[30, 30]], dtype=torch.float32),
+        peak_coords=torch.tensor([[45, 49], [30, 30]], dtype=torch.float32),
         boxsize=20,
         max_iterations=500,
         learning_rate=0.05,
         tolerance=1e-8,
     )
-    
+
     # Check that we found the correct number of peaks
     assert len(fitted_params) == len(peaks)
 
     assert torch.allclose(fitted_params[0], peaks[0], atol=1e-1)
     assert torch.allclose(fitted_params[1], peaks[1], atol=1e-1)
 
+
 def test_refine_peaks_3d_basic():
     """Test basic functionality of 3D Gaussian fitting."""
     # Create test peaks with parameters [amplitude, z, y, x, sigma_z, sigma_y, sigma_x]
-    peaks = torch.tensor([[4, 47, 50, 49, 5, 5, 5], [1, 32, 30, 28, 2, 2, 2]], dtype=torch.float32)
+    peaks = torch.tensor(
+        [[4, 47, 50, 49, 5, 5, 5], [1, 32, 30, 28, 2, 2, 2]], dtype=torch.float32
+    )
     data = create_test_volume(size=100, peaks=peaks, noise_level=0.05)
 
     # Fit Gaussians to the peaks

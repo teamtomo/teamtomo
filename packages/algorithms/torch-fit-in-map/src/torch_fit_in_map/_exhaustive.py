@@ -14,10 +14,14 @@ from torch_so3 import get_symmetry_ranges, get_uniform_euler_angles
 from tqdm import tqdm
 
 from ._config import ExhaustiveSearchConfig
+from ._preprocess import _normalise_volume
+from ._result import AlignmentResult
 
 
 def _parse_symmetry(sym: str) -> tuple[str, int]:
-    """Parse a point-group string like ``"C4"``, ``"D2"``, ``"T"`` into ``(group, order)``.
+    """Parse a point-group string into ``(group, order)``.
+
+    Accepts strings like ``"C4"``, ``"D2"``, ``"T"``.
 
     Raises ``ValueError`` for unrecognised strings.
     """
@@ -39,8 +43,6 @@ def _parse_symmetry(sym: str) -> tuple[str, int]:
     if order < 1:
         raise ValueError(f"Symmetry order must be >= 1, got {order}.")
     return sym[0], order
-from ._preprocess import _normalise_volume
-from ._result import AlignmentResult
 
 
 def _euler_zyz_to_4x4_zyx(
@@ -155,7 +157,12 @@ def _exhaustive_topk(
 
     from concurrent.futures import ThreadPoolExecutor
 
-    def _worker(device_str: str, M_rot_chunk: torch.Tensor, R3_chunk: torch.Tensor, pbar_shared=None):
+    def _worker(
+        device_str: str,
+        M_rot_chunk: torch.Tensor,
+        R3_chunk: torch.Tensor,
+        pbar_shared=None,
+    ):
         dev = torch.device(device_str)
         ref_norm_dev = _normalise_volume(reference.float(), mask).to(dev)
         mob_norm_dev = _normalise_volume(mobile.float(), mask).to(dev)
@@ -180,7 +187,9 @@ def _exhaustive_topk(
             batch_M = M_rot_chunk[batch_start : batch_start + batch_size]
             batch_R3 = R3_chunk[batch_start : batch_start + batch_size]
 
-            rotated_batch = _batch_rotate_volume(mob_norm_dev, batch_M, grid_flat_dev, (d, h, w))
+            rotated_batch = _batch_rotate_volume(
+                mob_norm_dev, batch_M, grid_flat_dev, (d, h, w)
+            )
             if mask_dev is not None:
                 rotated_batch = rotated_batch * mask_dev.unsqueeze(0)
 
@@ -209,12 +218,17 @@ def _exhaustive_topk(
                 pbar_shared.update(1)
 
         # Move tensors back to reference device or CPU before returning
-        return [(s, c, r.to(reference.device), t.to(reference.device)) for s, c, r, t in heap]
+        return [
+            (s, c, r.to(reference.device), t.to(reference.device))
+            for s, c, r, t in heap
+        ]
 
     n_batches = math.ceil(n_rotations / config.rotation_batch_size)
     pbar = tqdm(
         total=n_batches,
-        desc=f"Exhaustive search ({len(devices)} GPUs)" if len(devices) > 1 else "Exhaustive search",
+        desc=f"Exhaustive search ({len(devices)} GPUs)"
+        if len(devices) > 1
+        else "Exhaustive search",
         unit="batch",
         dynamic_ncols=True,
         disable=not verbose,
@@ -252,7 +266,9 @@ def _exhaustive_topk(
 
     results = []
     for score, _c, R3_i, t_i in final_heap:
-        t_ang = t_i * config.pixel_size_angstroms if config.pixel_size_angstroms else None
+        t_ang = (
+            t_i * config.pixel_size_angstroms if config.pixel_size_angstroms else None
+        )
         results.append(
             AlignmentResult(
                 rotation_matrix=R3_i,
@@ -291,11 +307,13 @@ def exhaustive_search(
     mask : torch.Tensor or None
         Optional ``(d, h, w)`` soft mask in ``[0, 1]`` applied to both
         volumes before scoring.
+    verbose : bool
+        Whether to print progress during the search.
 
     Returns
     -------
     AlignmentResult
-        Best rotation matrix (3×3, zyx), translation in pixels (3,), and NCC
+        Best rotation matrix (3x3, zyx), translation in pixels (3,), and NCC
         peak score.
     """
     if config is None:

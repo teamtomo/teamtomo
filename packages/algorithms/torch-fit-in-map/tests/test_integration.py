@@ -7,7 +7,7 @@ Convention note
 
 So ``fit_map_in_map(apply_alignment(ref, (R_p, t_p)), ref)`` returns
     R_pred  ≈  R_p^T        (inverse rotation)
-    t_pred  ≈  −R_p @ t_p  (inverse translation)
+    t_pred  ≈  -R_p @ t_p  (inverse translation)
 """
 
 from __future__ import annotations
@@ -16,17 +16,20 @@ import gzip
 import math
 import shutil
 import urllib.request
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
 import pytest
 import torch
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pandas as pd
+
 # ── download targets ──────────────────────────────────────────────────────────
 _EMD_URL = (
-    "https://ftp.ebi.ac.uk/pub/databases/emdb/structures/"
-    "EMD-39549/map/emd_39549.map.gz"
+    "https://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-39549/map/emd_39549.map.gz"
 )
 _PDB_URL = "https://files.rcsb.org/download/8YRQ.pdb"
 
@@ -35,6 +38,7 @@ _MAX_BOX = 64
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _load_mrc(path: Path) -> tuple[torch.Tensor, float]:
     import mrcfile  # type: ignore[import]
@@ -58,9 +62,7 @@ def _rotation_z_zyx(angle_deg: float) -> torch.Tensor:
     a = math.radians(angle_deg)
     c, s = math.cos(a), math.sin(a)
     return torch.tensor(
-        [[1.0, 0.0, 0.0],
-         [0.0,  c,   s ],
-         [0.0, -s,   c ]],
+        [[1.0, 0.0, 0.0], [0.0, c, s], [0.0, -s, c]],
         dtype=torch.float32,
     )
 
@@ -115,6 +117,7 @@ class _GaussianCaSimulator:
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def emdb_map(tmp_path_factory):
     """Download EMD-39549 once per test module into /tmp."""
@@ -138,6 +141,7 @@ def pdb_8yrq(tmp_path_factory):
 
 # ── tests ─────────────────────────────────────────────────────────────────────
 
+
 def _run_map_alignment_recovery(
     emdb_map: Path,
     angle_deg: float,
@@ -151,7 +155,7 @@ def _run_map_alignment_recovery(
     (Å along Z), runs ``fit_map_in_map``, and asserts recovery within 0.5°/0.5Å.
 
     Under the pull convention ``apply_alignment(ref, (R_p, t_p))`` produces
-    a mobile whose true inverse is R_p^T / −R_p@t_p.
+    a mobile whose true inverse is R_p^T / -R_p@t_p.
     """
     from torch_fit_in_map import (
         AlignmentResult,
@@ -250,7 +254,7 @@ def test_map_alignment_large_shift(emdb_map):
 
 @pytest.mark.slow
 def test_pdb_in_map_recovery(pdb_8yrq):
-    """Simulate 8YRQ density, perturb the reference, recover placement within 0.5 Å / 0.5°.
+    """Simulate 8YRQ density, perturb, recover placement within 0.5 Angstrom / 0.5 deg.
 
     Uses ``fit_pdb_in_map`` with a custom Gaussian CA-atom simulator so that
     no ``espcalculator`` installation is required.  The PDB is re-simulated
@@ -272,7 +276,7 @@ def test_pdb_in_map_recovery(pdb_8yrq):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     sim = _GaussianCaSimulator()
-    pixel_size = 2.0   # Å — coarse enough for speed, fine enough for 0.5 Å tolerance
+    pixel_size = 2.0  # Å — coarse enough for speed, fine enough for 0.5 Å tolerance
     box_size = _MAX_BOX
 
     atoms = mmdf.read(str(pdb_8yrq))
@@ -282,7 +286,7 @@ def test_pdb_in_map_recovery(pdb_8yrq):
 
     # ── perturbation ──────────────────────────────────────────────────────────
     R_perturb = _rotation_z_zyx(5.0).to(device)
-    t_px = 2.0 / pixel_size           # 2 Å in voxels
+    t_px = 2.0 / pixel_size  # 2 Å in voxels
     t_perturb = torch.tensor([t_px, 0.0, 0.0], dtype=torch.float32, device=device)
 
     # Perturb the reference density — fit_pdb_in_map will re-simulate the PDB

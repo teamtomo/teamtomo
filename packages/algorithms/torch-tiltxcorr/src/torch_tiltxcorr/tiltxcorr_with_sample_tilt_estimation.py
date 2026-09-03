@@ -24,8 +24,7 @@ def tiltxcorr_with_sample_tilt_estimation(
     sample_tilt_range: tuple[float, float] = (-30.0, 30.0),  # search range in degrees
     max_iter: int = 10,  # max iterations for Brent's method
 ) -> tuple[torch.Tensor, float]:  # (b, 2) yx shifts and optimal sample tilt
-    """
-    Estimate stage shifts and sample tilt by maximizing sum of inter-image tilted cross correlations.
+    """Estimate stage shifts and sample tilt by maximizing tilted cross correlations.
 
     The sample tilt estimate represents sample tilt about the stage in the microscope.
     E.g. if the sample is physically tilted +5°, then at nominal 0° the beam
@@ -155,7 +154,7 @@ def _compute_shifts_with_sample_tilt(
     idx_positive = torch.arange(transition_idx, b, device=tilt_series.device)
     idx_negative = torch.arange(0, transition_idx + 1, device=tilt_series.device)
 
-    # process positive branch: from least positive -> most positive (ascending abs angles)
+    # process positive branch: least positive -> most positive (ascending abs)
     positive_branch_shifts, positive_correlation = _find_shifts_for_branch(
         tilt_series=sorted_tilt_series[idx_positive],
         tilt_angles=true_tilt_angles[idx_positive],

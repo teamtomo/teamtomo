@@ -1,20 +1,21 @@
+"""Detect local maxima (peaks) in 2D/3D images."""
+
+from typing import Literal, Union
+
 import einops
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
-from typing import Any, Union, Literal
-import numpy as np 
-import pandas as pd
 
 
 def _find_peaks_2d_torch(
-        image: torch.Tensor,
-        min_distance: int = 1,
-        threshold_abs: float = 0.0,
-        exclude_border: int = 0,
+    image: torch.Tensor,
+    min_distance: int = 1,
+    threshold_abs: float = 0.0,
+    exclude_border: int = 0,
 ) -> torch.Tensor:
-    """
-    Internal function to find local peaks in a 2D tensor.
-    """
+    """Internal function to find local peaks in a 2D tensor."""
     image = einops.rearrange(image, "h w -> 1 1 h w")
     mask = F.max_pool2d(
         image,
@@ -37,11 +38,11 @@ def _find_peaks_2d_torch(
 
 
 def find_peaks_2d(
-        image: Union[torch.Tensor, np.ndarray], 
-        min_distance: int = 1,
-        threshold_abs: float = 0.0,
-        exclude_border: int = 0,
-        return_as: Literal["torch","numpy","dataframe"] = "torch",
+    image: Union[torch.Tensor, np.ndarray],
+    min_distance: int = 1,
+    threshold_abs: float = 0.0,
+    exclude_border: int = 0,
+    return_as: Literal["torch", "numpy", "dataframe"] = "torch",
 ) -> torch.Tensor:
     """
     Find local peaks in a 2D image.
@@ -93,11 +94,12 @@ def find_peaks_2d(
         except Exception as e:
             raise TypeError(
                 f"Input type {type(image)} not supported or conversion failed: {e}"
-            )
+            ) from e
 
     if image_tensor.ndim != 2:
         raise ValueError(
-            f"Input image must be 2-dimensional, but got {image_tensor.ndim} dimensions."
+            f"Input image must be 2-dimensional, but got {image_tensor.ndim} "
+            "dimensions."
         )
 
     found_peaks, heights = _find_peaks_2d_torch(
@@ -115,20 +117,19 @@ def find_peaks_2d(
         # Use einops.pack to properly handle tensors with different dimensions
         # First tensor has shape [N, 2], second has shape [N]
         # We're packing them along the second dimension (dim=1)
-        packed, _ = einops.pack([found_peaks, heights], 'n *')
+        packed, _ = einops.pack([found_peaks, heights], "n *")
         return pd.DataFrame(packed.cpu(), columns=["y", "x", "height"])
     else:
         raise ValueError(f"Invalid return_as value: {return_as}")
 
+
 def _find_peaks_3d_torch(
-        volume: torch.Tensor,
-        min_distance: int = 1,
-        threshold_abs: float = 0.0,
-        exclude_border: int = 0,
+    volume: torch.Tensor,
+    min_distance: int = 1,
+    threshold_abs: float = 0.0,
+    exclude_border: int = 0,
 ) -> torch.Tensor:
-    """
-    Internal function to find local peaks in a 3D tensor.
-    """
+    """Internal function to find local peaks in a 3D tensor."""
     volume = einops.rearrange(volume, "d h w -> 1 1 d h w")
     mask = F.max_pool3d(
         volume,
@@ -149,15 +150,15 @@ def _find_peaks_3d_torch(
 
     coords = torch.nonzero(mask, as_tuple=False)
     heights = volume[mask]
-    return coords, heights  
+    return coords, heights
 
 
 def find_peaks_3d(
-        volume: Union[torch.Tensor, np.ndarray], 
-        min_distance: int = 1,
-        threshold_abs: float = 0.0,
-        exclude_border: int = 0,
-        return_as: Literal["torch","numpy","dataframe"] = "torch",
+    volume: Union[torch.Tensor, np.ndarray],
+    min_distance: int = 1,
+    threshold_abs: float = 0.0,
+    exclude_border: int = 0,
+    return_as: Literal["torch", "numpy", "dataframe"] = "torch",
 ) -> torch.Tensor:
     """
     Find local peaks in a 3D volume.
@@ -205,11 +206,12 @@ def find_peaks_3d(
         except Exception as e:
             raise TypeError(
                 f"Input type {type(volume)} not supported or conversion failed: {e}"
-            )
+            ) from e
 
     if volume_tensor.ndim != 3:
         raise ValueError(
-            f"Input volume must be 3-dimensional, but got {volume_tensor.ndim} dimensions."
+            f"Input volume must be 3-dimensional, but got {volume_tensor.ndim} "
+            "dimensions."
         )
 
     found_peaks, heights = _find_peaks_3d_torch(
@@ -227,7 +229,7 @@ def find_peaks_3d(
         # Use einops.pack to properly handle tensors with different dimensions
         # First tensor has shape [N, 3], second has shape [N]
         # We're packing them along the second dimension (dim=1)
-        packed, _ = einops.pack([found_peaks, heights], 'n *')
+        packed, _ = einops.pack([found_peaks, heights], "n *")
         return pd.DataFrame(packed.cpu(), columns=["z", "y", "x", "height"])
     else:
         raise ValueError(f"Invalid return_as value: {return_as}")

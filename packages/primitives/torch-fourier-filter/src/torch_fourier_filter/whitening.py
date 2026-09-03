@@ -1,6 +1,6 @@
 """Noise whitening functions."""
 
-from typing import Optional
+from typing import Optional, cast
 
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
@@ -131,7 +131,7 @@ def power_spectral_density(
 
     # Construct FFT frequency grid
     freq_grid = fftfreq_grid(
-        image_shape=real_space_shape,
+        image_shape=cast("tuple[int, int] | tuple[int, int, int]", real_space_shape),
         rfft=rfft,
         fftshift=fftshift,
         norm=True,
@@ -270,7 +270,7 @@ def whitening_filter(
     # )
 
     freq_grid = fftfreq_grid(
-        image_shape=output_shape,
+        image_shape=cast("tuple[int, int] | tuple[int, int, int]", output_shape),
         rfft=output_rfft,
         fftshift=output_fftshift,
         norm=True,

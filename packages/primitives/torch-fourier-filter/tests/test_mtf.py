@@ -20,9 +20,9 @@ def test_make_mtf_grid():
     )
 
     # Test if the MTF grid values are within the expected range
-    assert torch.all(mtf_grid_2d >= 0) and torch.all(
-        mtf_grid_2d <= 1
-    ), "MTF grid values out of range for 2D input"
-    assert torch.all(mtf_grid_3d >= 0) and torch.all(
-        mtf_grid_3d <= 1
-    ), "MTF grid values out of range for 3D input"
+    assert torch.all(mtf_grid_2d >= 0) and torch.all(mtf_grid_2d <= 1), (
+        "MTF grid values out of range for 2D input"
+    )
+    assert torch.all(mtf_grid_3d >= 0) and torch.all(mtf_grid_3d <= 1), (
+        "MTF grid values out of range for 3D input"
+    )

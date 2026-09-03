@@ -15,4 +15,4 @@ def homogenise_coordinates(coords: torch.Tensor) -> torch.Tensor:
     output: torch.Tensor
         `(..., d+1)` array of homogenous coordinates
     """
-    return F.pad(torch.as_tensor(coords), pad=(0, 1), mode='constant', value=1)
+    return F.pad(torch.as_tensor(coords), pad=(0, 1), mode="constant", value=1)

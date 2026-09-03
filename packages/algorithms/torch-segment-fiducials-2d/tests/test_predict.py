@@ -4,7 +4,7 @@ import warnings
 import pytest
 
 warnings.filterwarnings(action="ignore", category=UserWarning, module="tiler")
-from torch_segment_fiducials_2d import predict_fiducial_mask
+from torch_segment_fiducials_2d import predict_fiducial_mask  # noqa: E402
 
 
 @pytest.mark.slow

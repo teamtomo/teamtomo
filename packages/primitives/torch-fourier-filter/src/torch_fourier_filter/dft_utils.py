@@ -1,6 +1,7 @@
 """DFT utilities but currently only contains rotational averaging functions."""
 
 from collections.abc import Sequence
+from typing import cast
 
 import einops
 import torch
@@ -338,7 +339,7 @@ def _1d_to_rotational_average_2d_dft(
 
     # construct 2d grid of frequencies and find 2d indices for elements in each bin
     grid = fftfreq_grid(
-        image_shape=image_shape[-2:],
+        image_shape=cast("tuple[int, int]", image_shape[-2:]),
         rfft=rfft,
         fftshift=fftshifted,
         norm=True,
@@ -392,7 +393,7 @@ def _1d_to_rotational_average_3d_dft(
 
     # construct 3d grid of frequencies and find 3d indices for elements in each bin
     grid = fftfreq_grid(
-        image_shape=image_shape[-3:],
+        image_shape=cast("tuple[int, int, int]", image_shape[-3:]),
         rfft=rfft,
         fftshift=fftshifted,
         norm=True,

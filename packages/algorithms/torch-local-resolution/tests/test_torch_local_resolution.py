@@ -397,8 +397,11 @@ class TestSkipStatistics:
         )
 
     def test_permutation_params_do_not_affect_output(self):
-        """do_phase_permutation, n_random_maps, reference_dist_size are
-        irrelevant when skip_statistics=True; output must be identical."""
+        """Statistics-only params must not affect output when skip_statistics=True.
+
+        do_phase_permutation, n_random_maps, reference_dist_size are all
+        irrelevant when skip_statistics=True; output must be identical.
+        """
         half1, half2 = _make_random_bzyx_half_maps(spatial_shape=(32, 32, 32))
         common_kw = {
             "apix": APIX,

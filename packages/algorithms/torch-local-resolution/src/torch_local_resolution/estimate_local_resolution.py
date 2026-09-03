@@ -48,7 +48,7 @@ def _prepare_fft_pairs(
     list[tuple[torch.Tensor, torch.Tensor, tuple[int, ...], tuple[int, ...]]],
     list[list[torch.Tensor]],
 ]:
-    """Compute FFT pairs for each batch element and, optionally, permutation surrogates."""
+    """Compute per-batch FFT pairs and, optionally, permutation surrogates."""
     fft_pairs = []
     permutation_maps_fft_all = []
 
@@ -208,7 +208,9 @@ def compute_correlation(inp: ComputeResolutionInput) -> torch.Tensor:
             low=low_cpp,
             high=high_cpp,
             falloff=inp.falloff,
-            image_shape=padded_image_shape,
+            image_shape=cast(
+                "tuple[int, int] | tuple[int, int, int]", padded_image_shape
+            ),
             rfft=True,
             fftshift=False,
             device=device,
@@ -310,7 +312,9 @@ def compute_resolution(inp: ComputeResolutionInput) -> torch.Tensor:
             low=low_cpp,
             high=high_cpp,
             falloff=inp.falloff,
-            image_shape=padded_image_shape,
+            image_shape=cast(
+                "tuple[int, int] | tuple[int, int, int]", padded_image_shape
+            ),
             rfft=True,
             fftshift=False,
             device=device,

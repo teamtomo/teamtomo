@@ -102,15 +102,11 @@ def test_transform_atoms_preserves_pairwise_distances():
     # A non-trivial rotation about z + a translation.
     theta = np.deg2rad(30.0)
     c, s = np.cos(theta), np.sin(theta)
-    R = torch.tensor(
-        [[1.0, 0.0, 0.0], [0.0, c, s], [0.0, -s, c]], dtype=torch.float32
-    )
+    R = torch.tensor([[1.0, 0.0, 0.0], [0.0, c, s], [0.0, -s, c]], dtype=torch.float32)
     t = torch.tensor([1.0, -2.0, 0.5], dtype=torch.float32)
     result = AlignmentResult(R, t, score=1.0)
 
-    out = transform_atoms(
-        atoms, result, pixel_size=px, box_shape=(box, box, box)
-    )
+    out = transform_atoms(atoms, result, pixel_size=px, box_shape=(box, box, box))
 
     def _pdist(df):
         p = df[["x", "y", "z"]].to_numpy()

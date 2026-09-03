@@ -133,3 +133,6 @@ exclude_lines = [
 
 [tool.coverage.run]
 source = ["torch_fit_in_map"]
+
+[tool.typos.default.extend-words]
+iy = "iy"

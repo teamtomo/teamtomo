@@ -40,13 +40,16 @@ class ExhaustiveSearchConfig(BaseModel):
             "Number of top poses from the exhaustive search to refine independently. "
             "The best-scoring refined pose is returned.  n_start=1 gives the same "
             "behaviour as before; higher values improve robustness at the cost of "
-            "n_start × gradient-refinement time."
+            "n_start x gradient-refinement time."
         ),
     )
     pixel_size_angstroms: float | None = None
     devices: list[str] | None = Field(
         default=None,
-        description="List of devices to use (e.g. ['cuda:0', 'cuda:1']). If None, uses the device of the input tensors.",
+        description=(
+            "List of devices to use (e.g. ['cuda:0', 'cuda:1']). If None, uses "
+            "the device of the input tensors."
+        ),
     )
 
 

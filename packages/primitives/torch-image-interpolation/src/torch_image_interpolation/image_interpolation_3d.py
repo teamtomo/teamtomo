@@ -1,17 +1,20 @@
+"""Sample from and insert into 3D images at arbitrary coordinates."""
+
 from typing import Literal
 
 import einops
 import torch
 import torch.nn.functional as F
 
-from .grid_sample_utils import array_to_grid_sample
 from torch_image_interpolation import utils
+
+from .grid_sample_utils import array_to_grid_sample
 
 
 def sample_image_3d(
     image: torch.Tensor,
     coordinates: torch.Tensor,
-    interpolation: Literal['nearest', 'trilinear'] = 'trilinear',
+    interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> torch.Tensor:
     """Sample a 3D image with a specific interpolation mode.
 
@@ -21,7 +24,7 @@ def sample_image_3d(
         `(d, h, w)` image or `(c, d, h, w)` multichannel image.
     coordinates: torch.Tensor
         `(..., 3)` array of coordinates at which `image` should be sampled.
-        - Coordinates are ordered `zyx` and are positions in the `d`, `h` and `w` dimensions respectively.
+        - Coordinates are ordered `zyx`, positions in the `d`, `h`, `w` dimensions.
         - Coordinates span the range `[0, N-1]` for a dimension of length N.
     interpolation: Literal['nearest', 'trilinear']
         Interpolation mode for image sampling.
@@ -34,7 +37,9 @@ def sample_image_3d(
     device = coordinates.device
 
     if image.ndim not in (3, 4):
-        raise ValueError(f'image should have shape (d, h, w) or (c, d, h, w), got {image.shape}')
+        raise ValueError(
+            f"image should have shape (d, h, w) or (c, d, h, w), got {image.shape}"
+        )
 
     # keep track of a few image properties
     input_image_is_complex = torch.is_complex(image)
@@ -42,11 +47,11 @@ def sample_image_3d(
 
     # coerce single channel to multi-channel
     if input_image_is_multichannel is False:
-        image = einops.rearrange(image, 'd h w -> 1 d h w')
+        image = einops.rearrange(image, "d h w -> 1 d h w")
 
     # setup coordinates for sampling image with torch.nn.functional.grid_sample
     # shape (..., 3) -> (b, 3)
-    coordinates, ps = einops.pack([coordinates], pattern='* zyx')
+    coordinates, ps = einops.pack([coordinates], pattern="* zyx")
     n_samples = coordinates.shape[0]
 
     # handle complex input
@@ -55,34 +60,38 @@ def sample_image_3d(
         # c.f. https://github.com/pytorch/pytorch/issues/67634
         # workaround: treat real and imaginary parts as separate channels
         image = torch.view_as_real(image)
-        image = einops.rearrange(image, 'c d h w complex -> (complex c) d h w')
+        image = einops.rearrange(image, "c d h w complex -> (complex c) d h w")
 
     # torch.nn.functional.grid_sample is set up for sampling grids
     # here we view our volume as a batch of n_samples multi-channel volumes
     # then sample a batch of (1x1x1) grids
     # this enables sampling arbitrarily shaped arrays of coords
-    image = einops.repeat(image, 'c d h w -> b c d h w', b=n_samples)
-    coordinates = einops.rearrange(coordinates, 'b zyx -> b 1 1 1 zyx')  # b d h w zyx
+    image = einops.repeat(image, "c d h w -> b c d h w", b=n_samples)
+    coordinates = einops.rearrange(coordinates, "b zyx -> b 1 1 1 zyx")  # b d h w zyx
 
     # take the samples
-    interpolation = 'bilinear' if interpolation == 'trilinear' else interpolation
+    # grid_sample has no "trilinear" mode; "bilinear" performs trilinear sampling
+    # when the input is volumetric, so it's used to implement our "trilinear" option
+    grid_sample_mode = "bilinear" if interpolation == "trilinear" else interpolation
     samples = F.grid_sample(
         input=image,
         grid=array_to_grid_sample(coordinates, array_shape=image.shape[-3:]),
-        mode=interpolation,  # bilinear is trilinear sampling when input is volumetric
-        padding_mode='border',  # this increases sampling fidelity at edges
+        mode=grid_sample_mode,
+        padding_mode="border",  # this increases sampling fidelity at edges
         align_corners=True,
     )
 
     # reconstruct complex valued samples if required
     if input_image_is_complex is True:
-        samples = einops.rearrange(samples, 'b (complex c) 1 1 1 -> b c complex', complex=2)
+        samples = einops.rearrange(
+            samples, "b (complex c) 1 1 1 -> b c complex", complex=2
+        )
         samples = utils.view_as_complex(samples.contiguous())  # (b, c)
     else:
-        samples = einops.rearrange(samples, 'b c 1 1 1 -> b c')
+        samples = einops.rearrange(samples, "b c 1 1 1 -> b c")
 
     # set samples from outside of volume to zero
-    coordinates = einops.rearrange(coordinates, 'b 1 1 1 zyx -> b zyx')
+    coordinates = einops.rearrange(coordinates, "b 1 1 1 zyx -> b zyx")
     volume_shape = torch.as_tensor(image.shape[-3:]).to(device)
     inside = torch.logical_and(coordinates >= 0, coordinates <= volume_shape - 1)
     inside = torch.all(inside, dim=-1)  # (b, d, h, w)
@@ -90,13 +99,13 @@ def sample_image_3d(
 
     # pack samples back into the expected shape
     # (b, c) -> (..., c)
-    [samples] = einops.unpack(samples, pattern='* c', packed_shapes=ps)
+    [samples] = einops.unpack(samples, pattern="* c", packed_shapes=ps)
 
     # ensure output has correct shape
     # - (...) if input image was single channel
     # - (..., c) if input image was multi-channel
     if input_image_is_multichannel is False:
-        samples = einops.rearrange(samples, '... 1 -> ...')  # drop channel dim
+        samples = einops.rearrange(samples, "... 1 -> ...")  # drop channel dim
 
     return samples
 
@@ -106,7 +115,7 @@ def insert_into_image_3d(
     coordinates: torch.Tensor,
     image: torch.Tensor,
     weights: torch.Tensor | None = None,
-    interpolation: Literal['nearest', 'trilinear'] = 'trilinear',
+    interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert values into a 3D image with specified interpolation.
 
@@ -116,10 +125,11 @@ def insert_into_image_3d(
         `(...)` or `(..., c)` array of values to be inserted into `image`.
     coordinates: torch.Tensor
         `(..., 3)` array of 3D coordinates for each value in `data`.
-        - Coordinates are ordered `zyx` and are positions in the `d`, `h` and `w` dimensions respectively.
+        - Coordinates are ordered `zyx`, positions in the `d`, `h`, `w` dimensions.
         - Coordinates span the range `[0, N-1]` for a dimension of length N.
     image: torch.Tensor
-        `(d, h, w)` or `(c, d, h, w)` array containing the image into which data will be inserted.
+        `(d, h, w)` or `(c, d, h, w)` array containing the image into which
+        data will be inserted.
     weights: torch.Tensor | None
         `(d, h, w)` array containing weights associated with each voxel in `image`.
         This is useful for tracking weights across multiple calls to this function.
@@ -140,23 +150,23 @@ def insert_into_image_3d(
     coordinates_shape, coordinates_ndim = coordinates.shape[:-1], coordinates.shape[-1]
 
     if values_shape != coordinates_shape:
-        raise ValueError('One coordinate triplet is required for each value in data.')
+        raise ValueError("One coordinate triplet is required for each value in data.")
     if coordinates_ndim != 3:
-        raise ValueError('Coordinates must be 3D with shape (..., 3).')
+        raise ValueError("Coordinates must be 3D with shape (..., 3).")
     if image.dtype != values.dtype:
-        raise ValueError('Image and values must have the same dtype.')
+        raise ValueError("Image and values must have the same dtype.")
 
     if weights is None:
         weights = torch.zeros(size=(d, h, w), dtype=torch.float32, device=image.device)
 
     # add channel dim to both image and values if input image is not multichannel
     if not input_image_is_multichannel:
-        image = einops.rearrange(image, 'd h w -> 1 d h w')
-        values = einops.rearrange(values, '... -> ... 1')
+        image = einops.rearrange(image, "d h w -> 1 d h w")
+        values = einops.rearrange(values, "... -> ... 1")
 
     # linearise data and coordinates
-    values, _ = einops.pack([values], pattern='* c')
-    coordinates, _ = einops.pack([coordinates], pattern='* zyx')
+    values, _ = einops.pack([values], pattern="* c")
+    coordinates, _ = einops.pack([coordinates], pattern="* zyx")
     coordinates = coordinates.float()
 
     # only keep data and coordinates inside the image
@@ -167,16 +177,16 @@ def insert_into_image_3d(
     values, coordinates = values[idx_inside], coordinates[idx_inside]
 
     # splat data onto grid
-    if interpolation == 'nearest':
+    if interpolation == "nearest":
         image, weights = _insert_nearest_3d(values, coordinates, image, weights)
-    if interpolation == 'trilinear':
+    if interpolation == "trilinear":
         image, weights = _insert_linear_3d(values, coordinates, image, weights)
 
     # ensure correct output image shape
     # single channel input -> (d, h, w)
     # multichannel input -> (c, d, h, w)
     if not input_image_is_multichannel:
-        image = einops.rearrange(image, '1 d h w -> d h w')
+        image = einops.rearrange(image, "1 d h w -> d h w")
 
     return image, weights
 
@@ -185,27 +195,27 @@ def _insert_nearest_3d(
     data,  # (b, c)
     coordinates,  # (b, zyx)
     image,  # (c, d, h, w)
-    weights  # (d, h, w)
+    weights,  # (d, h, w)
 ):
     # b is number of data points to insert per channel, c is number of channels
     b, c = data.shape
 
     # flatten data to insert values for all channels with one call to index_put()
-    data = einops.rearrange(data, 'b c -> b c')
+    data = einops.rearrange(data, "b c -> b c")
 
     # find nearest voxel for each coordinate
     coordinates = torch.round(coordinates).long()
-    idx_z, idx_y, idx_x = einops.rearrange(coordinates, 'b zyx -> zyx b')
+    idx_z, idx_y, idx_x = einops.rearrange(coordinates, "b zyx -> zyx b")
 
     # insert ones into weights image (d, h, w) at each position
     w = torch.ones(size=(b, 1), device=weights.device, dtype=weights.dtype)
 
     # setup indices for insertion
     idx_c = torch.arange(c, device=coordinates.device, dtype=torch.long)
-    idx_c = einops.rearrange(idx_c, 'c -> 1 c')
-    idx_z = einops.rearrange(idx_z, 'b -> b 1')
-    idx_y = einops.rearrange(idx_y, 'b -> b 1')
-    idx_x = einops.rearrange(idx_x, 'b -> b 1')
+    idx_c = einops.rearrange(idx_c, "c -> 1 c")
+    idx_z = einops.rearrange(idx_z, "b -> b 1")
+    idx_y = einops.rearrange(idx_y, "b -> b 1")
+    idx_x = einops.rearrange(idx_x, "b -> b 1")
 
     # insert image data and weights
     image.index_put_(indices=(idx_c, idx_z, idx_y, idx_x), values=data, accumulate=True)
@@ -217,13 +227,13 @@ def _insert_linear_3d(
     data,  # (b, c)
     coordinates,  # (b, zyx)
     image,  # (c, d, h, w)
-    weights  # (d, h, w)
+    weights,  # (d, h, w)
 ):
     # b is number of data points to insert per channel, c is number of channels
     b, c = data.shape
 
     # cache corner coordinates for each value to be inserted
-    coordinates = einops.rearrange(coordinates, 'b zyx -> zyx b')
+    coordinates = einops.rearrange(coordinates, "b zyx -> zyx b")
     z0, y0, x0 = torch.floor(coordinates)
     z1, y1, x1 = torch.ceil(coordinates)
 
@@ -247,28 +257,28 @@ def _insert_linear_3d(
     w = torch.empty(size=(b, 2, 2, 2), device=image.device, dtype=weights.dtype)
 
     w[:, 0, 0, 0] = (1 - tz) * (1 - ty) * (1 - tx)  # C000
-    w[:, 0, 0, 1] = (1 - tz) * (1 - ty) * tx        # C001
-    w[:, 0, 1, 0] = (1 - tz) * ty * (1 - tx)        # C010
-    w[:, 0, 1, 1] = (1 - tz) * ty * tx              # C011
-    w[:, 1, 0, 0] = tz * (1 - ty) * (1 - tx)        # C100
-    w[:, 1, 0, 1] = tz * (1 - ty) * tx              # C101
-    w[:, 1, 1, 0] = tz * ty * (1 - tx)              # C110
-    w[:, 1, 1, 1] = tz * ty * tx                    # C111
+    w[:, 0, 0, 1] = (1 - tz) * (1 - ty) * tx  # C001
+    w[:, 0, 1, 0] = (1 - tz) * ty * (1 - tx)  # C010
+    w[:, 0, 1, 1] = (1 - tz) * ty * tx  # C011
+    w[:, 1, 0, 0] = tz * (1 - ty) * (1 - tx)  # C100
+    w[:, 1, 0, 1] = tz * (1 - ty) * tx  # C101
+    w[:, 1, 1, 0] = tz * ty * (1 - tx)  # C110
+    w[:, 1, 1, 1] = tz * ty * tx  # C111
 
     # make sure indices broadcast correctly
     idx_c = torch.arange(c, device=coordinates.device, dtype=torch.long)
-    idx_c = einops.rearrange(idx_c, 'c -> 1 c 1 1 1')
-    idx_z = einops.rearrange(idx_z, 'b z y x -> b 1 z y x')
-    idx_y = einops.rearrange(idx_y, 'b z y x -> b 1 z y x')
-    idx_x = einops.rearrange(idx_x, 'b z y x -> b 1 z y x')
+    idx_c = einops.rearrange(idx_c, "c -> 1 c 1 1 1")
+    idx_z = einops.rearrange(idx_z, "b z y x -> b 1 z y x")
+    idx_y = einops.rearrange(idx_y, "b z y x -> b 1 z y x")
+    idx_x = einops.rearrange(idx_x, "b z y x -> b 1 z y x")
 
     # insert weighted data and weight values at each corner
-    data = einops.rearrange(data, 'b c -> b c 1 1 1')
-    w = einops.rearrange(w, 'b z y x -> b 1 z y x')
+    data = einops.rearrange(data, "b c -> b c 1 1 1")
+    w = einops.rearrange(w, "b z y x -> b 1 z y x")
     image.index_put_(
         indices=(idx_c, idx_z, idx_y, idx_x),
         values=data * w.to(data.dtype),
-        accumulate=True
+        accumulate=True,
     )
     weights.index_put_(indices=(idx_z, idx_y, idx_x), values=w, accumulate=True)
 

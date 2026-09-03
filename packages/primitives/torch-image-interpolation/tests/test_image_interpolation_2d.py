@@ -1,9 +1,9 @@
 import einops
 import numpy as np
-import torch
 import pytest
+import torch
 
-from torch_image_interpolation import sample_image_2d, insert_into_image_2d
+from torch_image_interpolation import insert_into_image_2d, sample_image_2d
 
 
 def test_sample_image_2d():
@@ -51,7 +51,7 @@ def test_sample_image_2d_multichannel_complex_input():
 
     # basic sanity check only
     image = torch.complex(real=torch.rand((28, 28)), imag=torch.rand(28, 28))
-    image = einops.repeat(image, 'h w -> c h w', c=n_channels)
+    image = einops.repeat(image, "h w -> c h w", c=n_channels)
 
     # make an arbitrary stack (..., 2) of 2d coords
     arbitrary_shape = (6, 7, 8)
@@ -70,10 +70,12 @@ def test_insert_into_image_2d():
     coordinate = torch.tensor([10.5, 14.5]).view((1, 2))
 
     # sample
-    image, weights = insert_into_image_2d(value, coordinates=coordinate, image=image, interpolation="bilinear")
+    image, _weights = insert_into_image_2d(
+        value, coordinates=coordinate, image=image, interpolation="bilinear"
+    )
 
     # check value (5) is evenly split over 4 nearest pixels
-    expected = einops.repeat(torch.tensor([5 / 4]), '1 -> 2 2')
+    expected = einops.repeat(torch.tensor([5 / 4]), "1 -> 2 2")
     assert torch.allclose(image[10:12, 14:16], expected)
 
     # check for zeros elsewhere
@@ -88,7 +90,9 @@ def test_insert_into_image_2d_multiple():
     coordinates = torch.tensor(np.random.randint(low=0, high=27, size=(6, 7, 8, 2)))
 
     # sample
-    image, weights = insert_into_image_2d(values, coordinates=coordinates, image=image, interpolation="bilinear")
+    image, _weights = insert_into_image_2d(
+        values, coordinates=coordinates, image=image, interpolation="bilinear"
+    )
 
     # check for nonzero value at one point
     sample_point = coordinates[0, 0, 0]
@@ -103,10 +107,14 @@ def test_insert_multiple_values_into_multichannel_image_2d_bilinear():
     # multiple values
     arbitrary_shape = (6, 7, 8)
     values = torch.ones(size=(*arbitrary_shape, n_channels)).float()
-    coordinates = torch.tensor(np.random.randint(low=0, high=27, size=(*arbitrary_shape, 2)))
+    coordinates = torch.tensor(
+        np.random.randint(low=0, high=27, size=(*arbitrary_shape, 2))
+    )
 
     # sample
-    image, weights = insert_into_image_2d(values, coordinates=coordinates, image=image, interpolation="bilinear")
+    image, weights = insert_into_image_2d(
+        values, coordinates=coordinates, image=image, interpolation="bilinear"
+    )
 
     # check for nonzero value at one point
     sample_point = coordinates[0, 0, 0]
@@ -125,10 +133,14 @@ def test_insert_multiple_values_into_multichannel_image_2d_nearest():
     # multiple values
     arbitrary_shape = (6, 7, 8)
     values = torch.ones(size=(*arbitrary_shape, n_channels)).float()
-    coordinates = torch.tensor(np.random.randint(low=0, high=27, size=(*arbitrary_shape, 2)))
+    coordinates = torch.tensor(
+        np.random.randint(low=0, high=27, size=(*arbitrary_shape, 2))
+    )
 
     # sample
-    image, weights = insert_into_image_2d(values, coordinates=coordinates, image=image, interpolation="nearest")
+    image, weights = insert_into_image_2d(
+        values, coordinates=coordinates, image=image, interpolation="nearest"
+    )
 
     # check for nonzero value at one point
     sample_point = coordinates[0, 0, 0]
@@ -148,7 +160,9 @@ def test_insert_into_image_nearest_interp_2d():
     coordinate = torch.tensor([10.7, 14.3]).view((1, 2))
 
     # sample
-    image, weights = insert_into_image_2d(value, coordinates=coordinate, image=image, interpolation='nearest')
+    image, _weights = insert_into_image_2d(
+        value, coordinates=coordinate, image=image, interpolation="nearest"
+    )
 
     # check value (5) is added at nearest pixel
     expected = torch.zeros((28, 28)).float()
@@ -157,8 +171,7 @@ def test_insert_into_image_nearest_interp_2d():
 
 
 @pytest.mark.parametrize(
-    "dtype",
-    [torch.float32, torch.float64, torch.complex64, torch.complex128]
+    "dtype", [torch.float32, torch.float64, torch.complex64, torch.complex128]
 )
 def test_insert_into_image_2d_type_consistency(dtype):
     image = torch.rand((4, 4), dtype=dtype)
@@ -166,7 +179,7 @@ def test_insert_into_image_2d_type_consistency(dtype):
     values = torch.rand(size=(3, 4), dtype=dtype)
     weights = torch.zeros_like(image, dtype=torch.float64)
 
-    for mode in ['bilinear', 'nearest']:
+    for mode in ["bilinear", "nearest"]:
         image, weights = insert_into_image_2d(
             values,
             image=image,
