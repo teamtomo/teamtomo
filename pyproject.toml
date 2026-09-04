@@ -34,6 +34,7 @@ dependencies = [
     "torch-tiltxcorr",
     "torch-local-resolution",
     "torch-fit-in-map",
+    "torch-simulate-image",
     "torch-reconstruct-tomogram",
     "teamtomo-basemodel",
     "torch-calculate-electrostatic-potential",
@@ -69,6 +70,7 @@ torch-segment-fiducials-2d = { workspace = true }
 torch-tiltxcorr = { workspace = true }
 torch-local-resolution = { workspace = true }
 torch-fit-in-map = { workspace = true }
+torch-simulate-image = { workspace = true }
 torch-reconstruct-tomogram = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 torch-calculate-electrostatic-potential = { workspace = true }

@@ -31,6 +31,7 @@ members = [
     "torch-refine-tilt-axis-angle",
     "torch-scattering",
     "torch-segment-fiducials-2d",
+    "torch-simulate-image",
     "torch-so3",
     "torch-structure-manipulation",
     "torch-subpixel-crop",
@@ -3792,6 +3793,7 @@ dependencies = [
     { name = "torch-refine-tilt-axis-angle" },
     { name = "torch-scattering" },
     { name = "torch-segment-fiducials-2d" },
+    { name = "torch-simulate-image" },
     { name = "torch-so3" },
     { name = "torch-structure-manipulation" },
     { name = "torch-subpixel-crop" },
@@ -3844,6 +3846,7 @@ requires-dist = [
     { name = "torch-refine-tilt-axis-angle", editable = "packages/algorithms/torch-refine-tilt-axis-angle" },
     { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
     { name = "torch-segment-fiducials-2d", editable = "packages/algorithms/torch-segment-fiducials-2d" },
+    { name = "torch-simulate-image", editable = "packages/algorithms/torch-simulate-image" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
     { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
@@ -5206,6 +5209,92 @@ dev = [
 test = [
     { name = "pytest" },
     { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-simulate-image"
+source = { editable = "packages/algorithms/torch-simulate-image" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "teamtomo-basemodel" },
+    { name = "torch" },
+    { name = "torch-ctf" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-grid-utils" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipykernel" },
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "mmdf" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-scattering" },
+    { name = "torch-structure-manipulation" },
+]
+examples = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
+    { name = "mmdf" },
+    { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-scattering" },
+    { name = "torch-structure-manipulation" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-scattering" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "teamtomo-basemodel", editable = "packages/utils/teamtomo-basemodel" },
+    { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipykernel" },
+    { name = "ipython" },
+    { name = "matplotlib" },
+    { name = "mmdf" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
+]
+examples = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
+    { name = "mmdf" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
 ]
 
 [[package]]
