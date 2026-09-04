@@ -10,11 +10,14 @@ thickness from a micrograph power spectrum.
 - 1D defocus on the mean spectrum, then 2D defocus / astigmatism on patches
 - Spatial defocus as a spline grid or a linear tilt model
 - 1D thickness grid search against a thickness-modulated CTF, with optional
-  thickness-only refinement
+  joint defocus+thickness refinement (1D scalar or 2D field)
 - Laser phase plate (LPP) CTF support via `torch-ctf`
 
-This package is the algorithm. Programs such as PICASSO chain these primitives
-and write optics / metrics files.
+This package is the algorithm: `estimate_ctf` (defocus only) and
+`estimate_ctf_and_thickness` (defocus + thickness) are self-contained
+compositions of the lower-level primitives, usable directly from notebooks,
+tests, or another program. Downstream tools can chain these primitives
+differently and add optics / metrics file I/O.
 
 ## Installation
 
@@ -42,4 +45,16 @@ fitting = CTFFittingParams(
     patch_sidelength=128,
 )
 mean_ps, result1d, result2d = estimate_ctf(image, optical, fitting)
+```
+
+To also estimate sample thickness, use `estimate_ctf_and_thickness` with a
+`ThicknessParams`:
+
+```python
+from torch_ctf_estimation import estimate_ctf_and_thickness
+from torch_ctf_estimation.models import ThicknessParams
+
+thickness = ThicknessParams(refine_dim="2d")
+result = estimate_ctf_and_thickness(image, optical, fitting, thickness)
+result.result2d, result.thickness1d, result.thickness_joint
 ```

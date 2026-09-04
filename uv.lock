@@ -4259,6 +4259,11 @@ dependencies = [
     { name = "torchvision" },
 ]
 
+[package.optional-dependencies]
+plot = [
+    { name = "matplotlib" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "ipython" },
@@ -4278,6 +4283,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
+    { name = "matplotlib", marker = "extra == 'plot'" },
     { name = "numpy" },
     { name = "pydantic", specifier = ">=2.0,<3" },
     { name = "scipy" },
@@ -4291,6 +4297,7 @@ requires-dist = [
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torchvision" },
 ]
+provides-extras = ["plot"]
 
 [package.metadata.requires-dev]
 dev = [
