@@ -3,11 +3,10 @@
 import torch
 from torch_grid_utils import dft_center
 from torch_subpixel_crop import subpixel_crop_2d
-from torch_tilt_series import TiltSeries
-
-from torch_reconstruct_tomogram.io import (
+from torch_tilt_series import (
+    TiltSeries,
     load_tilt_series_images,
-    normalize_on_central_crop,
+    preprocess_tilt_series_images,
 )
 
 
@@ -49,16 +48,19 @@ def extract_particle_tilt_series(
     points_zyx: torch.Tensor,
     sidelength: int,
     return_rfft: bool = True,
-    normalize: bool = True,
+    preprocess: bool = True,
 ) -> torch.Tensor:
     """Extract a subtilt-series at 3D location(s) in the sample.
 
-    Loads (and, by default, normalizes) the raw tilt images matching
-    `tilt_series` via `tilt_series.image_path`/`image_indices`.
+    Loads (and, by default, preprocesses) the raw tilt images matching
+    `tilt_series` via `tilt_series.image_path`/`image_indices`. Preprocessing
+    (see `torch_tilt_series.preprocess_tilt_series_images`) applies plane
+    subtraction, a DC-excluding bandpass with no low-pass (i.e. up to
+    Nyquist), and central-crop normalization.
     """
     images = load_tilt_series_images(tilt_series)
-    if normalize:
-        images = normalize_on_central_crop(images)
+    if preprocess:
+        images = preprocess_tilt_series_images(images)
     return _extract_particle_tilt_series(
         tilt_series,
         images,

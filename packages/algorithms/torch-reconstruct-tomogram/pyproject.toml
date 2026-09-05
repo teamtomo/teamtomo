@@ -54,8 +54,7 @@ dependencies = [
     "torch-ctf",
     "torch-grid-utils>=0.0.8",
     "torch-subpixel-crop",
-    "torch-tilt-series",
-    "mrcfile",
+    "torch-tilt-series[io]",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies

@@ -51,12 +51,14 @@ dependencies = [
     "einops",
     "torch",
     "torch-affine-utils",
+    "torch-grid-utils",
+    "torch-fourier-filter",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 # add dependencies for "extra" features here.  Not dev dependencies.
 [project.optional-dependencies]
-io = ["alnfile", "etomofiles"]
+io = ["alnfile", "etomofiles", "mrcfile"]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -91,6 +93,8 @@ dev = [
 
 [tool.uv.sources]
 torch-affine-utils = { workspace = true }
+torch-grid-utils = { workspace = true }
+torch-fourier-filter = { workspace = true }
 
 # https://docs.astral.sh/ruff
 [tool.ruff]

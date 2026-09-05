@@ -4912,14 +4912,13 @@ name = "torch-reconstruct-tomogram"
 source = { editable = "packages/algorithms/torch-reconstruct-tomogram" }
 dependencies = [
     { name = "einops" },
-    { name = "mrcfile" },
     { name = "torch" },
     { name = "torch-ctf" },
     { name = "torch-fourier-rescale" },
     { name = "torch-fourier-slice" },
     { name = "torch-grid-utils" },
     { name = "torch-subpixel-crop" },
-    { name = "torch-tilt-series" },
+    { name = "torch-tilt-series", extra = ["io"] },
 ]
 
 [package.dev-dependencies]
@@ -4941,14 +4940,13 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "mrcfile" },
     { name = "torch" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
-    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tilt-series", extras = ["io"], editable = "packages/primitives/torch-tilt-series" },
 ]
 
 [package.metadata.requires-dev]
@@ -5233,12 +5231,15 @@ dependencies = [
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-grid-utils" },
 ]
 
 [package.optional-dependencies]
 io = [
     { name = "alnfile" },
     { name = "etomofiles" },
+    { name = "mrcfile" },
 ]
 
 [package.dev-dependencies]
@@ -5268,9 +5269,12 @@ requires-dist = [
     { name = "alnfile", marker = "extra == 'io'" },
     { name = "einops" },
     { name = "etomofiles", marker = "extra == 'io'" },
+    { name = "mrcfile", marker = "extra == 'io'" },
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
 provides-extras = ["io"]
 

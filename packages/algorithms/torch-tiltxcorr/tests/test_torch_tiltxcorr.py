@@ -156,3 +156,22 @@ def test_tiltxcorr_shift_estimation(shift_magnitude: float, max_error: float):
         f"  Max error: {error:.3f} pixels (max allowed: {max_error} pixels)\n"
         f"  Mean error: {torch.abs(estimated_shifts - ground_truth_shifts).mean():.3f} pixels"
     )
+
+
+def test_tiltxcorr_preprocess_is_optional():
+    """preprocess=False must run without error and change the result."""
+    tilt_series, tilt_angles, tilt_axis_angle, _ = _generate_shifted_tilt_series(
+        shift_magnitude=2.0, d=128, n_points_on_plane=100, seed=42
+    )
+    kwargs = dict(
+        tilt_series=tilt_series,
+        tilt_angles=tilt_angles,
+        tilt_axis_angle=tilt_axis_angle,
+    )
+    default_shifts = tiltxcorr(**kwargs)
+    no_preprocess_shifts = tiltxcorr(**kwargs, preprocess=False)
+
+    assert default_shifts.shape == no_preprocess_shifts.shape == (len(tilt_angles), 2)
+    # turning preprocessing off must actually change the estimated shifts -
+    # confirms the flag is wired through, not silently ignored
+    assert not torch.allclose(default_shifts, no_preprocess_shifts)

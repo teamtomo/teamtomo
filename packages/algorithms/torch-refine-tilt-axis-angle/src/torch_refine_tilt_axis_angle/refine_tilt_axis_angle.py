@@ -1,6 +1,7 @@
 """Refine an initial tilt axis angle."""
 
 import torch
+from torch_tilt_series import preprocess_tilt_series_images
 
 
 def refine_tilt_axis_angle(
@@ -12,6 +13,8 @@ def refine_tilt_axis_angle(
     refine: bool = True,
     refine_range: float = 3.0,
     refine_angle_step: float = 0.1,
+    preprocess: bool = True,
+    high: float = 0.5,
 ) -> float:
     """Find the tilt-axis angle of a tilt series from its common line.
 
@@ -27,13 +30,19 @@ def refine_tilt_axis_angle(
     shared by both axes and converted to per-axis pixel indices only at
     lookup time.
 
+    `preprocess` can be turned off if the caller has already preprocessed
+    `tilt_series` themselves (e.g. once, for reuse across multiple calls).
+    A Hann-window taper (suppressing the FFT edge artifact from
+    non-periodic boundaries) is always applied and is not configurable: a
+    full-width Hann window gives noticeably better angular precision for
+    this common-line technique than an edge-only taper.
+
     Parameters
     ----------
     tilt_series : torch.Tensor
         Tensor containing the tilt series images with shape
-        `(n_tilts, h, w)`. Should already be translationally aligned and,
-        ideally, ramp- and bandpass-filtered. A pixel size of 10A is
-        recommended.
+        `(n_tilts, h, w)`. Should already be translationally aligned. A
+        pixel size of 10A is recommended.
     tilt_axis_angle : float, default=90.0
         Initial guess for the tilt axis angle in degrees. The search range
         is `[tilt_axis_angle - 90, tilt_axis_angle + 90]`. The default of
@@ -51,6 +60,18 @@ def refine_tilt_axis_angle(
         (degrees).
     refine_angle_step : float, default=0.1
         Step size for the fine grid search (degrees).
+    preprocess : bool, default=True
+        If True, preprocess `tilt_series` via
+        `torch_tilt_series.preprocess_tilt_series_images` (background plane
+        subtraction, a bandpass filter with `low` fixed at 0.025 and `high`
+        below, and central-crop normalization) before the common-line search.
+        This is also what removes each image's DC/background offset before
+        windowing; if False, `tilt_series` is used as-is (the caller is
+        expected to have handled that themselves).
+    high : float, default=0.5
+        Low-pass cutoff frequency for `preprocess`, as a fraction of Nyquist
+        (0-0.5). Only used if `preprocess` is True. Default matches
+        `torch_tiltxcorr`'s own default (no low-pass, i.e. Nyquist).
 
     Returns
     -------
@@ -58,6 +79,11 @@ def refine_tilt_axis_angle(
         The tilt axis angle in degrees, in
         `[tilt_axis_angle - 90, tilt_axis_angle + 90]`.
     """
+    if preprocess:
+        tilt_series = preprocess_tilt_series_images(
+            tilt_series, low=0.025, high=high, falloff=0.025
+        )
+
     _, h, w = tilt_series.shape
     device = tilt_series.device
 
@@ -66,9 +92,9 @@ def refine_tilt_axis_angle(
         torch.hann_window(h, periodic=False, device=device),
         torch.hann_window(w, periodic=False, device=device),
     )
+    windowed = tilt_series * mask
 
     # coherent complex rfft sum across the stack
-    windowed = (tilt_series - tilt_series.mean(dim=(-2, -1), keepdim=True)) * mask
     power_sum = torch.fft.rfft2(windowed).sum(dim=0).abs() ** 2
 
     # Shared normalized-frequency sample points, converted to per-axis pixel

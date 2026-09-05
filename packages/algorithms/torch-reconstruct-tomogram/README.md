@@ -15,9 +15,8 @@ This package provides (sub-)tomogram reconstruction and subtilt extraction drive
 * `extract_particle_tilt_series()`: extract a subtilt-series at 3D location(s) in the sample
 * `reconstruct_subvolume()`: rank-polymorphic reconstruction of 3D patch(es) at location(s) in the sample
 * `reconstruct_tomogram()`: full volume reconstruction by tiling reconstructed patches in 3D
-* `load_tilt_series_images()` / `normalize_on_central_crop()`: the lower-level image loading/normalization building blocks used internally by the functions above, also usable standalone
 
-`TiltSeries` holds alignment geometry (in Angstroms) plus `image_path`/`image_indices`/`pixel_spacing` metadata. The functions above take a `TiltSeries`, load and (by default) normalize the matching raw images internally.  `output_pixel_spacing` lets both local (`reconstruct_subvolume`) and global (`reconstruct_tomogram`) reconstruction target an arbitrary output voxel size. Reconstruction happens at the input pixel spacing and is Fourier-rescaled to the requested output size. Reconstruction is performed in Fourier space using central slice insertion. Positions are in `zyx` coordinates, in Angstroms, relative to the tomogram center.
+`TiltSeries` holds alignment geometry (in Angstroms) plus `image_path`/`image_indices`/`pixel_spacing` metadata. The functions above take a `TiltSeries`, and load and (by default) preprocess the matching raw images internally via `torch_tilt_series.load_tilt_series_images()` / `preprocess_tilt_series_images()` (plane subtraction, a DC-excluding bandpass with no low-pass, i.e. up to Nyquist, and central-crop normalization).  `output_pixel_spacing` lets both local (`reconstruct_subvolume`) and global (`reconstruct_tomogram`) reconstruction target an arbitrary output voxel size. Reconstruction happens at the input pixel spacing and is Fourier-rescaled to the requested output size. Reconstruction is performed in Fourier space using central slice insertion. Positions are in `zyx` coordinates, in Angstroms, relative to the tomogram center.
 
 ## Installation
 

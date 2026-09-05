@@ -1,21 +1,27 @@
 """(sub-)tomogram reconstruction in pytorch."""
 
 import einops
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_fourier_rescale import fourier_rescale_rfft_2d
 from torch_fourier_slice import insert_central_slices_rfft_3d_multichannel
 from torch_grid_utils import fftfreq_grid
-from torch_tilt_series import TiltSeries
-
-from torch_reconstruct_tomogram.io import (
-    _writable,
+from torch_tilt_series import (
+    TiltSeries,
     load_tilt_series_images,
-    normalize_on_central_crop,
+    preprocess_tilt_series_images,
 )
+
 from torch_reconstruct_tomogram.projection import _extract_particle_tilt_series
 
 _PAD_FACTOR = 2.0
+
+
+def _writable(data):
+    if isinstance(data, np.ndarray) and not data.flags.writeable:
+        data = data.copy()
+    return data
 
 
 def _reconstruct_subvolume(
@@ -113,7 +119,7 @@ def reconstruct_subvolume(
     points_zyx: torch.Tensor,
     sidelength: int,
     output_pixel_spacing: float | None = None,
-    normalize: bool = True,
+    preprocess: bool = True,
 ) -> torch.Tensor:
     """Reconstruct 3D patch(es) at location(s) in the sample.
 
@@ -127,12 +133,14 @@ def reconstruct_subvolume(
       Fourier-rescaled to this pixel size before 3D reconstruction, so local
       (subvolume) and global (tomogram) reconstructions can each target an
       arbitrary output pixel size independent of the raw data's
-    - normalize, if True (default), applies `normalize_on_central_crop` to the
-      loaded images before reconstruction
+    - preprocess, if True (default), applies
+      `torch_tilt_series.preprocess_tilt_series_images` (plane subtraction, a
+      DC-excluding bandpass with no low-pass, i.e. up to Nyquist, and
+      central-crop normalization) to the loaded images before reconstruction
     """
     images = load_tilt_series_images(tilt_series)
-    if normalize:
-        images = normalize_on_central_crop(images)
+    if preprocess:
+        images = preprocess_tilt_series_images(images)
     return _reconstruct_subvolume(
         tilt_series,
         images,
@@ -162,13 +170,13 @@ def reconstruct_tomogram(
     sidelength: int,
     batch_size: int | None = None,
     output_pixel_spacing: float | None = None,
-    normalize: bool = True,
+    preprocess: bool = True,
     blend_margin: int | None = None,
 ) -> torch.Tensor:
     """Reconstruct the full tomogram by tiling reconstructed patches in 3D."""
     images = load_tilt_series_images(tilt_series)
-    if normalize:
-        images = normalize_on_central_crop(images)
+    if preprocess:
+        images = preprocess_tilt_series_images(images)
 
     pixel_spacing = tilt_series.pixel_spacing  # raises if unset
     if output_pixel_spacing is None:

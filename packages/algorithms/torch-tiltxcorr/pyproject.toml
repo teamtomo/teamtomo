@@ -50,9 +50,10 @@ dependencies = [
     "scipy",
     "einops",
     "torch-affine-utils",
+    "torch-grid-utils",
     "torch-transform-image",
-    "torch-fourier-filter",
     "torch-fourier-rescale",
+    "torch-tilt-series",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies

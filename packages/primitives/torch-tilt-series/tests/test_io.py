@@ -1,12 +1,8 @@
 import numpy as np
 import pytest
 import torch
-from torch_tilt_series import TiltSeries
 
-from torch_reconstruct_tomogram import (
-    load_tilt_series_images,
-    normalize_on_central_crop,
-)
+from torch_tilt_series import TiltSeries, load_tilt_series_images
 
 
 def test_load_tilt_series_images_uses_path_and_indices(tmp_path):
@@ -51,13 +47,3 @@ def test_load_tilt_series_images_requires_image_path():
     )
     with pytest.raises(ValueError):
         load_tilt_series_images(tilt_series)
-
-
-def test_normalize_on_central_crop():
-    images = torch.rand(2, 32, 32) * 10 + 5
-    normalized = normalize_on_central_crop(images)
-    crop = normalized[:, 12:20, 12:20]
-    assert torch.allclose(crop.mean(dim=(-2, -1)), torch.zeros(2), atol=1e-5)
-    assert torch.allclose(
-        crop.std(dim=(-2, -1), correction=0), torch.ones(2), atol=1e-5
-    )
