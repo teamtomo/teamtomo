@@ -35,6 +35,7 @@ dependencies = [
     "torch-local-resolution",
     "torch-fit-in-map",
     "torch-reconstruct-tomogram",
+    "torch-ctf-estimation",
     "teamtomo-basemodel",
 ]
 
@@ -68,6 +69,7 @@ torch-tiltxcorr = { workspace = true }
 torch-local-resolution = { workspace = true }
 torch-fit-in-map = { workspace = true }
 torch-reconstruct-tomogram = { workspace = true }
+torch-ctf-estimation = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 torch-calculate-electrostatic-potential = { git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git" }
 

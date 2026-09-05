@@ -29,7 +29,7 @@ _Note: File i/o packages remain separate from the monorepo_
 ### Algorithms packages migration
 
 - [x] `torch-2dtm`                        - 2D template matching in cryo-EM images
-- [ ] `torch-ctf-estimation`              - estimate local defocus in cryo-EM images
+- [x] `torch-ctf-estimation`              - estimate local defocus in cryo-EM images
 - [x] `torch-cryoeraser`                  - erase regions in cryo-EM images
 - [x] `torch-motion-correction`           - correct local motion in cryo-EM images
 - [x] `torch-refine-tilt-axis-angle`      - tilt axis angle refinement for cryo-ET tilt series
@@ -78,7 +78,7 @@ Which package repositories have been tagged as depreciated and archived. Documen
 - [ ] `torch-segment-fiducials-2d`
 - [ ] `torch-segment-tomogram-boundaries`
 - [ ] `torch-motion-correction`
-- [ ] `torch-ctf-estimation`
+- [x] `torch-ctf-estimation`
 
 ### Utils packages archiving
 
