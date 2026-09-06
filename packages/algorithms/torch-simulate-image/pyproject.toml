@@ -52,6 +52,7 @@ torch-grid-utils = { workspace = true }
 torch-scattering = { workspace = true }
 torch-calculate-electrostatic-potential = { workspace = true }
 torch-structure-manipulation = { workspace = true }
+torch-transform-image = { workspace = true }
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -72,6 +73,7 @@ examples = [
     "torch-structure-manipulation",
     "torch-calculate-electrostatic-potential",
     "torch-scattering",
+    "torch-transform-image",
 ]
 dev = [
     { include-group = "test" },

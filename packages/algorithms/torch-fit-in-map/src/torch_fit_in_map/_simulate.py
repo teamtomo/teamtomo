@@ -156,7 +156,6 @@ class _ESPSimulator:
             bonded_fallback=config.bonded_fallback,
             per_voxel_averaging=config.per_voxel_averaging,
             batch_size=config.batch_size,
-            verbose=False,
         )
         return potential_zyx.float().contiguous()
 

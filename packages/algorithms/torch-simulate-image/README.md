@@ -35,13 +35,16 @@ config = MicrographSimulationConfig(
 micrograph = simulate_micrograph(exit_wave, config)
 ```
 
-End-to-end notebook (PDB → ESP → multislice → micrograph):
-[`examples/simulate_micrograph_from_pdb.ipynb`](examples/simulate_micrograph_from_pdb.ipynb).
+End-to-end notebooks (PDB → ESP → multislice → micrograph):
+
+- Dry atoms: [`examples/simulate_micrograph_from_pdb.ipynb`](examples/simulate_micrograph_from_pdb.ipynb)
+- Continuum ice comparison (`none` / `constant` / `shang_sigworth`): [`examples/simulate_micrograph_with_solvent.ipynb`](examples/simulate_micrograph_with_solvent.ipynb)
+- Ice slab + tilt series (CPU Shang–Sigworth: 5 particles, 256³, −60…+60°/3°): [`examples/simulate_tilt_series_slab.ipynb`](examples/simulate_tilt_series_slab.ipynb)
 
 ```bash
 # from the monorepo root, or this package directory
 uv sync --group examples
-# then open examples/simulate_micrograph_from_pdb.ipynb in Jupyter / VS Code
+# then open a notebook in Jupyter / VS Code
 ```
 
 ## Scope

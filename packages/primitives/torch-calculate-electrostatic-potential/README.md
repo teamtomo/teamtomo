@@ -174,6 +174,112 @@ Positions, B-factors, occupancies, and explicit parameter tensors remain
 differentiable. `sublattice_radius` controls the finite local stencil; increase
 it for broad Gaussians.
 
+## Continuum solvent (ice)
+
+Solvent is modeled as an additive potential in **volts** on the same 3D grid as
+the dry ESP. Geometry and potential layers are composable:
+
+| Piece | Role |
+|-------|------|
+| `distance_to_surface` | Min surface distance `\|x−atom\| − VdW` |
+| `vdw_probe_occupancy` | Binary solvent mask `dist >= probe_radius` |
+| `constant_solvent_potential` | Bulk ice MIP × occupancy |
+| `shang_sigworth_density` / `shang_sigworth_solvent_potential` | Shang & Sigworth (2012) continuum hydration layer |
+
+### Quick start: ESP with ice
+
+```python
+import pandas as pd
+from torch_structure_manipulation import AtomicStructure
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    solvated_potential_from_structure_3d,
+)
+
+# Build structure (or AtomicStructure.from_dataframe after mmdf.read(...))
+atoms = pd.DataFrame(
+    {
+        "x": [0.0],
+        "y": [0.0],
+        "z": [0.0],
+        "element": ["C"],
+        "atom": ["C"],
+        "b_isotropic": [20.0],
+        "occupancy": [1.0],
+    }
+)
+structure = AtomicStructure.from_dataframe(atoms)
+
+grid = GridConfig.from_grid_shape_and_voxel_size(
+    grid_shape=(64, 64, 64),
+    voxel_size=(1.0, 1.0, 1.0),
+    center_zyx=(0.0, 0.0, 0.0),
+)
+
+# Shang & Sigworth continuum hydration (default when water is on).
+volume = solvated_potential_from_structure_3d(
+    structure,
+    grid,
+    model_water_potential=True,  # defaults to solvent_model="shang_sigworth"
+    ice_potential_V=3.6,
+    probe_radius=1.4,
+)
+
+# Flat bulk ice instead:
+# volume = solvated_potential_from_structure_3d(
+#     structure, grid,
+#     model_water_potential=True,
+#     solvent_model="constant",
+#     ice_potential_V=3.6,
+# )
+
+# Dry atoms only (same as potential_from_structure_3d):
+# volume = solvated_potential_from_structure_3d(structure, grid)
+# # or explicitly: model_water_potential=False
+
+# Feed volts into multislice:
+# from torch_scattering import multislice
+# exit_wave = multislice(volume, pixel_size=1.0, voltage=300)
+```
+
+### Composable pieces
+
+```python
+from torch_calculate_electrostatic_potential import (
+    distance_to_surface,
+    vdw_probe_occupancy,
+    constant_solvent_potential,
+    shang_sigworth_solvent_potential,
+    potential_from_structure_3d,
+    solvent_potential_from_structure_3d,
+)
+
+atomic = potential_from_structure_3d(structure, grid)
+
+# Option A: constant ice from a VdW+probe mask
+dist, nearest_z = distance_to_surface(
+    structure.positions_zyx, structure.atomic_numbers, grid
+)
+occupancy = vdw_probe_occupancy(dist, probe_radius=1.4)
+solvent = constant_solvent_potential(occupancy, ice_potential_V=3.6)
+volume = atomic + solvent
+
+# Option B: Shang–Sigworth continuum solvent only
+solvent = solvent_potential_from_structure_3d(
+    structure, grid, model="shang_sigworth", ice_potential_V=3.6
+)
+volume = atomic + solvent
+
+# Option C: build Shang–Sigworth potential from the distance field yourself
+solvent = shang_sigworth_solvent_potential(
+    dist, nearest_z, ice_potential_V=3.6, probe_radius=1.4
+)
+volume = atomic + solvent
+```
+
+Solvent helpers currently require an unbatched structure
+(`positions_zyx` shape `(n_atoms, 3)`). Enclosed cavities are not flood-filled.
+
 ## Testing
 
 Install the package together with test dependencies:
@@ -189,7 +295,7 @@ With coverage: `pytest --cov=torch_calculate_electrostatic_potential --cov-repor
 
 - Python >= 3.11
 - PyTorch >= 2.0
-- torch-structure-manipulation, numpy, einops, tqdm
+- torch-structure-manipulation, numpy, einops
 
 ## License
 

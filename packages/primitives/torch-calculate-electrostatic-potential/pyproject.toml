@@ -51,7 +51,6 @@ dependencies = [
     "torch>=2.0.0",
     "numpy>=1.21.0",
     "torch-structure-manipulation",
-    "tqdm>=4.60.0",
     "einops>=0.6.0",
     "setuptools",    # Required by PyTorch's inductor compiler (torch.compile)
 ]
@@ -71,7 +70,6 @@ dev = [
     "pre-commit",
     "rich",                     # https://github.com/Textualize/rich
     "ruff",
-    "types-tqdm",
 ]
 
 [tool.uv.sources]

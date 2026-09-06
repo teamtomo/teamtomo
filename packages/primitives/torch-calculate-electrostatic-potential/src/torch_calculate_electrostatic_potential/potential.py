@@ -33,7 +33,6 @@ from typing import TYPE_CHECKING
 
 import einops
 import torch
-from tqdm import tqdm
 
 if TYPE_CHECKING:
     from .grid import GridConfig
@@ -117,7 +116,6 @@ def _calculate_scattering_potential(
     atom_occupancies: torch.Tensor | None,  # (..., N) or None
     per_voxel_averaging: bool,
     batch_size: int,
-    verbose: bool,
 ) -> torch.Tensor:  # (..., *grid_config.grid_shape)
     """Shared dense implementation behind the 2D/3D public entry points."""
     if atom_pos.shape[-1] != grid_config.ndim:
@@ -179,8 +177,7 @@ def _calculate_scattering_potential(
         torch.arange(batch_total, device=device, dtype=torch.int64) * grid_flat_size
     )
 
-    chunk_starts = range(0, num_atoms, batch_size)
-    for start in tqdm(chunk_starts, disable=not verbose, desc="atoms"):
+    for start in range(0, num_atoms, batch_size):
         end = min(start + batch_size, num_atoms)
         pos_chunk = pos_flat[:, start:end, :]  # (batch_total, n, D)
 
@@ -220,7 +217,6 @@ def calculate_scattering_potential_3d(
     atom_occupancies: torch.Tensor | None = None,
     per_voxel_averaging: bool = True,
     batch_size: int = 4096,
-    verbose: bool = False,
 ) -> torch.Tensor:  # (..., *grid_config.grid_shape)
     """Compute a differentiable 3D electrostatic-potential volume in volts.
 
@@ -242,8 +238,6 @@ def calculate_scattering_potential_3d(
         the voxel center.
     batch_size : int
         Number of atoms processed per chunk (performance/memory tuning only).
-    verbose : bool
-        If True, show a tqdm progress bar over atom chunks.
 
     Returns
     -------
@@ -264,7 +258,6 @@ def calculate_scattering_potential_3d(
         atom_occupancies,
         per_voxel_averaging,
         batch_size,
-        verbose,
     )
 
 
@@ -278,7 +271,6 @@ def calculate_scattering_potential_2d(
     atom_occupancies: torch.Tensor | None = None,
     per_voxel_averaging: bool = True,
     batch_size: int = 4096,
-    verbose: bool = False,
 ) -> torch.Tensor:  # (..., *grid_config.grid_shape)
     """Compute a differentiable 2D projected electrostatic potential.
 
@@ -300,8 +292,6 @@ def calculate_scattering_potential_2d(
         the pixel center.
     batch_size : int
         Number of atoms processed per chunk (performance/memory tuning only).
-    verbose : bool
-        If True, show a tqdm progress bar over atom chunks.
 
     Returns
     -------
@@ -322,5 +312,4 @@ def calculate_scattering_potential_2d(
         atom_occupancies,
         per_voxel_averaging,
         batch_size,
-        verbose,
     )
