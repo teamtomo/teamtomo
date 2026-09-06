@@ -1,0 +1,95 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = "^torch-structure-manipulation@v(?P<version>.+)$"
+fallback-version = "0.1.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+tag_regex = "^torch-structure-manipulation@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-structure-manipulation@v[0-9]*.[0-9]*.[0-9]*'"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+[project]
+name = "torch-structure-manipulation"
+dynamic = ["version"]
+description = "Typed molecular structure data, bonding annotations, and tensor transforms"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BSD-3-Clause" }
+authors = [
+    { name = "Davide Torre", email = "davidetorre99@gmail.com" },
+    { name = "TeamTomo Developers" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = ["gemmi", "numpy", "pandas", "roma", "torch"]
+
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+dev = [
+    { include-group = "test" },
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "rich",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = ["E", "W", "F", "D", "D417", "I", "UP", "C4", "B", "A001", "RUF", "TC", "TID"]
+ignore = ["D401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+
+[tool.mypy]
+files = "src/torch_structure_manipulation"
+strict = true
+disallow_any_generics = false
+disallow_subclassing_any = false
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["pandas", "pandas.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["roma", "roma.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["torch_structure_manipulation"]
+
+[tool.check-manifest]
+ignore = [".ruff_cache/**/*", "tests/**/*"]

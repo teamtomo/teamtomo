@@ -4,10 +4,45 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from teamtomo_basemodel import BaseModelTeamTomo
 
 
-class ExhaustiveSearchConfig(BaseModel):
+class PotentialSimulatorConfig(BaseModelTeamTomo):
+    """Options for the default electrostatic-potential simulator.
+
+    Parameters
+    ----------
+    scattering_factors : {"peng_elemental", "peng_bonded"}
+        Peng parameter model passed to ``potential_from_structure_3d``.
+    annotate_bonding : bool
+        When ``True`` (or when ``scattering_factors`` is ``peng_bonded``), build
+        the structure with :meth:`~torch_structure_manipulation.AtomicStructure.from_annotated_dataframe`
+        so bonded environments are available. Requires ``chain``, ``residue_id``,
+        ``residue``, and ``atom`` columns in addition to coordinates.
+    include_hydrogens : bool
+        Passed to ``from_annotated_dataframe`` when bonding annotation runs.
+    sublattice_radius : float or None
+        Per-atom stencil radius in Angstroms. ``None`` uses
+        :func:`~torch_calculate_electrostatic_potential.default_sublattice_radius`.
+    per_voxel_averaging : bool
+        Average the potential over each voxel instead of sampling its centre.
+    bonded_fallback : {"elemental", "error"}
+        Behaviour for unsupported bonded providers or environment keys.
+    batch_size : int
+        Number of atoms evaluated per chunk during potential calculation.
+    """
+
+    scattering_factors: Literal["peng_elemental", "peng_bonded"] = "peng_elemental"
+    annotate_bonding: bool = False
+    include_hydrogens: bool = True
+    sublattice_radius: float | None = None
+    per_voxel_averaging: bool = True
+    bonded_fallback: Literal["elemental", "error"] = "elemental"
+    batch_size: int = Field(default=4096, ge=1)
+
+
+class ExhaustiveSearchConfig(BaseModelTeamTomo):
     """Configuration for the exhaustive SO(3) grid search.
 
     Parameters
@@ -40,17 +75,20 @@ class ExhaustiveSearchConfig(BaseModel):
             "Number of top poses from the exhaustive search to refine independently. "
             "The best-scoring refined pose is returned.  n_start=1 gives the same "
             "behaviour as before; higher values improve robustness at the cost of "
-            "n_start × gradient-refinement time."
+            "n_start x gradient-refinement time."
         ),
     )
     pixel_size_angstroms: float | None = None
     devices: list[str] | None = Field(
         default=None,
-        description="List of devices to use (e.g. ['cuda:0', 'cuda:1']). If None, uses the device of the input tensors.",
+        description=(
+            "List of devices to use (e.g. ['cuda:0', 'cuda:1']). If None, uses "
+            "the device of the input tensors."
+        ),
     )
 
 
-class GradientRefinementConfig(BaseModel):
+class GradientRefinementConfig(BaseModelTeamTomo):
     """Configuration for gradient-based local refinement.
 
     Parameters
@@ -82,7 +120,7 @@ class GradientRefinementConfig(BaseModel):
     )
 
 
-class ProjectionAlignmentConfig(BaseModel):
+class ProjectionAlignmentConfig(BaseModelTeamTomo):
     """Configuration for the projection-based alignment.
 
     Parameters

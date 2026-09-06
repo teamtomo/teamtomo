@@ -59,7 +59,7 @@ def projection_align(
     Returns
     -------
     AlignmentResult
-        Best rotation matrix (3×3, zyx), translation ``[0, dy, dx]`` in
+        Best rotation matrix (3 x 3, zyx), translation ``[0, dy, dx]`` in
         pixels, and peak 2-D NCC score.
     """
     if config is None:
@@ -98,9 +98,7 @@ def projection_align(
     # 2-D NCC map for each orientation
     ref_rfft = torch.fft.rfft2(ref_projs, dim=(-2, -1))  # (N, d, d//2+1)
     mob_rfft = torch.fft.rfft2(mob_projs, dim=(-2, -1))
-    cc_2d = torch.fft.irfft2(
-        ref_rfft * torch.conj(mob_rfft), dim=(-2, -1)
-    )  # (N, d, d)
+    cc_2d = torch.fft.irfft2(ref_rfft * torch.conj(mob_rfft), dim=(-2, -1))  # (N, d, d)
 
     # Best orientation: argmax of per-orientation peak score
     peak_per_orient = cc_2d.view(n, -1).max(dim=-1).values  # (N,)

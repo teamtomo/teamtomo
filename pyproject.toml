@@ -36,6 +36,8 @@ dependencies = [
     "torch-fit-in-map",
     "torch-reconstruct-tomogram",
     "teamtomo-basemodel",
+    "torch-calculate-electrostatic-potential",
+    "torch-structure-manipulation",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -69,7 +71,8 @@ torch-local-resolution = { workspace = true }
 torch-fit-in-map = { workspace = true }
 torch-reconstruct-tomogram = { workspace = true }
 teamtomo-basemodel = { workspace = true }
-torch-calculate-electrostatic-potential = { git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git" }
+torch-calculate-electrostatic-potential = { workspace = true }
+torch-structure-manipulation = { workspace = true }
 
 [tool.uv.workspace]
 members = [

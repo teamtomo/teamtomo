@@ -1,4 +1,4 @@
-"""DensitySimulator protocol and default ESP implementation."""
+"""PotentialSimulator protocol and default ESP implementation."""
 
 from __future__ import annotations
 
@@ -6,13 +6,16 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
 
+from ._config import PotentialSimulatorConfig
+from ._geometry import center_positions_in_simulation_box, simulation_box_center_zyx
+
 if TYPE_CHECKING:
     import pandas as pd
 
 
 @runtime_checkable
-class DensitySimulator(Protocol):
-    """Protocol for simulating a density map from a table of atoms.
+class PotentialSimulator(Protocol):
+    """Protocol for simulating an electrostatic-potential map from a table of atoms.
 
     Atoms are supplied as a :class:`pandas.DataFrame` with (at least) the
     columns ``x``, ``y``, ``z`` (Cartesian coordinates in Angstroms) and
@@ -21,13 +24,10 @@ class DensitySimulator(Protocol):
     ``mmdf.read("model.pdb")`` (file reading itself lives in the CLI wrapper,
     ``torch-fit-in-map-cli``).
 
-    The default implementation uses ``torch-calculate-electrostatic-potential``
-    (``espcalculator``) which must be installed separately::
-
-        pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
+    The default implementation uses ``torch-calculate-electrostatic-potential``.
 
     A custom simulator can be injected by implementing this protocol and passing
-    it to :func:`fit_map_in_pdb` or :func:`fit_pdb_in_map`.
+    it to :func:`fit_map_in_structure` or :func:`fit_structure_in_map`.
 
     Example
     -------
@@ -35,13 +35,14 @@ class DensitySimulator(Protocol):
 
         import mmdf
 
+
         class MySimulator:
-            def simulate(self, atoms, pixel_size, box_size, device=None):
+            def simulate(self, atoms, pixel_size, box_size, device=None, config=None):
                 ...
 
+
         atoms = mmdf.read("model.pdb")
-        result = fit_pdb_in_map(atoms, density, 1.5, 128,
-                                simulator=MySimulator())
+        result = fit_structure_in_map(atoms, potential_map, 1.5, 128, simulator=MySimulator())
     """
 
     def simulate(
@@ -50,8 +51,9 @@ class DensitySimulator(Protocol):
         pixel_size: float,
         box_size: int,
         device: torch.device | None = None,
+        config: PotentialSimulatorConfig | None = None,
     ) -> torch.Tensor:
-        """Simulate a density from a table of atoms.
+        """Simulate a potential map from a table of atoms.
 
         Parameters
         ----------
@@ -64,24 +66,23 @@ class DensitySimulator(Protocol):
             Cubic box dimension in voxels.
         device : torch.device or None
             Target device for the output tensor.
+        config : PotentialSimulatorConfig or None
+            Simulator options. ``None`` uses the default configuration.
 
         Returns
         -------
-        density : torch.Tensor
-            ``(box_size, box_size, box_size)`` float32 density map.
+        potential : torch.Tensor
+            ``(box_size, box_size, box_size)`` float32 potential map in volts.
         """
         ...
 
 
+# Deprecated alias; prefer PotentialSimulator.
+DensitySimulator = PotentialSimulator
+
+
 class _ESPSimulator:
-    """Default simulator using ``espcalculator`` (electrostatic potential).
-
-    Atom coordinates and element symbols are taken from the ``atoms`` DataFrame,
-    centered in the box, and passed to ``espcalculator.calculate_esp``.  Install
-    the optional dependency with::
-
-        pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
-    """
+    """Default simulator using the workspace electrostatic-potential APIs."""
 
     def simulate(
         self,
@@ -89,25 +90,20 @@ class _ESPSimulator:
         pixel_size: float,
         box_size: int,
         device: torch.device | None = None,
+        config: PotentialSimulatorConfig | None = None,
     ) -> torch.Tensor:
-        try:
-            from espcalculator import (  # type: ignore[import]
-                AtomStack,
-                Lattice,
-                calculate_esp,
-            )
-        except ImportError as exc:
-            raise ImportError(
-                "The default DensitySimulator requires 'espcalculator'.\n"
-                "Install it with:\n"
-                "  pip install git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git\n"
-                "or pass a custom simulator= to fit_map_in_pdb / fit_pdb_in_map."
-            ) from exc
+        from torch_calculate_electrostatic_potential import (
+            GridConfig,
+            default_sublattice_radius,
+            potential_from_structure_3d,
+        )
+        from torch_structure_manipulation import AtomicStructure
 
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if config is None:
+            config = PotentialSimulatorConfig()
 
-        # --- read atoms from the DataFrame ---
         missing = {"x", "y", "z", "element"} - set(atoms.columns)
         if missing:
             raise ValueError(
@@ -115,48 +111,57 @@ class _ESPSimulator:
             )
         if len(atoms) == 0:
             raise ValueError("atoms DataFrame is empty")
+        if pixel_size <= 0:
+            raise ValueError("pixel_size must be positive")
+        if box_size <= 0:
+            raise ValueError("box_size must be positive")
 
-        names: list[str] = atoms["element"].astype(str).tolist()
-        coords_t = torch.tensor(
-            atoms[["x", "y", "z"]].to_numpy(),
-            dtype=torch.float32,
-            device=device,
-        )  # (N, 3)
+        use_bonded = config.scattering_factors == "peng_bonded"
+        has_bonding_metadata = (
+            "bonded_environments" in atoms.columns and "molecule_type" in atoms.columns
+        )
+        if use_bonded and has_bonding_metadata:
+            structure = AtomicStructure.from_dataframe(atoms, device=device)
+        elif use_bonded or config.annotate_bonding:
+            structure = AtomicStructure.from_annotated_dataframe(
+                atoms,
+                include_hydrogens=config.include_hydrogens,
+                device=device,
+            )
+        else:
+            structure = AtomicStructure.from_dataframe(atoms, device=device)
 
-        # --- center atoms at box centre ---
-        box_centre_a = (box_size - 1) / 2.0 * pixel_size
-        centroid = coords_t.mean(dim=0)
-        coords_t = coords_t - centroid + box_centre_a  # (N, 3)
+        centered_positions = center_positions_in_simulation_box(
+            structure.positions_zyx, box_size, pixel_size
+        )
+        structure = structure.with_positions(centered_positions)
 
-        # AtomStack expects (B=1, N, 3)
-        atom_stack = AtomStack.from_coords_and_names(
-            atom_coordinates=coords_t.unsqueeze(0),
-            atom_names=names,
+        box_center_zyx = simulation_box_center_zyx(box_size, pixel_size, device=device)
+        radius = (
+            default_sublattice_radius(pixel_size)
+            if config.sublattice_radius is None
+            else config.sublattice_radius
+        )
+        grid_config = GridConfig.from_grid_shape_and_voxel_size(
+            grid_shape=(box_size, box_size, box_size),
+            voxel_size=(pixel_size, pixel_size, pixel_size),
+            center_zyx=box_center_zyx,
+            sublattice_radius=radius,
             device=device,
         )
-        atom_stack.fill_constant_bfactor(8.0 * torch.pi**2 * 0.5**2)
-
-        # --- lattice: grid covers [0, (box_size-1)*pixel_size]^3 ---
-        extent = (box_size - 1) * pixel_size
-        lattice = Lattice.from_grid_dimensions_and_voxel_sizes(
-            grid_dimensions=(box_size, box_size, box_size),
-            voxel_sizes_in_A=(pixel_size, pixel_size, pixel_size),
-            left_bottom_point_in_A=(0.0, 0.0, 0.0),
-            right_upper_point_in_A=(extent, extent, extent),
-            sublattice_radius_in_A=max(5.0, 3.0 * pixel_size),
-            device=device,
-        )
-
-        density_xyz: torch.Tensor = calculate_esp(
-            atom_stack=atom_stack,
-            lattice=lattice,
-            B=64,
-            per_voxel_averaging=True,
+        potential_zyx: torch.Tensor = potential_from_structure_3d(
+            structure,
+            grid_config,
+            scattering_factors=config.scattering_factors,
+            bonded_fallback=config.bonded_fallback,
+            per_voxel_averaging=config.per_voxel_averaging,
+            batch_size=config.batch_size,
             verbose=False,
         )
-        # espcalculator returns (Dx, Dy, Dz) in XYZ order (axis 0 = X).
-        # Transpose to ZYX so the output matches MRC convention and our pipeline.
-        return density_xyz.permute(2, 1, 0).float().contiguous()
+        return potential_zyx.float().contiguous()
 
 
-DEFAULT_SIMULATOR: DensitySimulator = _ESPSimulator()  # type: ignore[assignment]
+DEFAULT_POTENTIAL_SIMULATOR: PotentialSimulator = _ESPSimulator()
+
+# Deprecated alias; prefer DEFAULT_POTENTIAL_SIMULATOR.
+DEFAULT_SIMULATOR = DEFAULT_POTENTIAL_SIMULATOR

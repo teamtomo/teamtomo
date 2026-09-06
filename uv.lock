@@ -12,6 +12,7 @@ members = [
     "teamtomo-basemodel",
     "torch-2dtm",
     "torch-affine-utils",
+    "torch-calculate-electrostatic-potential",
     "torch-cryoeraser",
     "torch-ctf",
     "torch-cubic-spline-grids",
@@ -31,6 +32,7 @@ members = [
     "torch-scattering",
     "torch-segment-fiducials-2d",
     "torch-so3",
+    "torch-structure-manipulation",
     "torch-subpixel-crop",
     "torch-tilt-series",
     "torch-tiltxcorr",
@@ -3499,6 +3501,19 @@ wheels = [
 ]
 
 [[package]]
+name = "roma"
+version = "1.6.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/79/bbe3ba78a479f0b6623105480e49de053751e146b97c1e638347ad95a0ee/roma-1.6.1.tar.gz", hash = "sha256:869e534ffd1f5184dd3d03802e546eda6de704ec50c0b19b685f0bea6f2f9904", size = 318338, upload-time = "2026-08-20T13:31:55.581Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8f/e5/484ff091291cfb9ba82977717ca817456f9a22d519906ec9d16629036360/roma-1.6.1-py3-none-any.whl", hash = "sha256:79c3a07ab94c0e784e8de2ecc878645a5cf0aff312f7b1e281ca1be7c5f0b7e8", size = 25484, upload-time = "2026-08-20T13:31:53.537Z" },
+]
+
+[[package]]
 name = "rpds-py"
 version = "0.30.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3758,6 +3773,7 @@ dependencies = [
     { name = "teamtomo-basemodel" },
     { name = "torch-2dtm" },
     { name = "torch-affine-utils" },
+    { name = "torch-calculate-electrostatic-potential" },
     { name = "torch-cryoeraser" },
     { name = "torch-ctf" },
     { name = "torch-cubic-spline-grids" },
@@ -3777,6 +3793,7 @@ dependencies = [
     { name = "torch-scattering" },
     { name = "torch-segment-fiducials-2d" },
     { name = "torch-so3" },
+    { name = "torch-structure-manipulation" },
     { name = "torch-subpixel-crop" },
     { name = "torch-tilt-series" },
     { name = "torch-tiltxcorr" },
@@ -3812,6 +3829,7 @@ requires-dist = [
     { name = "teamtomo-basemodel", editable = "packages/utils/teamtomo-basemodel" },
     { name = "torch-2dtm", editable = "packages/algorithms/torch-2dtm" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
     { name = "torch-cryoeraser", editable = "packages/algorithms/torch-cryoeraser" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
@@ -3831,6 +3849,7 @@ requires-dist = [
     { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
     { name = "torch-segment-fiducials-2d", editable = "packages/algorithms/torch-segment-fiducials-2d" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
     { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
@@ -4119,14 +4138,58 @@ test = [
 
 [[package]]
 name = "torch-calculate-electrostatic-potential"
-version = "0.1.0"
-source = { git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git#225eac4c5de4bb4067e72cfc92b8d8d1a51f35d0" }
+source = { editable = "packages/primitives/torch-calculate-electrostatic-potential" }
 dependencies = [
-    { name = "gemmi" },
+    { name = "einops" },
     { name = "numpy" },
     { name = "setuptools" },
     { name = "torch" },
+    { name = "torch-structure-manipulation" },
     { name = "tqdm" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "types-tqdm" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops", specifier = ">=0.6.0" },
+    { name = "numpy", specifier = ">=1.21.0" },
+    { name = "setuptools" },
+    { name = "torch", specifier = ">=2.0.0" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
+    { name = "tqdm", specifier = ">=4.60.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+    { name = "types-tqdm" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
 ]
 
 [[package]]
@@ -4367,6 +4430,7 @@ source = { editable = "packages/algorithms/torch-fit-in-map" }
 dependencies = [
     { name = "pandas" },
     { name = "pydantic" },
+    { name = "teamtomo-basemodel" },
     { name = "torch" },
     { name = "torch-affine-utils" },
     { name = "torch-calculate-electrostatic-potential" },
@@ -4375,6 +4439,7 @@ dependencies = [
     { name = "torch-grid-utils" },
     { name = "torch-image-interpolation" },
     { name = "torch-so3" },
+    { name = "torch-structure-manipulation" },
     { name = "torch-transform-image" },
     { name = "tqdm" },
 ]
@@ -4403,14 +4468,16 @@ test = [
 requires-dist = [
     { name = "pandas" },
     { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "teamtomo-basemodel", editable = "packages/utils/teamtomo-basemodel" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
-    { name = "torch-calculate-electrostatic-potential", git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
     { name = "torch-so3", editable = "packages/primitives/torch-so3" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
     { name = "tqdm" },
 ]
@@ -5024,16 +5091,22 @@ dev = [
     { name = "ipython" },
     { name = "matplotlib" },
     { name = "mypy" },
+    { name = "pandas" },
     { name = "pdbpp" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-structure-manipulation" },
 ]
 test = [
+    { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-structure-manipulation" },
 ]
 
 [package.metadata]
@@ -5049,16 +5122,22 @@ dev = [
     { name = "ipython" },
     { name = "matplotlib" },
     { name = "mypy" },
+    { name = "pandas" },
     { name = "pdbpp" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
 ]
 test = [
+    { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
 ]
 
 [[package]]
@@ -5163,6 +5242,56 @@ dev = [
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-structure-manipulation"
+source = { editable = "packages/primitives/torch-structure-manipulation" }
+dependencies = [
+    { name = "gemmi" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "roma" },
+    { name = "torch" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gemmi" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "roma" },
+    { name = "torch" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "rich" },
@@ -5546,6 +5675,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7e/69/3c51b36d04da19b92f9e815be12753125bd8bc247ba0470a982e6979e71c/types_pyyaml-6.0.12.20250915.tar.gz", hash = "sha256:0f8b54a528c303f0e6f7165687dd33fafa81c807fcac23f632b63aa624ced1d3", size = 17522, upload-time = "2025-09-15T03:01:00.728Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl", hash = "sha256:e7d4d9e064e89a3b3cae120b4990cd370874d2bf12fa5f46c97018dd5d3c9ab6", size = 20338, upload-time = "2025-09-15T03:00:59.218Z" },
+]
+
+[[package]]
+name = "types-tqdm"
+version = "4.70.0.20260827"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/66/f4a8d5483513ed883e8f01c607b5d47815ca0eb796d376349fdfe85a125c/types_tqdm-4.70.0.20260827.tar.gz", hash = "sha256:d3efd69243ac9093c552f1c0d081b77286d61ace96b6899a142542555bdad2dc", size = 19251, upload-time = "2026-08-27T12:06:55.911Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/f0/b0e2a33c0367e79806054f556159f0b43e6a98d7e728aea1b07028a56ee4/types_tqdm-4.70.0.20260827-py3-none-any.whl", hash = "sha256:d6e02da8ec2bc11124e02d4bc84bd8b67a444f4c5decf544846897c8272c7023", size = 25163, upload-time = "2026-08-27T12:06:54.898Z" },
 ]
 
 [[package]]
