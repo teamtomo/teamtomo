@@ -1,3 +1,5 @@
+"""Real-space affine transforms for 2D images."""
+
 from typing import Literal, Optional
 
 import einops
@@ -9,11 +11,11 @@ from torch_image_interpolation import sample_image_2d
 
 
 def affine_transform_image_2d(
-        image: torch.Tensor,
-        matrices: torch.Tensor,
-        interpolation: Literal['nearest', 'bilinear', 'bicubic'],
-        output_shape: Optional[tuple] = None,
-        yx_matrices: bool = False,
+    image: torch.Tensor,
+    matrices: torch.Tensor,
+    interpolation: Literal["nearest", "bilinear", "bicubic"],
+    output_shape: Optional[tuple] = None,
+    yx_matrices: bool = False,
 ) -> torch.Tensor:
     # grab image dimensions
     if output_shape:
@@ -23,9 +25,7 @@ def affine_transform_image_2d(
 
     if not yx_matrices:
         matrices = matrices.clone()  # dont modify the input tensor
-        matrices[..., :2, :2] = (
-            torch.flip(matrices[..., :2, :2], dims=(-2, -1))
-        )
+        matrices[..., :2, :2] = torch.flip(matrices[..., :2, :2], dims=(-2, -1))
         matrices[..., :2, 2] = torch.flip(matrices[..., :2, 2], dims=(-1,))
 
     # generate grid of pixel coordinates
@@ -33,9 +33,11 @@ def affine_transform_image_2d(
 
     # apply matrix to coordinates
     grid = homogenise_coordinates(grid)  # (h, w, yxw)
-    grid = einops.rearrange(grid, 'h w yxw -> h w yxw 1')
+    grid = einops.rearrange(grid, "h w yxw -> h w yxw 1")
     grid = matrices @ grid
-    grid = grid[..., :2, 0]  # dehomogenise coordinates: (..., h, w, yxw, 1) -> (..., h, w, yx)
+    grid = grid[
+        ..., :2, 0
+    ]  # dehomogenise coordinates: (..., h, w, yxw, 1) -> (..., h, w, yx)
 
     # sample image at transformed positions
     result = sample_image_2d(image, coordinates=grid, interpolation=interpolation)
@@ -87,9 +89,11 @@ def rotate_then_shift_image_2d(
         h, w = image.shape[-2:]
         image_center = dft_center(
             image_shape=(h, w), device=image.device, fftshift=True, rfft=False
-            )
+        )
 
-    matrix = _build_rotate_shift_matrix_2d(rotate, shift_yx, image_center, rotate_first=True)
+    matrix = _build_rotate_shift_matrix_2d(
+        rotate, shift_yx, image_center, rotate_first=True
+    )
     return affine_transform_image_2d(
         image=image,
         matrices=matrix,
@@ -143,9 +147,11 @@ def shift_then_rotate_image_2d(
         h, w = image.shape[-2:]
         image_center = dft_center(
             image_shape=(h, w), device=image.device, fftshift=True, rfft=False
-            )
+        )
 
-    matrix = _build_rotate_shift_matrix_2d(rotate, shift_yx, image_center, rotate_first=False)
+    matrix = _build_rotate_shift_matrix_2d(
+        rotate, shift_yx, image_center, rotate_first=False
+    )
     return affine_transform_image_2d(
         image=image,
         matrices=matrix,
@@ -153,11 +159,12 @@ def shift_then_rotate_image_2d(
         yx_matrices=True,
     )
 
+
 def _build_rotate_shift_matrix_2d(
-        rotate: int | float,
-        shift_yx: list[float | int] | tuple[float | int, ...],
-        center_tensor: torch.Tensor,
-        rotate_first: bool,
+    rotate: int | float,
+    shift_yx: list[float | int] | tuple[float | int, ...],
+    center_tensor: torch.Tensor,
+    rotate_first: bool,
 ) -> torch.Tensor:
 
     if (num_shifts := len(shift_yx)) > 2:
@@ -172,7 +179,11 @@ def _build_rotate_shift_matrix_2d(
         inner_matrix = translation_matrix @ rotation_matrix
     else:
         inner_matrix = rotation_matrix @ translation_matrix
-    matrix = T(center_tensor, device=device) @ inner_matrix @ T(-center_tensor, device=device)
+    matrix = (
+        T(center_tensor, device=device)
+        @ inner_matrix
+        @ T(-center_tensor, device=device)
+    )
     # Matrix is inverted because it is applied to the coordinate grid,
     # not the image directly.
     return torch.inverse(matrix)
