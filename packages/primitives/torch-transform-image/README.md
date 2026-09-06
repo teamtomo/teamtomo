@@ -107,6 +107,20 @@ result = affine_transform_image_3d(
 )
 ```
 
+### Tilt-axis rotation (cryo-ET)
+
+Rotate about an axis in the XY plane. `tilt_axis_angle` is degrees from +X toward +Y (`0` → X, `90` → Y):
+
+```python
+from torch_transform_image import rotate_image_3d_about_tilt_axis
+
+tilted = rotate_image_3d_about_tilt_axis(
+    volume,
+    tilt_deg=30.0,
+    tilt_axis_angle=90.0,  # default: about Y
+)
+```
+
 ## How It Works
 
 Under the hood, the package:
