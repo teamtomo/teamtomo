@@ -164,14 +164,15 @@ def _build_rotate_shift_matrix_2d(
         e = f"2 shifts are required but {num_shifts} were supplied: {shift_yx}"
         raise ValueError(e)
 
-    rotation_matrix = R([rotate], yx=True)
-    translation_matrix = T(shift_yx)
+    device = center_tensor.device
+    rotation_matrix = R([rotate], yx=True, device=device)
+    translation_matrix = T(shift_yx, device=device)
 
     if rotate_first:
         inner_matrix = translation_matrix @ rotation_matrix
     else:
         inner_matrix = rotation_matrix @ translation_matrix
-    matrix = T(center_tensor) @ inner_matrix @ T(-center_tensor)
+    matrix = T(center_tensor, device=device) @ inner_matrix @ T(-center_tensor, device=device)
     # Matrix is inverted because it is applied to the coordinate grid,
     # not the image directly.
     return torch.inverse(matrix)

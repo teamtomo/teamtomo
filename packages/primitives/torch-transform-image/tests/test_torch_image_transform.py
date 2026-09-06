@@ -1,9 +1,11 @@
+import pytest
 import torch
 from torch_affine_utils.transforms_2d import T as T_2d, S as S_2d
 from torch_affine_utils.transforms_3d import T as T_3d, S as S_3d
 from torch_transform_image import (
     affine_transform_image_2d,
     affine_transform_image_3d,
+    rotate_image_3d_about_tilt_axis,
     rotate_then_shift_image_2d,
     shift_then_rotate_image_2d,
     rotate_then_shift_image_3d,
@@ -174,3 +176,45 @@ def test_shift_rotate_image_3d():
     assert image[14, 19, 21] == 0
     assert torch.allclose(result[14, 19, 21], torch.tensor(1.0), atol=1e-6)
     assert result[14, 7, 14] == 0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_rotate_then_shift_image_3d_cuda_device():
+    image = torch.zeros((28, 28, 28), dtype=torch.float32, device="cuda")
+    image[14, 7, 14] = 1
+
+    result = rotate_then_shift_image_3d(
+        image=image,
+        rotate_zyx=[0, 30, 0],
+        shift_zyx=[0, 0, 0],
+        interpolation="trilinear",
+    )
+    assert result.device.type == "cuda"
+    assert result.shape == image.shape
+    assert torch.isfinite(result).all()
+
+
+def test_rotate_image_3d_about_tilt_axis_matches_y_rotation():
+    image = torch.zeros((28, 28, 28), dtype=torch.float32)
+    image[14, 7, 14] = 1
+
+    via_tilt_axis = rotate_image_3d_about_tilt_axis(
+        image, tilt_deg=90.0, tilt_axis_angle=90.0
+    )
+    via_principal = rotate_then_shift_image_3d(
+        image, rotate_zyx=[0, 90, 0], shift_zyx=[0, 0, 0]
+    )
+    assert torch.allclose(via_tilt_axis, via_principal, atol=1e-5)
+
+
+def test_rotate_image_3d_about_tilt_axis_x_is_zero_axis_angle():
+    image = torch.zeros((28, 28, 28), dtype=torch.float32)
+    image[14, 14, 7] = 1
+
+    via_tilt_axis = rotate_image_3d_about_tilt_axis(
+        image, tilt_deg=90.0, tilt_axis_angle=0.0
+    )
+    via_principal = rotate_then_shift_image_3d(
+        image, rotate_zyx=[0, 0, 90], shift_zyx=[0, 0, 0]
+    )
+    assert torch.allclose(via_tilt_axis, via_principal, atol=1e-5)
