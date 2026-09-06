@@ -56,7 +56,13 @@ repository = "https://github.com/teamtomo/teamtomo"
 
 # https://peps.python.org/pep-0735/
 [dependency-groups]
-test = ["pytest", "pytest-cov"]
+test = [
+    "pandas",
+    "pytest",
+    "pytest-cov",
+    "torch-calculate-electrostatic-potential",
+    "torch-structure-manipulation",
+]
 dev = [
     { include-group = "test" },
     "ipython",
@@ -67,6 +73,10 @@ dev = [
     "rich",                     # https://github.com/Textualize/rich
     "ruff",
 ]
+
+[tool.uv.sources]
+torch-calculate-electrostatic-potential = { workspace = true }
+torch-structure-manipulation = { workspace = true }
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
@@ -112,7 +122,7 @@ skip-magic-trailing-comma = false
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
-files = "src/**/"
+files = "src/torch_scattering"
 strict = true
 disallow_any_generics = false
 disallow_subclassing_any = false
@@ -122,7 +132,14 @@ pretty = true
 # scipy, torch-grid-utils, and torch-ctf don't ship a py.typed marker /
 # stub package yet.
 [[tool.mypy.overrides]]
-module = ["scipy.*", "torch_grid_utils.*", "torch_ctf.*"]
+module = [
+    "scipy",
+    "scipy.*",
+    "torch_ctf",
+    "torch_ctf.*",
+    "torch_grid_utils",
+    "torch_grid_utils.*",
+]
 ignore_missing_imports = true
 
 # https://docs.pytest.org/

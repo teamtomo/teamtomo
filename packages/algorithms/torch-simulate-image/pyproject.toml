@@ -1,0 +1,161 @@
+# https://peps.python.org/pep-0517/
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# https://hatch.pypa.io/latest/config/metadata/
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.1.0"
+
+[tool.hatch.version.raw-options]
+search_parent_directories = true
+tag_regex = "^torch-simulate-image@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-simulate-image@v[0-9]*.[0-9]*.[0-9]*'"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
+
+# https://peps.python.org/pep-0621/
+[project]
+name = "torch-simulate-image"
+dynamic = ["version"]
+description = "Cryo-EM micrograph simulation from exit waves in PyTorch"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "TeamTomo contributors" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "torch",
+    "pydantic>=2.0,<3",
+    "teamtomo-basemodel",
+    "torch-ctf",
+    "torch-fourier-filter",
+    "torch-grid-utils",
+]
+
+[tool.uv.sources]
+teamtomo-basemodel = { workspace = true }
+torch-ctf = { workspace = true }
+torch-fourier-filter = { workspace = true }
+torch-grid-utils = { workspace = true }
+torch-scattering = { workspace = true }
+torch-calculate-electrostatic-potential = { workspace = true }
+torch-structure-manipulation = { workspace = true }
+torch-transform-image = { workspace = true }
+
+[project.urls]
+homepage = "https://github.com/teamtomo/teamtomo"
+repository = "https://github.com/teamtomo/teamtomo"
+
+# https://peps.python.org/pep-0735/
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-cov",
+    "torch-scattering",
+    "torch-calculate-electrostatic-potential",
+]
+examples = [
+    "ipykernel",
+    "matplotlib",
+    "mmdf",
+    "torch-structure-manipulation",
+    "torch-calculate-electrostatic-potential",
+    "torch-scattering",
+    "torch-transform-image",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "examples" },
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "pre-commit",
+    "rich",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = [
+    "E",
+    "W",
+    "F",
+    "D",
+    "D417",
+    "I",
+    "UP",
+    "C4",
+    "B",
+    "A001",
+    "RUF",
+    "TCH",
+    "TID",
+]
+ignore = [
+    "D401",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D", "S"]
+
+[tool.ruff.format]
+docstring-code-format = true
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+files = "src/torch_simulate_image"
+strict = true
+disallow_any_generics = false
+disallow_subclassing_any = false
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "torch_ctf",
+    "torch_ctf.*",
+    "torch_fourier_filter",
+    "torch_fourier_filter.*",
+    "torch_grid_utils",
+    "torch_grid_utils.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+filterwarnings = ["error"]
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+addopts = "-m 'not slow'"
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "except ImportError",
+    "\\.\\.\\.",
+    "raise NotImplementedError()",
+    "pass",
+]
+
+[tool.coverage.run]
+source = ["torch_simulate_image"]

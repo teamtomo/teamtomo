@@ -1,3 +1,5 @@
+"""Real-space affine transforms for 3D images."""
+
 from typing import Literal, Optional
 
 import einops
@@ -99,7 +101,9 @@ def rotate_then_shift_image_3d(
             image_shape=(d, h, w), device=image.device, fftshift=True, rfft=False
         )
 
-    matrix = _build_rotate_shift_matrix_3d(rotate_zyx, shift_zyx, image_center, rotate_first=True)
+    matrix = _build_rotate_shift_matrix_3d(
+        rotate_zyx, shift_zyx, image_center, rotate_first=True
+    )
     return affine_transform_image_3d(
         image=image,
         matrices=matrix,
@@ -166,7 +170,9 @@ def shift_then_rotate_image_3d(
             image_shape=(d, h, w), device=image.device, fftshift=True, rfft=False
         )
 
-    matrix = _build_rotate_shift_matrix_3d(rotate_zyx, shift_zyx, image_center, rotate_first=False)
+    matrix = _build_rotate_shift_matrix_3d(
+        rotate_zyx, shift_zyx, image_center, rotate_first=False
+    )
     return affine_transform_image_3d(
         image=image,
         matrices=matrix,
@@ -174,11 +180,63 @@ def shift_then_rotate_image_3d(
         zyx_matrices=True,
     )
 
+
+def rotate_image_3d_about_tilt_axis(
+    image: torch.Tensor,
+    tilt_deg: float | int,
+    tilt_axis_angle: float | int = 90.0,
+    interpolation: Literal["trilinear", "nearest"] = "trilinear",
+) -> torch.Tensor:
+    """Rotate a 3D image about an axis lying in the XY plane.
+
+    The tilt axis is oriented in XY at ``tilt_axis_angle`` degrees from +X
+    toward +Y (0 → about X, 90 → about Y). ``tilt_deg`` is the rotation about
+    that axis (right-hand rule). Implemented as
+    ``Rz(φ) @ Rx(θ) @ Rz(-φ)`` with a single resample about the image center.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Volume with shape ``(..., d, h, w)``.
+    tilt_deg : float | int
+        Rotation angle about the tilt axis, in degrees.
+    tilt_axis_angle : float | int
+        Orientation of the tilt axis in the XY plane, in degrees from +X
+        toward +Y. Default ``90`` (Y axis).
+    interpolation : {"trilinear", "nearest"}
+        Sampling mode passed to :func:`affine_transform_image_3d`.
+
+    Returns
+    -------
+    torch.Tensor
+        Rotated volume, same shape as ``image``. Out-of-bounds samples are
+        zero (see :func:`torch_image_interpolation.sample_image_3d`).
+    """
+    phi = float(tilt_axis_angle)
+    theta = float(tilt_deg)
+    device = image.device
+    d, h, w = image.shape[-3:]
+    center = dft_center(image_shape=(d, h, w), device=device, fftshift=True, rfft=False)
+    R = (
+        Rz(phi, zyx=True, device=device)
+        @ Rx(theta, zyx=True, device=device)
+        @ Rz(-phi, zyx=True, device=device)
+    )
+    matrix = T(center, device=device) @ R @ T(-center, device=device)
+    matrix = torch.inverse(matrix)
+    return affine_transform_image_3d(
+        image=image,
+        matrices=matrix,
+        interpolation=interpolation,
+        zyx_matrices=True,
+    )
+
+
 def _build_rotate_shift_matrix_3d(
-        rotate_zyx: list[float | int] | tuple[float | int, ...],
-        shift_zyx: list[float | int] | tuple[float | int, ...],
-        image_center: torch.Tensor,
-        rotate_first: bool,
+    rotate_zyx: list[float | int] | tuple[float | int, ...],
+    shift_zyx: list[float | int] | tuple[float | int, ...],
+    image_center: torch.Tensor,
+    rotate_first: bool,
 ) -> torch.Tensor:
     if (num_angles := len(rotate_zyx)) != 3:
         e = f"3 angles (zyx) are required but {num_angles} were supplied: {rotate_zyx}."
@@ -187,18 +245,21 @@ def _build_rotate_shift_matrix_3d(
         e = f"3 shifts (zyx) are required but {num_shifts} were supplied: {shift_zyx}."
         raise ValueError(e)
 
+    device = image_center.device
     rotation_matrix = (
-            Rx(rotate_zyx[2], zyx=True)
-            @ Ry(rotate_zyx[1], zyx=True)
-            @ Rz(rotate_zyx[0], zyx=True)
-        )
-    translation_matrix = T(shift_zyx)
+        Rx(rotate_zyx[2], zyx=True, device=device)
+        @ Ry(rotate_zyx[1], zyx=True, device=device)
+        @ Rz(rotate_zyx[0], zyx=True, device=device)
+    )
+    translation_matrix = T(shift_zyx, device=device)
 
     if rotate_first:
         inner_matrix = translation_matrix @ rotation_matrix
     else:
         inner_matrix = rotation_matrix @ translation_matrix
-    matrix = T(image_center) @ inner_matrix @ T(-image_center)
+    matrix = (
+        T(image_center, device=device) @ inner_matrix @ T(-image_center, device=device)
+    )
     # Matrix is inverted because it is applied to the coordinate grid,
     # not the image directly.
     return torch.inverse(matrix)

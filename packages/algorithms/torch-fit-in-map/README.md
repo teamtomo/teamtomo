@@ -11,16 +11,17 @@
 cryo-EM. It finds the rotation and translation that best superimposes a *mobile*
 volume onto a *reference* volume using normalised cross-correlation (NCC).
 
-The public API operates purely on **`torch.Tensor`** density maps and
+The public API operates purely on **`torch.Tensor`** potential maps and
 **`pandas.DataFrame`** atom tables — it does no file I/O. Reading/writing MRC and
 PDB/mmCIF files and the command-line tools live in the companion package
 [`torch-fit-in-map-cli`](https://github.com/rsanchezgarc/torch-fit-in-map-cli).
 
 Two alignment modes are supported:
 
-- **Map-to-map** — align one density map onto another (`fit_map_in_map`).
-- **Atoms ↔ map** — simulate an electrostatic-potential density from a table of
-  atoms and align it against a map (`fit_pdb_in_map` / `fit_map_in_pdb`).
+- **Map-to-map** — align one map onto another (`fit_map_in_map`).
+- **Atoms ↔ map** — simulate an electrostatic potential from a table of
+  atoms and align it against a map (`fit_structure_in_map` /
+  `fit_map_in_structure`).
 
 ## Features
 
@@ -29,7 +30,8 @@ Two alignment modes are supported:
 - Gradient-based local refinement (L-BFGS or Adam) using PyTorch autograd
 - Multi-start refinement to escape local minima
 - Optional soft masking and multi-GPU support
-- Atom-table transform: map input atomic coordinates into the reference frame (`transform_atoms`)
+- Atom-table transform: map input atomic coordinates into the reference frame
+  (`apply_alignment_to_structure`)
 
 ## Installation
 
@@ -72,11 +74,11 @@ exactly what [`mmdf`](https://github.com/teamtomo/mmdf) produces:
 
 ```python
 import mmdf
-from torch_fit_in_map import fit_pdb_in_map
+from torch_fit_in_map import fit_structure_in_map
 
 atoms = mmdf.read("model.pdb")          # pandas DataFrame
 
-result = fit_pdb_in_map(
+result = fit_structure_in_map(
     mobile_atoms=atoms,
     reference_map=experimental,          # (d, h, w) tensor
     pixel_size_angstroms=1.5,
@@ -84,15 +86,37 @@ result = fit_pdb_in_map(
 )
 ```
 
-`fit_map_in_pdb` does the inverse (fit a map into the frame of an atomic model).
-Both accept a custom `simulator=` implementing the `DensitySimulator` protocol.
+`fit_map_in_structure` does the inverse (fit a map into the frame of an atomic
+structure).
+Both accept a custom `simulator=` implementing the `PotentialSimulator` protocol
+and optional `simulator_config=` for the default electrostatic-potential backend.
+
+#### Simulation contract
+
+The default simulator (`DEFAULT_POTENTIAL_SIMULATOR`) delegates to
+`torch-calculate-electrostatic-potential`:
+
+1. Atoms are centred at the cubic simulation-box centre
+   (`default_sublattice_radius(pixel_size)` sets the per-atom stencil).
+2. A `(box_size, box_size, box_size)` potential in volts is returned (ZYX order).
+3. `apply_alignment_to_structure` inverts the same centre/crop geometry before
+   applying the alignment transform.
+
+Use `PotentialSimulatorConfig` to select Peng elemental vs bonded scattering
+factors. Bonded factors require structure columns
+`chain`, `residue_id`, `residue`, and `atom` (or set `annotate_bonding=True`).
+
+The CLI wrappers `torch-fit-in-map`, `torch-fit-in-atomic-model`, and
+`torch-simulate-density` in
+[`torch-fit-in-map-cli`](https://github.com/rsanchezgarc/torch-fit-in-map-cli)
+call the same default simulator path.
 
 ### Transforming atoms into the reference frame
 
 ```python
-from torch_fit_in_map import transform_atoms
+from torch_fit_in_map import apply_alignment_to_structure
 
-moved = transform_atoms(
+moved = apply_alignment_to_structure(
     atoms, result,
     pixel_size=1.5,
     box_shape=reference.shape,           # (d, h, w)
@@ -134,6 +158,7 @@ All alignment functions return an `AlignmentResult`:
 | `translation_pixels` | `(3,)` tensor | Translation in zyx pixels |
 | `score` | `float` | Peak NCC score (higher is better, max 1.0) |
 | `translation_angstroms` | `(3,)` tensor or `None` | Translation in Å (when pixel size is provided) |
+| `simulated_potential` | `(d, h, w)` tensor or `None` | Simulated potential when `save_simulated=True` |
 
 Use `apply_alignment(mobile, result)` to produce the aligned volume.
 
@@ -142,6 +167,7 @@ Use `apply_alignment(mobile, result)` to produce the aligned volume.
 The `torch-fit-in-map`, `torch-fit-in-atomic-model` and `torch-simulate-density`
 commands (with MRC/PDB file handling) live in
 [`torch-fit-in-map-cli`](https://github.com/rsanchezgarc/torch-fit-in-map-cli).
+They use the same `DEFAULT_POTENTIAL_SIMULATOR` path as the Python API.
 
 ## License
 

@@ -34,8 +34,11 @@ dependencies = [
     "torch-tiltxcorr",
     "torch-local-resolution",
     "torch-fit-in-map",
+    "torch-simulate-image",
     "torch-reconstruct-tomogram",
     "teamtomo-basemodel",
+    "torch-calculate-electrostatic-potential",
+    "torch-structure-manipulation",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -67,9 +70,11 @@ torch-segment-fiducials-2d = { workspace = true }
 torch-tiltxcorr = { workspace = true }
 torch-local-resolution = { workspace = true }
 torch-fit-in-map = { workspace = true }
+torch-simulate-image = { workspace = true }
 torch-reconstruct-tomogram = { workspace = true }
 teamtomo-basemodel = { workspace = true }
-torch-calculate-electrostatic-potential = { git = "https://github.com/teamtomo/torch-calculate-electrostatic-potential.git" }
+torch-calculate-electrostatic-potential = { workspace = true }
+torch-structure-manipulation = { workspace = true }
 
 [tool.uv.workspace]
 members = [

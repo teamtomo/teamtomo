@@ -21,6 +21,8 @@ _Note: File i/o packages remain separate from the monorepo_
 - [x] `torch-fourier-slice`             - extracting/inserting central slices of Fourier transforms
 - [x] `torch-grid-utils`                - coordinate grids, frequency grids and shape generation
 - [x] `torch-image-interpolation`       - sample values from or insert values into images
+- [x] `torch-calculate-electrostatic-potential` - calculate electrostatic potential from atomic coordinates
+- [x] `torch-structure-manipulation`    - manipulate and annotate atomic structures
 - [x] `torch-so3`                       - 3D rotation operations and utilities
 - [x] `torch-transform-image`           - affine transforms of images
 - [x] `torch-subpixel-crop`             - crop from images with subpixel precision
@@ -44,8 +46,6 @@ _Note: File i/o packages remain separate from the monorepo_
 ### Work in progress packages
 
 - [ ] `torch-tilt-series` - renamed from torch-tomogram during migration, interface for tilt series data
-- [ ] `torch-calculate-electrostatic-potential` - calculate electrostatic potential from atomic coordinates
-- [ ] `torch-structure-manipulation` - manipulate atomic structures (e.g. rotation, translation, cropping, etc.)
 
 ## Archiving old repositories
 
