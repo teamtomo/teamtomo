@@ -5,6 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    default_sublattice_radius,
+    potential_from_structure_3d,
+)
+from torch_structure_manipulation import AtomicStructure
 
 from ._config import PotentialSimulatorConfig
 from ._geometry import center_positions_in_simulation_box, simulation_box_center_zyx
@@ -37,12 +43,15 @@ class PotentialSimulator(Protocol):
 
 
         class MySimulator:
-            def simulate(self, atoms, pixel_size, box_size, device=None, config=None):
-                ...
+            def simulate(
+                self, atoms, pixel_size, box_size, device=None, config=None
+            ): ...
 
 
         atoms = mmdf.read("model.pdb")
-        result = fit_structure_in_map(atoms, potential_map, 1.5, 128, simulator=MySimulator())
+        result = fit_structure_in_map(
+            atoms, potential_map, 1.5, 128, simulator=MySimulator()
+        )
     """
 
     def simulate(
@@ -92,12 +101,6 @@ class _ESPSimulator:
         device: torch.device | None = None,
         config: PotentialSimulatorConfig | None = None,
     ) -> torch.Tensor:
-        from torch_calculate_electrostatic_potential import (
-            GridConfig,
-            default_sublattice_radius,
-            potential_from_structure_3d,
-        )
-        from torch_structure_manipulation import AtomicStructure
 
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -3,6 +3,22 @@
 import numpy as np
 import pandas as pd
 import torch
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    default_sublattice_radius,
+    potential_from_structure_3d,
+)
+from torch_structure_manipulation import AtomicStructure
+
+from torch_fit_in_map import (
+    AlignmentResult,
+    ExhaustiveSearchConfig,
+    PotentialSimulatorConfig,
+    apply_alignment_to_structure,
+    fit_map_in_structure,
+    fit_structure_in_map,
+)
+from torch_fit_in_map._simulate import DEFAULT_POTENTIAL_SIMULATOR
 
 
 class _GaussianSimulator:
@@ -42,8 +58,6 @@ def _make_atoms() -> pd.DataFrame:
 
 def test_fit_structure_in_map_accepts_dataframe():
     """fit_structure_in_map accepts a DataFrame and honors a custom simulator."""
-    from torch_fit_in_map import ExhaustiveSearchConfig, fit_structure_in_map
-
     atoms = _make_atoms()
     sim = _GaussianSimulator()
     box = 24
@@ -62,14 +76,12 @@ def test_fit_structure_in_map_accepts_dataframe():
         gradient_config=None,
         verbose=False,
     )
-    # Identical simulated mobile/reference → near-identity recovery.
+    # Identical simulated mobile/reference -> near-identity recovery.
     assert torch.allclose(result.rotation_matrix.cpu(), torch.eye(3), atol=0.2)
 
 
 def test_fit_map_in_structure_accepts_dataframe():
     """fit_map_in_structure accepts a reference-atoms DataFrame."""
-    from torch_fit_in_map import ExhaustiveSearchConfig, fit_map_in_structure
-
     atoms = _make_atoms()
     sim = _GaussianSimulator()
     box = 24
@@ -93,8 +105,6 @@ def test_fit_map_in_structure_accepts_dataframe():
 
 def test_apply_alignment_to_structure_preserves_dataframe_and_distances():
     """The structure transform preserves metadata and pairwise distances."""
-    from torch_fit_in_map import AlignmentResult, apply_alignment_to_structure
-
     atoms = _make_atoms()
     atoms["label"] = [f"atom-{i}" for i in range(len(atoms))]
     box = 32
@@ -122,8 +132,6 @@ def test_apply_alignment_to_structure_preserves_dataframe_and_distances():
 
 def test_apply_alignment_to_structure_identity_centres_in_box():
     """With identity rotation and zero shift, atoms are centred at the box centre."""
-    from torch_fit_in_map import AlignmentResult, apply_alignment_to_structure
-
     atoms = _make_atoms()
     box = 40
     px = 2.0
@@ -140,21 +148,6 @@ def test_apply_alignment_to_structure_identity_centres_in_box():
 
 def test_default_workspace_simulator_produces_zyx_volume_and_fits():
     """The production simulator generates finite ZYX data usable by fitting."""
-    import torch_calculate_electrostatic_potential
-    from torch_calculate_electrostatic_potential import (
-        GridConfig,
-        potential_from_structure_3d,
-    )
-    from torch_structure_manipulation import AtomicStructure
-
-    from torch_fit_in_map import ExhaustiveSearchConfig, fit_structure_in_map
-    from torch_fit_in_map._simulate import DEFAULT_POTENTIAL_SIMULATOR
-    from torch_calculate_electrostatic_potential import default_sublattice_radius
-
-    assert "torch_calculate_electrostatic_potential" in (
-        torch_calculate_electrostatic_potential.__file__ or ""
-    )
-
     atoms = pd.DataFrame(
         {
             "x": [-2.0, 1.0, 3.0],
@@ -203,9 +196,6 @@ def test_default_workspace_simulator_produces_zyx_volume_and_fits():
 
 def test_default_simulator_supports_bonded_scattering_factors():
     """Bonded Peng factors can be selected via PotentialSimulatorConfig."""
-    from torch_fit_in_map import PotentialSimulatorConfig
-    from torch_fit_in_map._simulate import DEFAULT_POTENTIAL_SIMULATOR
-
     atoms = pd.DataFrame(
         {
             "x": [0.0, 1.2],

@@ -11,7 +11,7 @@ factors, not X-ray form factors:
     f_e(s) = sum_i a_i * exp(-b_i * s^2),  s = sin(theta) / wavelength
 
 Consequently, they must not undergo the X-ray-to-electron Mott-Bethe conversion
-``f_e(s) = 0.023934 * (Z - f_X(s)) / s²`` again. To produce electrostatic
+``f_e(s) = 0.023934 * (Z - f_X(s)) / s^2`` again. To produce electrostatic
 potential in volts, however, the electron scattering factor must still be
 converted to a voltage-normalized Fourier potential. For Fourier spatial
 frequency ``g = 2s``:
@@ -38,9 +38,9 @@ from tqdm import tqdm
 if TYPE_CHECKING:
     from .grid import GridConfig
 
-# Electron-scattering-factor (Å) to Fourier-potential (V Å³) normalization.
+# Electron-scattering-factor (Angstrom) to Fourier-potential (V Angstrom^3) norm.
 # Computed from CODATA 2022 electron mass and exact SI values for h and e.
-PENG_SCATTERING_TO_POTENTIAL = 47.877647240509745  # V Å²
+PENG_SCATTERING_TO_POTENTIAL = 47.877647240509745  # V Angstrom^2
 
 
 def evaluate_gaussian_sum(

@@ -242,7 +242,7 @@ def test_bonded_scattering_factor_table_reports_gaussian_term_count():
         parameters_a={"X": [1.0, 2.0, 3.0, 4.0, 5.0]},
         parameters_b={"X": [6.0, 7.0, 8.0, 9.0, 10.0]},
     )
-    assert table.n_gaussian_terms == 5
+    assert table.n_terms == 5
 
 
 def test_bonded_scattering_factor_table_validates_sequence_lengths():

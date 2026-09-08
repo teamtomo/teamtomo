@@ -32,7 +32,7 @@ class BondedScatteringFactorTable:
     """Gaussian scattering factors keyed by bonded-environment identifier.
 
     Every environment must provide the same number of ``(a_i, b_i)`` Gaussian
-    terms in ``parameters_a`` and ``parameters_b``. Use :attr:`n_gaussian_terms`
+    terms in ``parameters_a`` and ``parameters_b``. Use :attr:`n_terms`
     to query that count.
     """
 
@@ -69,7 +69,7 @@ class BondedScatteringFactorTable:
             )
 
     @property
-    def n_gaussian_terms(self) -> int:
+    def n_terms(self) -> int:
         """Number of Gaussian terms in every bonded-environment sequence."""
         return len(next(iter(self.parameters_a.values())))
 
@@ -206,10 +206,10 @@ def resolve_scattering_parameters(
                 f"atom {index}: {molecule_type.strip().lower()} key {environment!r}"
             )
             continue
-        if provider.n_gaussian_terms != PENG_GAUSSIAN_TERM_COUNT:
+        if provider.n_terms != PENG_GAUSSIAN_TERM_COUNT:
             raise ValueError(
                 f"provider {molecule_type.strip().lower()!r} defines "
-                f"{provider.n_gaussian_terms} Gaussian terms, but the potential "
+                f"{provider.n_terms} Gaussian terms, but the potential "
                 f"kernel currently requires {PENG_GAUSSIAN_TERM_COUNT}"
             )
         a[index] = torch.as_tensor(

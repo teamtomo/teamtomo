@@ -266,7 +266,7 @@ def fit_map_in_structure(
         When ``None``, the default electrostatic-potential simulator is used.
     simulator_config : PotentialSimulatorConfig or None
         Options for the default simulator (scattering factors, sublattice radius,
-        etc.).  Ignored when a custom ``simulator`` is supplied.
+        etc.).  Mutually exclusive with a custom ``simulator``.
     save_simulated : bool
         Store the simulated reference potential in
         ``AlignmentResult.simulated_potential``.
@@ -282,7 +282,17 @@ def fit_map_in_structure(
     Returns
     -------
     AlignmentResult
+
+    Raises
+    ------
+    ValueError
+        If both ``simulator`` and ``simulator_config`` are supplied.
     """
+    if simulator is not None and simulator_config is not None:
+        raise ValueError(
+            "simulator and simulator_config are mutually exclusive; "
+            "simulator_config only configures the default simulator."
+        )
     if simulator is None:
         simulator = DEFAULT_POTENTIAL_SIMULATOR
 
@@ -348,8 +358,8 @@ def fit_structure_in_map(
     simulator : PotentialSimulator or None
         Potential simulator.  See :class:`~torch_fit_in_map.PotentialSimulator`.
     simulator_config : PotentialSimulatorConfig or None
-        Options for the default simulator.  Ignored when a custom ``simulator``
-        is supplied.
+        Options for the default simulator.  Mutually exclusive with a custom
+        ``simulator``.
     save_simulated : bool
         Store the simulated potential in ``AlignmentResult.simulated_potential``.
     exhaustive_config : ExhaustiveSearchConfig or None
@@ -364,7 +374,17 @@ def fit_structure_in_map(
     Returns
     -------
     AlignmentResult
+
+    Raises
+    ------
+    ValueError
+        If both ``simulator`` and ``simulator_config`` are supplied.
     """
+    if simulator is not None and simulator_config is not None:
+        raise ValueError(
+            "simulator and simulator_config are mutually exclusive; "
+            "simulator_config only configures the default simulator."
+        )
     if simulator is None:
         simulator = DEFAULT_POTENTIAL_SIMULATOR
 
@@ -399,9 +419,9 @@ def fit_structure_in_map(
 
 
 __all__ = [
-    "AlignmentResult",
     "DEFAULT_POTENTIAL_SIMULATOR",
     "DEFAULT_SIMULATOR",
+    "AlignmentResult",
     "DensitySimulator",
     "ExhaustiveSearchConfig",
     "GradientRefinementConfig",

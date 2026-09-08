@@ -471,7 +471,7 @@ BASELINES_DIR = Path(__file__).parent / "baselines"
 
 
 class TestRegressionBaselines:
-    """Regression tests: fixed seed → near-exact output.
+    """Regression tests: fixed seed -> near-exact output.
 
     These tests require baseline ``.pt`` files in ``baselines/``.
     """

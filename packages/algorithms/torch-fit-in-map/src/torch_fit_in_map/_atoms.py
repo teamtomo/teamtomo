@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import torch
+from torch_structure_manipulation import (
+    apply_rotation_to_coords,
+    apply_translation_to_coords,
+    df_to_atomxyz,
+)
+
 from ._geometry import (
     coords_xyz_to_simulation_voxels,
     crop_start_xyz,
@@ -30,14 +37,18 @@ def apply_alignment_to_structure(
     :func:`~torch_fit_in_map.fit_map_in_structure`, then applies the alignment and
     converts back to Angstroms:
 
-    1. Atom Å → simulation voxels:
-       ``p_sim = (atom_Å_zyx - centroid_Å_zyx + box_centre_sim_Å) / pixel_size``
-    2. Simulation voxels → cropped-box voxels (accounts for ``crop_or_pad_to_shape``):
+    1. Atom Angstroms -> simulation voxels:
+       ```python
+       p_sim = (
+           atom_Angstroms_zyx - centroid_Angstroms_zyx + box_centre_sim_Angstroms
+       ) / pixel_size
+        ```
+    2. Simulation voxels -> cropped-box voxels (accounts for ``crop_or_pad_to_shape``):
        ``p_mob = p_sim - crop_start_zyx``
     3. Apply alignment (rotation around box centre, then translate):
        ``p_ref = R⁻¹ @ (p_mob - c) + c + t``
-    4. Reference voxels → Å (adds MRC origin):
-       ``atom_ref_Å = p_ref * pixel_size + origin_Å``
+    4. Reference voxels -> Angstroms (adds MRC origin):
+       ``atom_ref_Angstroms = p_ref * pixel_size + origin_Angstroms``
 
     Parameters
     ----------
@@ -61,13 +72,6 @@ def apply_alignment_to_structure(
         A copy of *atoms* with the ``x``, ``y``, ``z`` columns transformed into
         the reference frame.
     """
-    import torch
-    from torch_structure_manipulation import (
-        apply_rotation_to_coords,
-        apply_translation_to_coords,
-        df_to_atomxyz,
-    )
-
     missing = {"x", "y", "z"} - set(atoms.columns)
     if missing:
         raise ValueError(
@@ -84,11 +88,11 @@ def apply_alignment_to_structure(
     coords_xyz = df_to_atomxyz(atoms)
     centroid_xyz = coords_xyz.mean(dim=0)
 
-    # Step 1: atom Å → simulation voxel space
+    # Step 1: atom Angstroms -> simulation voxel space
     p_sim_vox_xyz = coords_xyz_to_simulation_voxels(
         coords_xyz, centroid_xyz, sim_box_size, pixel_size
     )
-    # Step 2: simulation voxels → cropped-box voxels
+    # Step 2: simulation voxels -> cropped-box voxels
     p_mob_vox_xyz = p_sim_vox_xyz - crop_start_xyz(sim_box_size, box_shape)
 
     # Convert the alignment's pull-convention ZYX matrix into the conventional
@@ -102,7 +106,7 @@ def apply_alignment_to_structure(
         zyx=False,
     )
     p_ref_vox_xyz = apply_translation_to_coords(p_ref_vox_xyz, translation_xyz)
-    # Step 4: reference voxels → Å (add map origin)
+    # Step 4: reference voxels -> Angstroms (add map origin)
     p_ref_A_xyz = p_ref_vox_xyz * pixel_size + torch.tensor(ref_origin_xyz)
 
     out = atoms.copy()

@@ -1,4 +1,4 @@
-"""Integration tests: download EMD-39549 + 8YRQ, perturb, recover within 0.5 Å / 0.5°.
+"""Download EMD-39549 + 8YRQ, perturb, recover to 0.5 Angstroms / 0.5°.
 
 Convention note
 ---------------
@@ -76,7 +76,7 @@ def _rotation_error_deg(R_a: torch.Tensor, R_b: torch.Tensor) -> float:
 class _GaussianCaSimulator:
     """CA-atom Gaussian density simulator (not physically accurate; for tests only)."""
 
-    sigma_A: float = 4.0  # Gaussian width in Ångström
+    sigma_A: float = 4.0  # Gaussian width in Angstroms
 
     def simulate(
         self,
@@ -152,7 +152,8 @@ def _run_map_alignment_recovery(
     """Shared logic for map-to-map alignment recovery tests.
 
     Perturbs EMD-39549 with ``angle_deg`` (Z-axis rotation) and ``shift_A``
-    (Å along Z), runs ``fit_map_in_map``, and asserts recovery within 0.5°/0.5Å.
+    (Angstroms along Z), runs ``fit_map_in_map``, and asserts recovery
+    within 0.5 deg/0.5 Angstroms.
 
     Under the pull convention ``apply_alignment(ref, (R_p, t_p))`` produces
     a mobile whose true inverse is R_p^T / -R_p@t_p.
@@ -206,11 +207,11 @@ def _run_map_alignment_recovery(
     t_err_A = (t_pred - t_expected.cpu()).norm().item() * pixel_size
 
     assert angle_err < 0.5, f"Rotation error {angle_err:.3f}° > 0.5°"
-    assert t_err_A < 0.5, f"Translation error {t_err_A:.3f} Å > 0.5 Å"
+    assert t_err_A < 0.5, f"Translation error {t_err_A:.3f} Angstroms > 0.5 Angstroms"
 
 
 def test_map_alignment_translation_only(emdb_map):
-    """CI-fast: pure translation (4 Å), 90° angular step (~24 orientations)."""
+    """CI-fast: pure translation (4 Angstroms), 90° angular step (~24 orientations)."""
     _run_map_alignment_recovery(
         emdb_map,
         angle_deg=0.0,
@@ -221,7 +222,7 @@ def test_map_alignment_translation_only(emdb_map):
 
 
 def test_map_alignment_90deg_rotation(emdb_map):
-    """CI-fast: 90° Z-rotation + 2 Å shift, 90° angular step (rotation on grid)."""
+    """CI-fast: 90° Z-rotation + 2 Angstroms shift, 90° angular step (rot on grid)."""
     _run_map_alignment_recovery(
         emdb_map,
         angle_deg=90.0,
@@ -233,28 +234,28 @@ def test_map_alignment_90deg_rotation(emdb_map):
 
 @pytest.mark.slow
 def test_map_alignment_recovery(emdb_map):
-    """Perturb EMD-39549 with a known rigid transform and recover within 0.5 Å / 0.5°.
+    """Perturb EMD-39549 with known rigid transform and recover wi 0.5 Angstroms / 0.5°.
 
-    Perturbation: 5° rotation around Z, 2 Å translation along Z.
+    Perturbation: 5° rotation around Z, 2 Angstroms translation along Z.
     """
     _run_map_alignment_recovery(emdb_map, angle_deg=5.0, shift_A=2.0)
 
 
 @pytest.mark.slow
 def test_map_alignment_large_rotation(emdb_map):
-    """Recover a large rotation (25°) with a moderate shift (4 Å) within 0.5°/0.5 Å."""
+    """Large rotation (25°) with a moderate shift (4 Angstroms) within 0.5°/0.5 A."""
     _run_map_alignment_recovery(emdb_map, angle_deg=25.0, shift_A=4.0)
 
 
 @pytest.mark.slow
 def test_map_alignment_large_shift(emdb_map):
-    """Recover a small rotation (8°) with a large shift (12 Å) within 0.5°/0.5 Å."""
+    """Small rotation (8°) with a large shift (12 Angstroms) within 0.5°/0.5 A."""
     _run_map_alignment_recovery(emdb_map, angle_deg=8.0, shift_A=12.0)
 
 
 @pytest.mark.slow
 def test_structure_in_map_recovery(pdb_8yrq):
-    """Simulate 8YRQ and recover placement within 0.5 Å / 0.5°.
+    """Simulate 8YRQ and recover placement within 0.5 Angstroms / 0.5°.
 
     Uses ``fit_structure_in_map`` with a custom Gaussian CA-atom simulator. The
     structure is re-simulated internally (as the mobile) and fitted into a
@@ -275,7 +276,8 @@ def test_structure_in_map_recovery(pdb_8yrq):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     sim = _GaussianCaSimulator()
-    pixel_size = 2.0  # Å — coarse enough for speed, fine enough for 0.5 Å tolerance
+    # Angstroms — coarse enough for speed, fine enough for 0.5 Angstroms tolerance
+    pixel_size = 2.0
     box_size = _MAX_BOX
 
     atoms = mmdf.read(str(pdb_8yrq))
@@ -285,7 +287,7 @@ def test_structure_in_map_recovery(pdb_8yrq):
 
     # ── perturbation ──────────────────────────────────────────────────────────
     R_perturb = _rotation_z_zyx(5.0).to(device)
-    t_px = 2.0 / pixel_size  # 2 Å in voxels
+    t_px = 2.0 / pixel_size  # 2 Angstroms in voxels
     t_perturb = torch.tensor([t_px, 0.0, 0.0], dtype=torch.float32, device=device)
 
     # Perturb the reference density; fitting will re-simulate the structure
@@ -327,4 +329,4 @@ def test_structure_in_map_recovery(pdb_8yrq):
     t_err_A = (t_pred - t_expected.cpu()).norm().item() * pixel_size
 
     assert angle_err < 0.5, f"Rotation error {angle_err:.3f}° > 0.5°"
-    assert t_err_A < 0.5, f"Translation error {t_err_A:.3f} Å > 0.5 Å"
+    assert t_err_A < 0.5, f"Translation error {t_err_A:.3f} Angstroms > 0.5 Angstroms"

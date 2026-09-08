@@ -16,12 +16,12 @@ Coordinates and spacing are in Angstroms. Axis order is ZYX in 3D and YX in 2D.
 scattering factors**, not X-ray form factors:
 
 ```text
-f_e(s) = sum_i a_i exp(-b_i s²),  s = sin(theta) / wavelength
+f_e(s) = sum_i a_i exp(-b_i s^2),  s = sin(theta) / wavelength
 ```
 
 The amplitudes `a_i` and `f_e` are in Angstroms and `b_i` is in Angstroms
 squared. The X-ray-to-electron Mott-Bethe conversion
-`f_e(s) = 0.023934 (Z - f_X(s)) / s²` is therefore already incorporated in the
+`f_e(s) = 0.023934 (Z - f_X(s)) / s^2` is therefore already incorporated in the
 tabulated coefficients and must not be applied again.
 
 An electron scattering factor is not itself a real-space potential in volts.
@@ -30,7 +30,7 @@ using
 
 ```text
 V_tilde(g) = C f_e(g / 2),  g = 2s
-C = 2 pi hbar² / (m_e e) = 47.877647... V Angstrom²
+C = 2 pi hbar^2 / (m_e e) = 47.877647... V Angstrom^2
 ```
 
 The inverse transform returned by `calculate_scattering_potential_3d` and
@@ -40,7 +40,7 @@ return a projected potential in **volt-Angstroms**.
 
 The bonded coefficients come from
 [Shtyrov et al. (2026)](https://pmc.ncbi.nlm.nih.gov/articles/PMC13167779/)
-and use the equivalent convention `f_e(g) = sum_i a_i exp(-b_i g² / 4)`.
+and use the equivalent convention `f_e(g) = sum_i a_i exp(-b_i g^2 / 4)`.
 Protein and RNA currently share the same coefficient table because RNA-specific
 factors have not yet been measured.
 
