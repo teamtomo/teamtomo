@@ -47,7 +47,6 @@ def sample_image_2d(
     # set up for sampling with torch.nn.functional.grid_sample
     # shape (..., 2) -> (n, 2)
     coordinates, ps = einops.pack([coordinates], pattern='* yx')
-    n_samples = coordinates.shape[0]
     h, w = image.shape[-2:]
 
     # handle complex input
@@ -58,12 +57,16 @@ def sample_image_2d(
         image = torch.view_as_real(image)
         image = einops.rearrange(image, 'c h w complex -> (complex c) h w')
 
-    # torch.nn.functional.grid_sample is set up for sampling grids
-    # here we view our image as a batch of n_samples multi-channel images
-    # then sample a batch of (1x1) grids
-    # this enables sampling arbitrarily shaped arrays of coords
-    image = einops.repeat(image, 'c h w -> b c h w', b=n_samples)
-    coordinates = einops.rearrange(coordinates, 'b yx -> b 1 1 yx')  # b h w yx
+    # torch.nn.functional.grid_sample is set up for sampling grids, so we sample
+    # a single grid of shape (1, n) containing all n coordinates.
+    #
+    # the sample points belong in the *grid's* spatial dimensions. broadcasting the
+    # image to (n, c, h, w) also produces correct results, but makes the backward
+    # pass materialise a dense (n, c, h, w) input-gradient before the broadcast
+    # sums it away - so peak memory and runtime scale with n * image_elems rather
+    # than with n. see https://github.com/teamtomo/teamtomo/issues/117
+    image = einops.rearrange(image, 'c h w -> 1 c h w')
+    coordinates = einops.rearrange(coordinates, 'b yx -> 1 1 b yx')  # b h w yx
 
     # take the samples
     samples = F.grid_sample(
@@ -76,13 +79,13 @@ def sample_image_2d(
 
     # reconstruct complex valued samples if required
     if input_image_is_complex is True:
-        samples = einops.rearrange(samples, 'b (complex c) 1 1 -> b c complex', complex=2)
+        samples = einops.rearrange(samples, '1 (complex c) 1 b -> b c complex', complex=2)
         samples = utils.view_as_complex(samples.contiguous())  # (b, c)
     else:
-        samples = einops.rearrange(samples, 'b c 1 1 -> b c')
+        samples = einops.rearrange(samples, '1 c 1 b -> b c')
 
     # set samples from outside of image to zero explicitly
-    coordinates = einops.rearrange(coordinates, 'b 1 1 yx -> b yx')
+    coordinates = einops.rearrange(coordinates, '1 1 b yx -> b yx')
     image_shape = torch.as_tensor(image.shape[-2:]).to(device)
     inside = torch.logical_and(coordinates >= 0, coordinates <= image_shape - 1)
     inside = torch.all(inside, dim=-1)  # (b,)
