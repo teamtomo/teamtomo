@@ -18,7 +18,7 @@ def preprocess_tilt_series_images(
     subtract_background: bool = True,
     normalize: bool = True,
 ) -> torch.Tensor:
-    """Preprocess tilt-series images for reconstruction.
+    """Preprocess tilt-series images for reconstruction and alignment.
 
     Applies, per image: linear background plane subtraction, a bandpass
     filter, and central-crop normalization - similar to the tilt-image

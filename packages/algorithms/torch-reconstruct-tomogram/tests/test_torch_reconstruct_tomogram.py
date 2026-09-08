@@ -153,6 +153,18 @@ def test_reconstruct_subvolume_preprocess_toggle(device, tmp_path):
 
 
 @pytest.mark.parametrize("device", DEVICES)
+def test_reconstruct_subvolume_preprocessing_kwargs_are_forwarded(device, tmp_path):
+    tilt_series = make_tilt_series(tmp_path, device)
+    point = torch.tensor([0.0, 0.0, 0.0], device=device)
+
+    default = reconstruct_subvolume(tilt_series, point, sidelength=8)
+    custom = reconstruct_subvolume(
+        tilt_series, point, sidelength=8, high=0.3, bandpass_padding=4
+    )
+    assert not torch.allclose(default, custom)
+
+
+@pytest.mark.parametrize("device", DEVICES)
 def test_reconstruct_tomogram_output_pixel_spacing(device, tmp_path):
     tilt_series = make_tilt_series(tmp_path, device)
     volume = reconstruct_tomogram(
