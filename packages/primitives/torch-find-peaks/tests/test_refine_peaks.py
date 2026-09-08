@@ -3,9 +3,6 @@ from _utils import create_test_image, create_test_volume
 
 from torch_find_peaks.refine_peaks import refine_peaks_2d, refine_peaks_3d
 
-# Set global random seed for reproducibility
-torch.manual_seed(42)
-
 
 def test_refine_peaks_2d_basic():
     """Test basic functionality of 2D Gaussian fitting."""

@@ -4,20 +4,23 @@ from torch_grid_utils import coordinate_grid
 from torch_find_peaks.gaussians import Gaussian2D, Gaussian3D
 
 
-def create_test_image(size:int=100, peaks: torch.tensor = torch.tensor([]), noise_level=0.1):
+def create_test_image(size:int=100, peaks: torch.tensor = torch.tensor([]), noise_level=0.1, seed: int = 42):
     """
     Create a test image with known Gaussian peaks.
-    
+
     Args:
         size: Size of the square image
         peaks: (n,5) tensor of peak parameters (amplitude, y, x, sigma_y, sigma_x)
         noise_level: Level of noise to add
-        
+        seed: Seed for the noise generator, applied at generation time so the
+            result doesn't depend on RNG draws from other tests
+
     Returns:
         - Image tensor with Gaussian peaks
     """
     # Create a blank image
-    image = torch.randn((size, size)) * noise_level
+    generator = torch.Generator().manual_seed(seed)
+    image = torch.randn((size, size), generator=generator) * noise_level
 
     gaussian_model = Gaussian2D(
         amplitude=peaks[:, 0],
@@ -34,20 +37,23 @@ def create_test_image(size:int=100, peaks: torch.tensor = torch.tensor([]), nois
 
     return image
 
-def create_test_volume(size:int=100, peaks: torch.tensor = torch.tensor([]), noise_level=0.1):
+def create_test_volume(size:int=100, peaks: torch.tensor = torch.tensor([]), noise_level=0.1, seed: int = 42):
     """
     Create a test volume with known Gaussian peaks.
-    
+
     Args:
         size: Size of the cube volume
         peaks: (n,7) tensor of peak parameters (amplitude, z, y, x, sigma_z, sigma_y, sigma_x)
         noise_level: Level of noise to add
-        
+        seed: Seed for the noise generator, applied at generation time so the
+            result doesn't depend on RNG draws from other tests
+
     Returns:
         - Volume tensor with Gaussian peaks
     """
     # Create a blank volume
-    image = torch.randn((size, size, size)) * noise_level
+    generator = torch.Generator().manual_seed(seed)
+    image = torch.randn((size, size, size), generator=generator) * noise_level
 
     gaussian_model = Gaussian3D(
         amplitude=peaks[:, 0],

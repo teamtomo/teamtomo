@@ -3,9 +3,6 @@ from _utils import create_test_image, create_test_volume
 
 from torch_find_peaks.find_peaks import find_peaks_2d, find_peaks_3d
 
-# Set global random seed for reproducibility
-torch.manual_seed(42)
-
 
 def test_peak_picking_2d():
     # Format of peaks: [amplitude, y, x, sigma_y, sigma_x]

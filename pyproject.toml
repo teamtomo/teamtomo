@@ -116,6 +116,10 @@ dev = [
     "rich",
     "ruff",
 ]
+examples = [
+    "ipykernel",
+    "matplotlib",
+]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not slow'"

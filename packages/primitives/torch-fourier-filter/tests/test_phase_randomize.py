@@ -109,6 +109,19 @@ def test_phase_permutation():
     )
 
 
+def _max_circular_nn_distance(a: torch.Tensor, b: torch.Tensor) -> float:
+    """Check `a` and `b` hold the same multiset of angles, up to per-element noise.
+
+    Avoids sort-and-compare: DC/Nyquist bins sit at angle exactly 0 or pi, so
+    a CPU/CUDA rounding difference there can flip one across the 0/2pi wrap
+    and cyclically shift every other bin's sorted rank, producing a large
+    spurious diff. Nearest-neighbor circular distance sidesteps that.
+    """
+    circular_diff = torch.remainder(a.unsqueeze(1) - b.unsqueeze(0) + math.pi, 2 * math.pi) - math.pi
+    dist = circular_diff.abs()
+    return max(dist.min(dim=1).values.max().item(), dist.min(dim=0).values.max().item())
+
+
 def test_phase_permutation_cuton_zero():
     """Full-spectrum permutation uses _permute_all_phases (no freq grid)."""
     image_shape = (24, 24)
@@ -116,19 +129,16 @@ def test_phase_permutation_cuton_zero():
     dft = torch.fft.fft2(torch.rand(image_shape, device=device))
     out = phase_permutation(dft, image_shape, cuton=0, device=device)
     assert torch.allclose(torch.abs(dft), torch.abs(out))
-    # Phase angle is ill-defined where |dft|≈0; cos/sin rebuild also shifts atan2
-    # slightly vs sorted-angle comparison on Windows vs Linux. Compare multiset only
-    # on bins with meaningful magnitude, in float64 with loose tol.
+    # Phase angle is ill-defined where |dft|≈0. Compare multiset only on bins
+    # with meaningful magnitude, in float64.
     mag = torch.abs(dft).flatten()
     mask = mag > 1e-5
     assert mask.any()
-    wo = torch.remainder(
-        torch.angle(dft.flatten()[mask]).double() + math.pi, 2 * math.pi
-    )
-    wp = torch.remainder(
-        torch.angle(out.flatten()[mask]).double() + math.pi, 2 * math.pi
-    )
-    assert torch.allclose(torch.sort(wo)[0], torch.sort(wp)[0], atol=0.02, rtol=0.02)
+    wo = torch.angle(dft.flatten()[mask]).double()
+    wp = torch.angle(out.flatten()[mask]).double()
+    # 1e-4 clears the ~1e-7 float32 noise floor (CPU and CUDA) but is still
+    # far tighter than the ~0.01 rad angle spacing, so real bugs get caught.
+    assert _max_circular_nn_distance(wo, wp) < 1e-4
 
 
 def test_phase_randomize_fftshift():

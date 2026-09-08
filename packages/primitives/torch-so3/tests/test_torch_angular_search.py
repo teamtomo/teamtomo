@@ -2,6 +2,7 @@
 
 import platform
 
+import healpy as hp
 import numpy as np
 import pytest
 
@@ -186,6 +187,51 @@ def test_healpix_sectored_base_grid_impossible_range_empty():
         phi_max=410.0,
     )
     assert grid.shape == (0, 4, 2)
+
+
+@pytest.mark.skipif(
+    platform.system() == "Windows", reason="healpy is not supported on Windows"
+)
+def test_healpix_sectored_base_grid_non_power_of_two_raises():
+    """nside_coarse and nside_fine must be a power of two."""
+    with pytest.raises(ValueError, match="nside_coarse"):
+        healpix_sectored_base_grid(nside_coarse=3, nside_fine=4)
+
+    with pytest.raises(ValueError, match="nside_fine"):
+        healpix_sectored_base_grid(nside_coarse=4, nside_fine=3)
+
+
+@pytest.mark.skipif(
+    platform.system() == "Windows", reason="healpy is not supported on Windows"
+)
+def test_healpix_sectored_base_grid_theta_step_rounds_to_power_of_two():
+    """Inferred nside_fine is rounded up to the nearest power of two."""
+    target = _nside_from_theta_step(20.0)
+    assert target == 3
+
+    grid = healpix_sectored_base_grid(nside_coarse=1, theta_step=20.0)
+    k2 = grid.shape[1]
+    assert k2 == 4**2  # nside_fine rounded up to 4, k2 = (4 / 1)**2
+
+
+@pytest.mark.skipif(
+    platform.system() == "Windows", reason="healpy is not supported on Windows"
+)
+def test_healpix_sectored_base_grid_matches_healpix_pixel_centres():
+    """Full-sphere sectored grid contains exactly the fine-grid pixel centres."""
+
+    nside_coarse, nside_fine = 2, 8
+    grid = healpix_sectored_base_grid(nside_coarse=nside_coarse, nside_fine=nside_fine)
+    actual = grid.reshape(-1, 2).numpy()
+    assert actual.shape == (12 * nside_fine**2, 2)
+
+    pixels = np.arange(12 * nside_fine**2)
+    theta_rad, phi_rad = hp.pix2ang(nside_fine, pixels)
+    expected = np.stack([np.rad2deg(phi_rad), np.rad2deg(theta_rad)], axis=-1)
+
+    actual_set = set(map(tuple, np.round(actual, decimals=6)))
+    expected_set = set(map(tuple, np.round(expected, decimals=6)))
+    assert actual_set == expected_set
 
 
 # ---------------------------------------------------------------------------

@@ -3796,6 +3796,10 @@ dev = [
     { name = "ttsim3d" },
     { name = "urllib3" },
 ]
+examples = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
+]
 test = [
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -3845,6 +3849,10 @@ dev = [
     { name = "ruff" },
     { name = "ttsim3d", specifier = ">=0.4.2" },
     { name = "urllib3" },
+]
+examples = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
 ]
 test = [
     { name = "pytest" },

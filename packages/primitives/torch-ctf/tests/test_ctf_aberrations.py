@@ -8,6 +8,7 @@ from torch_ctf import (
     apply_even_zernikes,
     apply_odd_zernikes,
     beam_tilt_to_zernike_coeffs,
+    calculate_ctf_2d,
     calculate_relativistic_electron_wavelength,
     resolve_odd_zernikes,
 )
@@ -566,3 +567,86 @@ def test_apply_even_zernikes_secondary_astigmatism():
 
     assert torch.allclose(result, expected)
     assert torch.all(torch.isfinite(result))
+
+
+def test_apply_odd_zernikes_per_image_coefficients():
+    """A per-image odd coefficient broadcasts an unbatched grid up to a batch."""
+    rho = torch.full((10, 10), 0.5)
+    theta = torch.linspace(0, 2 * torch.pi, 100).reshape(10, 10)
+    coeffs = torch.tensor([0.1, 0.2, 0.3]).view(3, 1, 1)
+
+    result = apply_odd_zernikes(
+        odd_zernikes={"Z33c": coeffs},
+        rho=rho,
+        theta=theta,
+        voltage_kv=torch.tensor(300.0),
+        spherical_aberration_mm=torch.tensor(2.7),
+    )
+
+    assert result.shape == (3, 10, 10)
+    for i, coeff in enumerate(coeffs.flatten()):
+        expected = apply_odd_zernikes(
+            odd_zernikes={"Z33c": coeff},
+            rho=rho,
+            theta=theta,
+            voltage_kv=torch.tensor(300.0),
+            spherical_aberration_mm=torch.tensor(2.7),
+        )
+        assert torch.allclose(result[i], expected)
+
+
+def test_apply_even_zernikes_per_image_coefficients():
+    """A per-image even coefficient broadcasts an unbatched phase shift."""
+    rho = torch.full((10, 10), 0.5)
+    theta = torch.linspace(0, 2 * torch.pi, 100).reshape(10, 10)
+    total_phase_shift = torch.zeros((10, 10))
+    coeffs = torch.tensor([0.1, 0.2, 0.3]).view(3, 1, 1)
+
+    result = apply_even_zernikes(
+        even_zernikes={"Z44c": coeffs},
+        total_phase_shift=total_phase_shift,
+        rho=rho,
+        theta=theta,
+    )
+
+    assert result.shape == (3, 10, 10)
+    expected = coeffs * rho**4 * torch.cos(4 * theta)
+    assert torch.allclose(result, expected)
+
+
+def test_calculate_ctf_2d_per_image_zernikes():
+    """Per-image Zernikes through the 2D CTF match per-image scalar calls."""
+    defocus = torch.tensor([1.0, 1.5, 2.0])
+    trefoil = torch.tensor([0.05, 0.10, 0.15])
+    kwargs = {
+        "astigmatism": torch.zeros(3),
+        "astigmatism_angle": torch.zeros(3),
+        "voltage": 300.0,
+        "spherical_aberration": 2.7,
+        "amplitude_contrast": 0.1,
+        "phase_shift": 0.0,
+        "pixel_size": 1.0,
+        "image_shape": (32, 32),
+        "rfft": False,
+        "fftshift": False,
+    }
+
+    batched = calculate_ctf_2d(
+        defocus=defocus,
+        odd_zernike_coeffs={"Z33c": trefoil.view(3, 1, 1)},
+        **kwargs,
+    )
+
+    assert batched.shape == (3, 32, 32)
+    single_kwargs = {
+        **kwargs,
+        "astigmatism": torch.zeros(1),
+        "astigmatism_angle": torch.zeros(1),
+    }
+    for i in range(3):
+        single = calculate_ctf_2d(
+            defocus=defocus[i].expand(1),
+            odd_zernike_coeffs={"Z33c": trefoil[i]},
+            **single_kwargs,
+        )
+        assert torch.allclose(batched[i], single[0], atol=1e-6)

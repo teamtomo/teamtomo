@@ -136,11 +136,12 @@ def get_sectored_euler_angles(
     Parameters
     ----------
     nside_coarse : int
-        HEALPix ``nside`` for the coarse sector grid.  ``n_sectors = 12 *
-        nside_coarse**2``.
+        HEALPix ``nside`` for the coarse sector grid.  Must be a power of two >= 1.
+        ``n_sectors = 12 * nside_coarse**2``.
     nside_fine : int, optional
-        HEALPix ``nside`` for the fine sampling inside each sector.  Must be >=
-        ``nside_coarse``.  If ``None``, inferred from ``theta_step``.
+        HEALPix ``nside`` for the fine sampling inside each sector.  Must be a power
+        of two >= ``nside_coarse``.  If ``None``, inferred from ``theta_step`` and
+        rounded up to the nearest power of two.
     theta_step : float, optional
         Angular step in degrees used to infer ``nside_fine`` when ``nside_fine`` is
         ``None``.  Default is 2.5.

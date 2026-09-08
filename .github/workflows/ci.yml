@@ -42,7 +42,7 @@ jobs:
             uv.lock
 
       - name: Install all workspace dependencies
-        run: uv sync --all-packages --group test
+        run: uv sync --all-packages --group test --locked
 
       - name: Print environment info
         run: |
