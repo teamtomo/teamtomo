@@ -4962,6 +4962,7 @@ name = "torch-refine-tilt-axis-angle"
 source = { editable = "packages/algorithms/torch-refine-tilt-axis-angle" }
 dependencies = [
     { name = "torch" },
+    { name = "torch-tilt-series" },
 ]
 
 [package.dev-dependencies]
@@ -4981,7 +4982,10 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "torch" }]
+requires-dist = [
+    { name = "torch" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+]
 
 [package.metadata.requires-dev]
 dev = [
@@ -5301,8 +5305,9 @@ dependencies = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torch-affine-utils" },
-    { name = "torch-fourier-filter" },
     { name = "torch-fourier-rescale" },
+    { name = "torch-grid-utils" },
+    { name = "torch-tilt-series" },
     { name = "torch-transform-image" },
 ]
 
@@ -5330,8 +5335,9 @@ requires-dist = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
-    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
