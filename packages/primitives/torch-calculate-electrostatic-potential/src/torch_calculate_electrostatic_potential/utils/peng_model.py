@@ -18,8 +18,9 @@ import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.resources import files
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
+import gemmi
 import numpy as np
 import torch
 
@@ -82,9 +83,19 @@ BondedFallback = Literal["elemental", "error"]
 
 
 def _load_peng_element_scattering_factor_parameter_table() -> np.ndarray:
-    resource = files(__package__).joinpath("peng1996_element_params.npy")
-    with resource.open("rb") as stream:
-        return cast("np.ndarray", np.load(stream))
+    resource = files(__package__).joinpath("peng1996_element_params.json")
+    data: dict[str, dict[str, list[float]]] = json.loads(
+        resource.read_text(encoding="utf-8")
+    )
+    parameters_a, parameters_b = data["parameters_a"], data["parameters_b"]
+
+    n_elements = len(parameters_a)
+    table = np.empty((2, n_elements, PENG_GAUSSIAN_TERM_COUNT), dtype=np.float64)
+    for atomic_number in range(n_elements):
+        symbol = gemmi.Element(atomic_number).name
+        table[0, atomic_number] = parameters_a[symbol]
+        table[1, atomic_number] = parameters_b[symbol]
+    return table
 
 
 def get_peng_scattering_parameters(

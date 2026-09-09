@@ -50,6 +50,7 @@ classifiers = [
 dependencies = [
     "torch>=2.0.0",
     "numpy>=1.21.0",
+    "gemmi",
     "torch-structure-manipulation",
     "tqdm>=4.60.0",
     "einops>=0.6.0",

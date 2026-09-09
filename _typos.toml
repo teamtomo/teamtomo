@@ -2,3 +2,7 @@
 ix = "ix"
 iy = "iy"
 iz = "iz"
+
+# Element symbols in peng1996_element_params.json that collide with real words.
+Ba = "Ba"
+Nd = "Nd"

@@ -12,7 +12,7 @@ Coordinates and spacing are in Angstroms. Axis order is ZYX in 3D and YX in 2D.
 
 ## Units and normalization
 
-`peng1996_element_params.npy` contains Peng et al. (1996) **elastic electron
+`peng1996_element_params.json` contains Peng et al. (1996) **elastic electron
 scattering factors**, not X-ray form factors:
 
 ```text
