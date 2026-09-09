@@ -5,7 +5,6 @@ from torch_affine_utils.transforms_3d import T as T_3d, S as S_3d
 from torch_transform_image import (
     affine_transform_image_2d,
     affine_transform_image_3d,
-    rotate_image_3d_about_tilt_axis,
     rotate_then_shift_image_2d,
     shift_then_rotate_image_2d,
     rotate_then_shift_image_3d,
@@ -193,28 +192,3 @@ def test_rotate_then_shift_image_3d_cuda_device():
     assert result.shape == image.shape
     assert torch.isfinite(result).all()
 
-
-def test_rotate_image_3d_about_tilt_axis_matches_y_rotation():
-    image = torch.zeros((28, 28, 28), dtype=torch.float32)
-    image[14, 7, 14] = 1
-
-    via_tilt_axis = rotate_image_3d_about_tilt_axis(
-        image, tilt_deg=90.0, tilt_axis_angle=90.0
-    )
-    via_principal = rotate_then_shift_image_3d(
-        image, rotate_zyx=[0, 90, 0], shift_zyx=[0, 0, 0]
-    )
-    assert torch.allclose(via_tilt_axis, via_principal, atol=1e-5)
-
-
-def test_rotate_image_3d_about_tilt_axis_x_is_zero_axis_angle():
-    image = torch.zeros((28, 28, 28), dtype=torch.float32)
-    image[14, 14, 7] = 1
-
-    via_tilt_axis = rotate_image_3d_about_tilt_axis(
-        image, tilt_deg=90.0, tilt_axis_angle=0.0
-    )
-    via_principal = rotate_then_shift_image_3d(
-        image, rotate_zyx=[0, 0, 90], shift_zyx=[0, 0, 0]
-    )
-    assert torch.allclose(via_tilt_axis, via_principal, atol=1e-5)

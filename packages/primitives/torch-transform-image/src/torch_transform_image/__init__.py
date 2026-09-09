@@ -16,7 +16,6 @@ from torch_transform_image.transforms_2d import (
 )
 from torch_transform_image.transforms_3d import (
     affine_transform_image_3d,
-    rotate_image_3d_about_tilt_axis,
     rotate_then_shift_image_3d,
     shift_then_rotate_image_3d,
 )
@@ -26,7 +25,6 @@ __all__ = [
     "rotate_then_shift_image_2d",
     "shift_then_rotate_image_2d",
     "affine_transform_image_3d",
-    "rotate_image_3d_about_tilt_axis",
     "rotate_then_shift_image_3d",
     "shift_then_rotate_image_3d",
 ]
