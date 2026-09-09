@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import roma
 import torch
 
 from .utils import df_to_atomxyz, df_to_atomzyx
@@ -117,47 +116,3 @@ def apply_rotation_to_coords(
         rotated_coords = rotated_coords + center
 
     return rotated_coords
-
-
-def create_rotation_matrix_from_euler(
-    angles: torch.Tensor,
-    order: str = "ZYZ",
-    degrees: bool = True,
-    device: torch.device | None = None,
-) -> torch.Tensor:
-    """Create rotation matrix from Euler angles using roma.
-
-    Parameters
-    ----------
-    angles : torch.Tensor
-        Euler angles as a tensor.
-        Shape can be (3,) for single rotation or (..., 3) for batch.
-        The last dimension must be 3, corresponding to (alpha, beta, gamma).
-    order : str
-        Rotation order convention (e.g., 'xyz', 'zyx', 'ZYZ', 'zyz').
-        Uppercase letters indicate intrinsic rotations.
-        Lowercase indicate extrinsic rotations.
-    degrees : bool
-        If True, input angles are in degrees. If False, angles are in radians.
-        Default is True (degrees).
-    device : torch.device | None
-        Device on which to perform computation.
-        If None, uses the device of the input tensor.
-
-    Returns
-    -------
-    torch.Tensor
-        Rotation matrix.
-        Shape is (3, 3) for single rotation or (..., 3, 3) for batch.
-    """
-    # Move to device if specified
-    if device is not None:
-        angles = angles.to(device)
-    else:
-        device = angles.device
-
-    # Use roma to construct rotation matrix
-    # roma uses uppercase for intrinsic, lowercase for extrinsic rotations
-    rot_mat = roma.euler_to_rotmat(order, angles, degrees=degrees, device=device)
-
-    return torch.as_tensor(rot_mat, dtype=angles.dtype, device=device)
