@@ -4133,6 +4133,7 @@ name = "torch-calculate-electrostatic-potential"
 source = { editable = "packages/primitives/torch-calculate-electrostatic-potential" }
 dependencies = [
     { name = "einops" },
+    { name = "gemmi" },
     { name = "numpy" },
     { name = "setuptools" },
     { name = "torch" },
@@ -4160,6 +4161,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops", specifier = ">=0.6.0" },
+    { name = "gemmi" },
     { name = "numpy", specifier = ">=1.21.0" },
     { name = "setuptools" },
     { name = "torch", specifier = ">=2.0.0" },
