@@ -12,10 +12,13 @@ from torch_fit_in_map._exhaustive import (
 
 
 def test_align_identity_no_transform():
-    """Aligning a volume with itself should recover near-identity rotation and zero shift."""
+    """Self-alignment should recover near-identity rotation and zero shift."""
     ref = torch.rand(24, 24, 24)
     result = exhaustive_search(
-        ref, ref, config=ExhaustiveSearchConfig(angular_step_degrees=15.0), verbose=False
+        ref,
+        ref,
+        config=ExhaustiveSearchConfig(angular_step_degrees=15.0),
+        verbose=False,
     )
     assert result.rotation_matrix.shape == (3, 3)
     assert result.translation_pixels.shape == (3,)
@@ -91,13 +94,17 @@ def test_symmetry_reduces_search_space():
     step = 15.0
     r_c1 = get_symmetry_ranges("C", 1)
     r_c4 = get_symmetry_ranges("C", 4)
-    n_c1 = get_uniform_euler_angles(psi_step=step, theta_step=step, **r_c1._asdict()).shape[0]
-    n_c4 = get_uniform_euler_angles(psi_step=step, theta_step=step, **r_c4._asdict()).shape[0]
+    n_c1 = get_uniform_euler_angles(
+        psi_step=step, theta_step=step, **r_c1._asdict()
+    ).shape[0]
+    n_c4 = get_uniform_euler_angles(
+        psi_step=step, theta_step=step, **r_c4._asdict()
+    ).shape[0]
     assert n_c4 < n_c1
 
 
 def test_exhaustive_search_with_symmetry():
-    """Search with C1 symmetry should recover near-identity rotation for self-alignment."""
+    """C1 search should recover near-identity rotation for self-alignment."""
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=20.0, symmetry="C1")
     result = exhaustive_search(ref, ref, config=cfg, verbose=False)
@@ -117,16 +124,17 @@ def test_exhaustive_topk_returns_k_results():
 
 
 def test_fit_map_in_map_multistart():
-    """fit_map_in_map with n_start=3 should return the best NCC-scored refined result."""
+    """Multiple starts should return the best NCC-scored refined result."""
     from torch_fit_in_map import GradientRefinementConfig, fit_map_in_map
 
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)
     result = fit_map_in_map(
-        ref, ref,
+        ref,
+        ref,
         exhaustive_config=cfg,
         gradient_config=GradientRefinementConfig(n_iterations=5),
         verbose=False,
     )
-    # After gradient refinement, score is NCC ∈ [-1, 1]; self-alignment should be positive
+    # The refined score is NCC in [-1, 1]; self-alignment should be positive.
     assert result.score > 0.0

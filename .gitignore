@@ -102,4 +102,7 @@ ENV/
 .idea/
 .vscode/
 
+# Personal local notes (not for commit)
+notes/*.local.md
+
 lightning_logs/

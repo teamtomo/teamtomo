@@ -20,16 +20,17 @@ def rytov(
     n_slices: int | None = None,
 ) -> torch.Tensor:
     """
-    Compute the 2D exit wave from a 3D scattering potential via the Rytov approximation.
+    Compute the exit wave using the Rytov approximation.
 
     Parameters
     ----------
     potential : torch.Tensor
-        Complex-valued 3D scattering potential, shape (..., Z, H, W), where
-        Z is the number of slices along the beam direction.
+        Real-valued electrostatic potential in volts for a non-absorbing
+        specimen, or complex-valued potential when modelling absorption.
+        Shape (..., Z, H, W), where Z is the beam direction.
     pixel_size : float | torch.Tensor
-        Pixel size in Angstroms. The slice thickness `dz` is assumed to
-        equal `pixel_size`.
+        Positive finite isotropic voxel spacing in Angstroms. This is both
+        the in-plane pixel spacing and slice thickness.
     voltage : float | torch.Tensor
         Electron beam acceleration voltage in kilovolts (e.g. 300 for 300 kV).
     n_slices : int | None

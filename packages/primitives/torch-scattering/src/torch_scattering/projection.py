@@ -6,7 +6,11 @@ pure-math primitives in `_core`.
 
 import torch
 
-from torch_scattering._core import interaction_parameter, transmission_function
+from torch_scattering._core import (
+    _validate_propagation_inputs,
+    interaction_parameter,
+    transmission_function,
+)
 
 
 def projection(
@@ -15,16 +19,17 @@ def projection(
     voltage: float | torch.Tensor,
 ) -> torch.Tensor:
     """
-    Compute the 2D exit wave from a 3D potential via the projection approximation.
+    Compute the exit wave using the projection approximation.
 
     Parameters
     ----------
     potential : torch.Tensor
-        Complex-valued 3D scattering potential, shape (..., Z, H, W), where
-        Z is the number of slices along the beam direction.
+        Real-valued electrostatic potential in volts for a non-absorbing
+        specimen, or complex-valued potential when modelling absorption.
+        Shape (..., Z, H, W), where Z is the beam direction.
     pixel_size : float | torch.Tensor
-        Pixel size in Angstroms. The slice thickness `dz` is assumed to
-        equal `pixel_size`.
+        Positive finite isotropic voxel spacing in Angstroms. This is both
+        the in-plane pixel spacing and slice thickness.
     voltage : float | torch.Tensor
         Electron beam acceleration voltage in kilovolts (e.g. 300 for 300 kV).
 
@@ -35,13 +40,16 @@ def projection(
 
     Notes
     -----
-    The projection approximation treats the specimen as infinitely thin,
-    ignoring Fresnel propagation between slices: the potential is summed
-    along the beam direction and transmitted through in a single step,
+    This wave-propagation approximation numerically sums a sampled 3D
+    potential along the beam direction, then treats the specimen as
+    infinitely thin and ignores Fresnel propagation between slices:
     ``psi = exp(i * sigma * dz * sum_z V(z))``. This is valid only when the
     specimen is thin enough that propagation effects within it are
-    negligible.
+    negligible. It is distinct from an analytic projected-potential
+    calculation and from projection alignment used when fitting structures
+    into maps.
     """
+    _validate_propagation_inputs(potential, pixel_size, voltage)
     sigma = interaction_parameter(voltage=voltage)
     projected_potential = potential.sum(dim=-3)
     return transmission_function(projected_potential, sigma=sigma, dz=pixel_size)

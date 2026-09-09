@@ -13,9 +13,6 @@ search_parent_directories = true
 tag_regex = "^torch-fit-in-map@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 git_describe_command = "git describe --dirty --tags --long --match 'torch-fit-in-map@v[0-9]*.[0-9]*.[0-9]*'"
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.hatch.build.targets.wheel]
 only-include = ["src"]
 sources = ["src"]
@@ -50,8 +47,15 @@ dependencies = [
     "torch-grid-utils",
     "torch-image-interpolation",
     "tqdm",
-    "torch-calculate-electrostatic-potential @ git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git",
+    "torch-calculate-electrostatic-potential",
+    "torch-structure-manipulation",
+    "teamtomo-basemodel",
 ]
+
+[tool.uv.sources]
+torch-calculate-electrostatic-potential = { workspace = true }
+torch-structure-manipulation = { workspace = true }
+teamtomo-basemodel = { workspace = true }
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -105,12 +109,29 @@ docstring-code-format = true
 skip-magic-trailing-comma = false
 
 [tool.mypy]
-files = "src/**/"
+files = "src/torch_fit_in_map"
 strict = true
 disallow_any_generics = false
 disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pandas",
+    "pandas.*",
+    "torch_fourier_rescale",
+    "torch_fourier_rescale.*",
+    "torch_fourier_slice",
+    "torch_fourier_slice.*",
+    "torch_grid_utils",
+    "torch_grid_utils.*",
+    "torch_image_interpolation",
+    "torch_image_interpolation.*",
+    "torch_so3",
+    "torch_so3.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"

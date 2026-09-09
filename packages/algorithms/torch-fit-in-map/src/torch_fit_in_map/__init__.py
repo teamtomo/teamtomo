@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 try:
     __version__ = version("torch-fit-in-map")
@@ -15,10 +15,11 @@ import torch
 from torch_transform_image import affine_transform_image_3d
 from tqdm import tqdm
 
-from ._atoms import transform_atoms
+from ._atoms import apply_alignment_to_structure
 from ._config import (
     ExhaustiveSearchConfig,
     GradientRefinementConfig,
+    PotentialSimulatorConfig,
     ProjectionAlignmentConfig,
 )
 from ._exhaustive import _exhaustive_topk, exhaustive_search
@@ -26,7 +27,12 @@ from ._gradient import gradient_refine
 from ._preprocess import crop_or_pad_to_shape, normalise_voxel_sizes
 from ._projection import projection_align
 from ._result import AlignmentResult
-from ._simulate import DEFAULT_SIMULATOR, DensitySimulator
+from ._simulate import (
+    DEFAULT_POTENTIAL_SIMULATOR,
+    DEFAULT_SIMULATOR,
+    DensitySimulator,
+    PotentialSimulator,
+)
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -65,11 +71,13 @@ def fit_map_in_map(
         Optional ``(d, h, w)`` soft mask in ``[0, 1]``.
     pixel_size_angstroms : float or None
         When given, ``AlignmentResult.translation_angstroms`` is populated.
+    verbose : bool
+        Show search and refinement progress.
 
     Returns
     -------
     AlignmentResult
-        Rotation matrix (3×3, zyx), translation in pixels (3,), NCC score, and
+        Rotation matrix (3 x 3, zyx), translation in pixels (3,), NCC score, and
         optionally translation in Angstroms.
     """
     if exhaustive_config is None:
@@ -90,7 +98,10 @@ def fit_map_in_map(
     result = candidates[0]
 
     if resolved_gradient is not None:
-        if resolved_gradient.pixel_size_angstroms is None and pixel_size_angstroms is not None:
+        if (
+            resolved_gradient.pixel_size_angstroms is None
+            and pixel_size_angstroms is not None
+        ):
             resolved_gradient = resolved_gradient.model_copy(
                 update={"pixel_size_angstroms": pixel_size_angstroms}
             )
@@ -101,7 +112,9 @@ def fit_map_in_map(
 
         n_start = len(candidates)
 
-        def _refine_worker(i, candidate, device_str):
+        def _refine_worker(
+            i: int, candidate: AlignmentResult, device_str: str
+        ) -> AlignmentResult:
             dev = torch.device(device_str)
             if verbose and len(devices) == 1:
                 tqdm.write(f"Gradient refinement: start {i + 1}/{n_start}")
@@ -122,12 +135,16 @@ def fit_map_in_map(
             r.rotation_matrix = r.rotation_matrix.to(reference_map.device)
             r.translation_pixels = r.translation_pixels.to(reference_map.device)
             if r.translation_angstroms is not None:
-                r.translation_angstroms = r.translation_angstroms.to(reference_map.device)
+                r.translation_angstroms = r.translation_angstroms.to(
+                    reference_map.device
+                )
             return r
 
-        refined: list = []
+        refined: list[AlignmentResult] = []
         if verbose and n_start > 1:
-            pbar = tqdm(total=n_start, desc="Refining poses", unit="pose", dynamic_ncols=True)
+            pbar = tqdm(
+                total=n_start, desc="Refining poses", unit="pose", dynamic_ncols=True
+            )
         else:
             pbar = None
 
@@ -137,7 +154,9 @@ def fit_map_in_map(
 
             with ThreadPoolExecutor(max_workers=len(devices)) as executor:
                 futures = [
-                    executor.submit(_refine_worker, i, candidate, devices[i % len(devices)])
+                    executor.submit(
+                        _refine_worker, i, candidate, devices[i % len(devices)]
+                    )
                     for i, candidate in enumerate(candidates)
                 ]
                 for f in futures:
@@ -164,7 +183,7 @@ def fit_map_in_map(
 def apply_alignment(
     mobile: torch.Tensor,
     result: AlignmentResult,
-    interpolation: str = "trilinear",
+    interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> torch.Tensor:
     """Apply an :class:`AlignmentResult` transform to produce the aligned mobile volume.
 
@@ -204,16 +223,20 @@ def apply_alignment(
     # Combined: rotate around centre, then shift by t
     M_combined = M_rot @ T_t
     return affine_transform_image_3d(
-        mobile.float(), M_combined, interpolation=interpolation, zyx_matrices=True  # type: ignore[arg-type]
+        mobile.float(),
+        M_combined,
+        interpolation=interpolation,
+        zyx_matrices=True,
     )
 
 
-def fit_map_in_pdb(
+def fit_map_in_structure(
     mobile_map: torch.Tensor,
     reference_atoms: pd.DataFrame,
     pixel_size_angstroms: float,
     box_size: int,
-    simulator: DensitySimulator | None = None,
+    simulator: PotentialSimulator | None = None,
+    simulator_config: PotentialSimulatorConfig | None = None,
     save_simulated: bool = False,
     exhaustive_config: ExhaustiveSearchConfig | None = None,
     gradient_config: GradientRefinementConfig | None = None,
@@ -222,39 +245,46 @@ def fit_map_in_pdb(
 ) -> AlignmentResult:
     """Fit *mobile_map* into the coordinate frame defined by an atomic model.
 
-    The atoms are simulated as a density map, which serves as the **reference**.
-    The experimental density *mobile_map* is the **mobile** being fitted.
-    For the inverse (fit atoms into a density map), use :func:`fit_pdb_in_map`.
+    The atoms are simulated as a potential map, which serves as the **reference**.
+    The experimental map *mobile_map* is the **mobile** being fitted.
+    For the inverse (fit a structure into a map), use
+    :func:`fit_structure_in_map`.
 
     Parameters
     ----------
     mobile_map : torch.Tensor
-        ``(d, h, w)`` experimental density map to be fitted.
+        ``(d, h, w)`` experimental map to be fitted.
     reference_atoms : pandas.DataFrame
         Atom table (columns ``x``, ``y``, ``z``, ``element``) that serves as
-        reference.  Obtain one with ``mmdf.read("model.pdb")``.
+        reference. Obtain one with ``mmdf.read("model.cif")``, for example.
     pixel_size_angstroms : float
-        Voxel size for the simulated reference density (Angstroms).
+        Voxel size for the simulated reference potential (Angstroms).
     box_size : int
-        Cubic box size for the simulated reference density (voxels).
-    simulator : DensitySimulator or None
-        Density simulator.  See :class:`~torch_fit_in_map.DensitySimulator`.
-        When ``None``, the default ``espcalculator``-based simulator is used.
+        Cubic box size for the simulated reference potential (voxels).
+    simulator : PotentialSimulator or None
+        Potential simulator.  See :class:`~torch_fit_in_map.PotentialSimulator`.
+        When ``None``, the default electrostatic-potential simulator is used.
+    simulator_config : PotentialSimulatorConfig or None
+        Options for the default simulator (scattering factors, sublattice radius,
+        etc.).  Ignored when a custom ``simulator`` is supplied.
     save_simulated : bool
-        Store the simulated reference density in ``AlignmentResult.simulated_volume``.
+        Store the simulated reference potential in
+        ``AlignmentResult.simulated_potential``.
     exhaustive_config : ExhaustiveSearchConfig or None
         Search parameters.
     gradient_config : GradientRefinementConfig or None
         Refinement parameters.
     mask : torch.Tensor or None
         Optional ``(d, h, w)`` soft mask.
+    verbose : bool
+        Show search and refinement progress.
 
     Returns
     -------
     AlignmentResult
     """
     if simulator is None:
-        simulator = DEFAULT_SIMULATOR
+        simulator = DEFAULT_POTENTIAL_SIMULATOR
 
     device = mobile_map.device
     simulated = simulator.simulate(
@@ -262,6 +292,7 @@ def fit_map_in_pdb(
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
         device=device,
+        config=simulator_config,
     )
 
     mobile_map, simulated, common_px = normalise_voxel_sizes(
@@ -279,57 +310,63 @@ def fit_map_in_pdb(
     )
 
     if save_simulated:
-        result.simulated_volume = simulated.cpu()
+        result.simulated_potential = simulated.cpu()
 
     return result
 
 
-def fit_pdb_in_map(
+def fit_structure_in_map(
     mobile_atoms: pd.DataFrame,
     reference_map: torch.Tensor,
     pixel_size_angstroms: float,
     box_size: int,
-    simulator: DensitySimulator | None = None,
+    simulator: PotentialSimulator | None = None,
+    simulator_config: PotentialSimulatorConfig | None = None,
     save_simulated: bool = False,
     exhaustive_config: ExhaustiveSearchConfig | None = None,
     gradient_config: GradientRefinementConfig | None = None,
     mask: torch.Tensor | None = None,
     verbose: bool = True,
 ) -> AlignmentResult:
-    """Fit an atomic model into a density map.
+    """Fit an atomic model into a map.
 
-    The atoms are simulated as a density map, which is the **mobile** being
-    fitted into *reference_map*.  For the inverse (fit a density map into an
-    atomic-model frame), use :func:`fit_map_in_pdb`.
+    The atoms are simulated as a potential map, which is the **mobile** being
+    fitted into *reference_map*.  For the inverse (fit a map into a
+    structure frame), use :func:`fit_map_in_structure`.
 
     Parameters
     ----------
     mobile_atoms : pandas.DataFrame
         Atom table (columns ``x``, ``y``, ``z``, ``element``) to be fitted.
-        Obtain one with ``mmdf.read("model.pdb")``.
+        Obtain one with ``mmdf.read("model.cif")``, for example.
     reference_map : torch.Tensor
-        ``(d, h, w)`` experimental density map that serves as reference.
+        ``(d, h, w)`` experimental map that serves as reference.
     pixel_size_angstroms : float
-        Voxel size for the simulated density (Angstroms).
+        Voxel size for the simulated potential (Angstroms).
     box_size : int
-        Cubic box size for the simulated density (voxels).
-    simulator : DensitySimulator or None
-        Density simulator.  See :class:`~torch_fit_in_map.DensitySimulator`.
+        Cubic box size for the simulated potential (voxels).
+    simulator : PotentialSimulator or None
+        Potential simulator.  See :class:`~torch_fit_in_map.PotentialSimulator`.
+    simulator_config : PotentialSimulatorConfig or None
+        Options for the default simulator.  Ignored when a custom ``simulator``
+        is supplied.
     save_simulated : bool
-        Store the simulated density in ``AlignmentResult.simulated_volume``.
+        Store the simulated potential in ``AlignmentResult.simulated_potential``.
     exhaustive_config : ExhaustiveSearchConfig or None
         Search parameters.
     gradient_config : GradientRefinementConfig or None
         Refinement parameters.
     mask : torch.Tensor or None
         Optional ``(d, h, w)`` soft mask.
+    verbose : bool
+        Show search and refinement progress.
 
     Returns
     -------
     AlignmentResult
     """
     if simulator is None:
-        simulator = DEFAULT_SIMULATOR
+        simulator = DEFAULT_POTENTIAL_SIMULATOR
 
     device = reference_map.device
     simulated = simulator.simulate(
@@ -337,6 +374,7 @@ def fit_pdb_in_map(
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
         device=device,
+        config=simulator_config,
     )
 
     reference_map, simulated, common_px = normalise_voxel_sizes(
@@ -355,25 +393,29 @@ def fit_pdb_in_map(
     )
 
     if save_simulated:
-        result.simulated_volume = simulated.cpu()
+        result.simulated_potential = simulated.cpu()
 
     return result
 
 
 __all__ = [
     "AlignmentResult",
+    "DEFAULT_POTENTIAL_SIMULATOR",
+    "DEFAULT_SIMULATOR",
     "DensitySimulator",
     "ExhaustiveSearchConfig",
     "GradientRefinementConfig",
+    "PotentialSimulator",
+    "PotentialSimulatorConfig",
     "ProjectionAlignmentConfig",
     "apply_alignment",
+    "apply_alignment_to_structure",
     "crop_or_pad_to_shape",
     "exhaustive_search",
     "fit_map_in_map",
-    "fit_map_in_pdb",
-    "fit_pdb_in_map",
+    "fit_map_in_structure",
+    "fit_structure_in_map",
     "gradient_refine",
     "normalise_voxel_sizes",
     "projection_align",
-    "transform_atoms",
 ]

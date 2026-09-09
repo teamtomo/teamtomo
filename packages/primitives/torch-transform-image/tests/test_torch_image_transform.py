@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch_affine_utils.transforms_2d import T as T_2d, S as S_2d
 from torch_affine_utils.transforms_3d import T as T_3d, S as S_3d
@@ -174,3 +175,19 @@ def test_shift_rotate_image_3d():
     assert image[14, 19, 21] == 0
     assert torch.allclose(result[14, 19, 21], torch.tensor(1.0), atol=1e-6)
     assert result[14, 7, 14] == 0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_rotate_then_shift_image_3d_cuda_device():
+    image = torch.zeros((28, 28, 28), dtype=torch.float32, device="cuda")
+    image[14, 7, 14] = 1
+
+    result = rotate_then_shift_image_3d(
+        image=image,
+        rotate_zyx=[0, 30, 0],
+        shift_zyx=[0, 0, 0],
+        interpolation="trilinear",
+    )
+    assert result.device.type == "cuda"
+    assert result.shape == image.shape
+    assert torch.isfinite(result).all()

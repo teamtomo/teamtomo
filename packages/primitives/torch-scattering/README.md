@@ -11,9 +11,15 @@ Multislice electron scattering simulation in PyTorch, for cryo-EM/cryo-ET forwar
 ## Overview
 
 `torch_scattering` computes the 2D exit wave produced by propagating an electron
-beam through a 3D scattering potential. Given a potential of shape `(..., Z, H, W)`,
-a pixel size, and a beam voltage, each function returns the complex-valued exit
-wave of shape `(..., H, W)`.
+beam through a 3D electrostatic potential in volts. The potential has shape
+`(..., Z, H, W)`, where Z is the beam direction. `pixel_size` is the isotropic
+voxel spacing in Angstroms, so it specifies both the Y/X pixel spacing and the
+Z slice thickness. Every function returns a complex exit wave of shape
+`(..., H, W)`.
+
+Real `float32` and `float64` potentials model non-absorbing specimens and can be
+passed directly; callers do not need to cast them to complex. Complex potentials
+remain supported for modelling absorption.
 
 Four propagation modes are provided, trading physical accuracy for speed:
 
@@ -28,9 +34,9 @@ Four propagation modes are provided, trading physical accuracy for speed:
   thin and skipping inter-slice propagation entirely. The fastest and least
   accurate mode.
 
-All four share the same signature and can be swapped in for one another. Each
-also accepts an `n_slices` argument to coarsen the potential into fewer, thicker
-slabs before propagating, trading accuracy for speed.
+All four share the same required inputs and can be swapped in for one another.
+`multislice`, `rytov`, and `firstborn` also accept an `n_slices` argument to
+coarsen the potential into fewer, thicker slabs before propagating.
 
 Lower-level, pure-math primitives (`fresnel_propagator`, `transmission_function`,
 `multislice_step`, `chunk_slices`, `interaction_parameter`) are also exposed for
@@ -48,8 +54,8 @@ pip install torch-scattering
 import torch
 from torch_scattering import multislice
 
-# a complex-valued scattering potential, shape (Z, H, W)
-potential = torch.zeros((50, 64, 64), dtype=torch.complex64)
+# A real electrostatic potential in volts, shape (Z, H, W).
+potential = torch.zeros((50, 64, 64), dtype=torch.float32)
 
 # propagate a plane wave through it
 exit_wave = multislice(
@@ -58,6 +64,7 @@ exit_wave = multislice(
     voltage=300,      # kV
 )
 # exit_wave.shape is (64, 64)
+# exit_wave.dtype is torch.complex64
 ```
 
 `rytov`, `firstborn`, and `projection` share the same call signature:
@@ -90,6 +97,68 @@ potential = torch.zeros((8, 50, 64, 64), dtype=torch.complex64)  # batch of 8
 exit_wave = multislice(potential, pixel_size=1.0, voltage=300)
 # exit_wave.shape is (8, 64, 64)
 ```
+
+## Structure-to-wave pipeline
+
+Structure handling and potential generation are deliberately separate packages.
+They are not runtime dependencies of `torch-scattering`; their real tensor
+output is passed through the public tensor API:
+
+```python
+import pandas as pd
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    potential_from_structure_3d,
+)
+from torch_scattering import multislice
+from torch_structure_manipulation import (
+    AtomicStructure,
+    annotate_bonding_environments,
+)
+
+# mmdf-compatible coordinates are in Angstroms.
+atoms = pd.DataFrame(
+    [
+        ("A", 1, "ALA", "C", "C", 0.0, 0.0, 0.0),
+        ("A", 1, "ALA", "O", "O", 1.2, 0.0, 0.0),
+        ("A", 1, "ALA", "CA", "C", -1.2, 0.0, 0.0),
+        ("A", 2, "GLY", "N", "N", 2.4, 0.0, 0.0),
+    ],
+    columns=[
+        "chain", "residue_id", "residue", "atom", "element", "x", "y", "z"
+    ],
+)
+atoms["b_isotropic"] = 10.0  # Angstrom squared
+atoms["occupancy"] = 1.0
+
+# Annotate a complete local residue context, then build the desired structure.
+annotated = annotate_bonding_environments(atoms, include_hydrogens=False)
+structure = AtomicStructure.from_dataframe(annotated.iloc[[0]])
+
+grid = GridConfig.from_grid_shape_and_voxel_size(
+    grid_shape=(9, 9, 9),       # Z, Y, X
+    voxel_size=(1.0, 1.0, 1.0), # Angstroms; isotropic for scattering
+    center_zyx=(0.0, 0.0, 0.0),
+    sublattice_radius=4.0,
+)
+elemental_volts = potential_from_structure_3d(structure, grid)
+bonded_volts = potential_from_structure_3d(
+    structure,
+    grid,
+    scattering_factors="peng_bonded",
+    bonded_fallback="error",
+)
+
+# Both volumes are real tensors in volts and are accepted directly.
+elemental_wave = multislice(elemental_volts, pixel_size=1.0, voltage=300.0)
+bonded_wave = multislice(bonded_volts, pixel_size=1.0, voltage=300.0)
+# Both waves are complex tensors; voltage is in kV.
+```
+
+`projection()` is a wave-propagation approximation that numerically sums this
+sampled 3D volume along Z. It is distinct from the electrostatic package's
+analytic 2D projected-potential calculation and from projection alignment in
+`torch-fit-in-map`.
 
 ## Low-level primitives
 
