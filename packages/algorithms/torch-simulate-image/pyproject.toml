@@ -53,6 +53,13 @@ torch-scattering = { workspace = true }
 torch-calculate-electrostatic-potential = { workspace = true }
 torch-structure-manipulation = { workspace = true }
 torch-transform-image = { workspace = true }
+torch-fourier-shell-correlation = { workspace = true }
+torch-fourier-shift = { workspace = true }
+torch-motion-correction = { workspace = true }
+torch-reconstruct-tomogram = { workspace = true }
+torch-refine-tilt-axis-angle = { workspace = true }
+torch-tilt-series = { workspace = true }
+torch-tiltxcorr = { workspace = true }
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -70,10 +77,20 @@ examples = [
     "ipykernel",
     "matplotlib",
     "mmdf",
+    "mrcfile",
     "torch-structure-manipulation",
     "torch-calculate-electrostatic-potential",
     "torch-scattering",
     "torch-transform-image",
+    # simulate_movies_to_tomogram.ipynb walks the whole cryo-ET stack, so its
+    # example environment reaches across to the processing packages
+    "torch-fourier-shell-correlation",
+    "torch-fourier-shift",
+    "torch-motion-correction",
+    "torch-reconstruct-tomogram",
+    "torch-refine-tilt-axis-angle",
+    "torch-tilt-series",
+    "torch-tiltxcorr",
 ]
 dev = [
     { include-group = "test" },

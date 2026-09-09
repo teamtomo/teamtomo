@@ -32,6 +32,7 @@ from torch_simulate_image.pipeline import (
     simulate_micrograph,
     simulate_micrograph_from_intensity,
 )
+from torch_simulate_image.tilt import tilt_volume
 
 __all__ = [
     "CtfConfig",
@@ -54,4 +55,5 @@ __all__ = [
     "scale_to_expected_counts",
     "simulate_micrograph",
     "simulate_micrograph_from_intensity",
+    "tilt_volume",
 ]
