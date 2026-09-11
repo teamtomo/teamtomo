@@ -2,7 +2,7 @@
 
 import math
 import warnings
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
@@ -32,7 +32,7 @@ def defocus_field_from_1d_fits(
     b_range_1d: tuple[float, float],
     b_step_1d: float,
     refine_steps_1d: int,
-    background_result: Optional[Any],
+    background_result: Any | None,
     device: torch.device,
     optimize_phase_shift: bool = False,
     use_equiphase_for_1d_spatial: bool = False,

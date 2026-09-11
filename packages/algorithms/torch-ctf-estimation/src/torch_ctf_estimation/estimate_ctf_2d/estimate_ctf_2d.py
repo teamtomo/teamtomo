@@ -1,7 +1,7 @@
 """Estimate CTF in 2D from a power spectrum."""
 
 from collections.abc import Callable
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 
@@ -34,7 +34,7 @@ def estimate_ctf_2d(
     initial_defocus_gradient_angle: float = 0.0,
     defocus_gradient_magnitude_lr: float = 0.05,
     defocus_gradient_angle_lr: float = 50.0,
-    fix_defocus_0: Optional[float] = None,
+    fix_defocus_0: float | None = None,
     debug: bool = False,
     optimize_phase_shift: bool = False,
     phase_shift_model: Literal["grid", "quadratic"] = "grid",
@@ -44,8 +44,8 @@ def estimate_ctf_2d(
     voltage_kev: float = 300.0,
     spherical_aberration_mm: float = 2.7,
     amplitude_contrast_fraction: float = 0.07,
-    laser_params: Optional[LaserParams] = None,
-    axis_mask: Optional[torch.Tensor] = None,
+    laser_params: LaserParams | None = None,
+    axis_mask: torch.Tensor | None = None,
     defocus_bounds_microns: tuple[float, float] | None = None,
     phase_shift_bounds_degrees: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float | None = None,
@@ -146,6 +146,9 @@ def estimate_ctf_2d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    use_amplitude : bool, optional
+        If True, fit against the CTF amplitude rather than CTF squared.
+        Default False.
 
     Returns
     -------

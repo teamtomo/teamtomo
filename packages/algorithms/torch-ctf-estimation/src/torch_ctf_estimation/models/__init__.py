@@ -38,12 +38,12 @@ __all__ = [
     "LinearDefocusModel",
     "LinearDefocusOutput",
     "OpticalParams",
-    "ThicknessParams",
     "PhaseShiftGridOutput",
     "PhaseShiftParamsOutput",
     "PhaseShiftQuadraticOutput",
     "QuadraticPhaseShiftModel",
     "Thickness1DResults",
     "Thickness2DResults",
+    "ThicknessParams",
     "linear_tilt_axis_and_magnitude_deg",
 ]

@@ -2,7 +2,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 from torch_fourier_filter.bandpass import bandpass_filter
@@ -51,7 +51,7 @@ def _shared_astigmatism_and_env(
     initial_astigmatism_angle: float,
     optimize_astigmatism: bool,
     initial_envelope_B: float,
-    axis_mask: Optional[torch.Tensor] = None,
+    axis_mask: torch.Tensor | None = None,
 ) -> tuple[
     torch.Tensor,
     torch.Tensor,
@@ -210,8 +210,8 @@ def estimate_defocus_2d_at_1x1(
     voltage_kev: float = 300.0,
     spherical_aberration_mm: float = 2.7,
     amplitude_contrast_fraction: float = 0.07,
-    laser_params: Optional[LaserParams] = None,
-    axis_mask: Optional[torch.Tensor] = None,
+    laser_params: LaserParams | None = None,
+    axis_mask: torch.Tensor | None = None,
     defocus_bounds_microns: tuple[float, float] | None = None,
     phase_shift_bounds_degrees: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float | None = None,
@@ -258,9 +258,20 @@ def estimate_defocus_2d_at_1x1(
     laser_params : Optional[LaserParams], optional
         If set and ``model_laser`` is True, use LPP CTF model for 2D fit; if None
         or ``model_laser`` is False, use standard CTF. Default None.
+    axis_mask : torch.Tensor or None, optional
+        Optional laser-axis mask applied during the 2D fit. Default None.
+    defocus_bounds_microns : tuple[float, float] or None, optional
+        Defocus clamp bounds in micrometers. Default None (unbounded).
+    phase_shift_bounds_degrees : tuple[float, float] or None, optional
+        Phase shift bounds in degrees. Default None (0-180 degrees).
+    fixed_phase_shift_deg : float or None, optional
+        Phase shift in degrees held fixed when not optimizing. Default None.
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback passed through to the 1x1
         grid fit. Default None (run all ``n_iterations``).
+    use_amplitude : bool, optional
+        If True, fit against the CTF amplitude rather than CTF squared.
+        Default False.
 
     Returns
     -------

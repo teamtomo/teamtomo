@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,8 +39,8 @@ def refine_defocus_and_thickness_1d(
     thickness_lr: float = 50.0,
     defocus_range_microns: tuple[float, float] | None = None,
     thickness_range_angstroms: tuple[float, float] = (300.0, 4000.0),
-    background_result: Optional[_Background1DResult] = None,
-    laser_params: Optional[LaserParams] = None,
+    background_result: _Background1DResult | None = None,
+    laser_params: LaserParams | None = None,
     early_stopper: Callable[[float], bool] | None = None,
     use_equiphase: bool = False,
     equiphase_defocus_um: float | None = None,
@@ -89,6 +89,19 @@ def refine_defocus_and_thickness_1d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    use_equiphase : bool, optional
+        If True, compute the background/1D profile with equiphase averaging
+        instead of a plain rotational average. Default False.
+    equiphase_defocus_um : float or None, optional
+        Defocus in micrometers used for equiphase averaging. Default None.
+    equiphase_astigmatism_um : float or None, optional
+        Astigmatism in micrometers used for equiphase averaging. Default None.
+    equiphase_astigmatism_angle_deg : float or None, optional
+        Astigmatism angle in degrees used for equiphase averaging. Default None.
+    equiphase_phase_shift_deg : float or None, optional
+        Phase shift in degrees used for equiphase averaging. Default None.
+    equiphase_n_theta : int, optional
+        Number of azimuthal samples for equiphase averaging. Default 64.
     optimize_defocus : bool, optional
         If False, keep defocus at ``initial_defocus_um`` and refine thickness
         only. Default True.
@@ -140,9 +153,7 @@ def refine_defocus_and_thickness_1d(
             ]
         )
     else:
-        defocus_param = torch.tensor(
-            initial_defocus_um, device=device, dtype=dtype
-        )
+        defocus_param = torch.tensor(initial_defocus_um, device=device, dtype=dtype)
         optimiser = torch.optim.Adam(
             [{"params": [thickness_param], "lr": thickness_lr}]
         )

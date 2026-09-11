@@ -8,10 +8,11 @@ When nt > 1, defocus_0 / gradient / angle can be 1D splines in t; otherwise scal
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 import einops
 import torch
+from torch_cubic_spline_grids import CubicCatmullRomGrid1d
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_ctf2_t,
@@ -48,11 +49,6 @@ from torch_ctf_estimation.utils.fitting_bounds import (
 # Type for 1D spline params; use Any to avoid two TypeAlias assignments
 _Spline1D: TypeAlias = Any
 
-try:
-    from torch_cubic_spline_grids import CubicCatmullRomGrid1d
-except ImportError:
-    CubicCatmullRomGrid1d = None
-
 
 @dataclass
 class _LinearDefocusParams:
@@ -62,15 +58,15 @@ class _LinearDefocusParams:
     Exactly one of (spline branch) or (scalar branch) is set; the other is None.
     """
 
-    defocus_0_fixed: Optional[float]
-    defocus_0_param: Optional[torch.nn.Parameter]
-    grad_mag_param: Optional[torch.nn.Parameter]
-    grad_angle_u: Optional[torch.nn.Parameter]
-    grad_angle_v: Optional[torch.nn.Parameter]
-    defocus_0_spline_1d: Optional[_Spline1D]
-    grad_mag_spline_1d: Optional[_Spline1D]
-    grad_angle_u_spline_1d: Optional[_Spline1D]
-    grad_angle_v_spline_1d: Optional[_Spline1D]
+    defocus_0_fixed: float | None
+    defocus_0_param: torch.nn.Parameter | None
+    grad_mag_param: torch.nn.Parameter | None
+    grad_angle_u: torch.nn.Parameter | None
+    grad_angle_v: torch.nn.Parameter | None
+    defocus_0_spline_1d: _Spline1D | None
+    grad_mag_spline_1d: _Spline1D | None
+    grad_angle_u_spline_1d: _Spline1D | None
+    grad_angle_v_spline_1d: _Spline1D | None
 
 
 def _setup_linear_spectra_and_shape(
@@ -100,7 +96,7 @@ def _setup_linear_defocus_params(
     initial_defocus: float,
     initial_defocus_gradient_angle: float,
     initial_defocus_gradient_magnitude: float,
-    fix_defocus_0: Optional[float],
+    fix_defocus_0: float | None,
 ) -> _LinearDefocusParams:
     """
     Create linear defocus parameters.
@@ -116,7 +112,7 @@ def _setup_linear_defocus_params(
         if initial_defocus_gradient_magnitude != 0
         else 0.05
     )
-    use_linear_splines = nt > 1 and CubicCatmullRomGrid1d is not None
+    use_linear_splines = nt > 1
 
     if use_linear_splines:
         if fix_defocus_0 is not None:
@@ -372,7 +368,7 @@ def _build_linear_param_groups(
     angle_v: torch.Tensor,
     astigmatism_lr: float,
     astigmatism_angle_lr: float,
-    phase_models: Optional[PhaseShiftModels],
+    phase_models: PhaseShiftModels | None,
     phase_shift_lr: float,
 ) -> list[dict]:
     """Build Adam param groups for linear defocus, astigmatism, and phase."""
@@ -440,7 +436,7 @@ def _build_linear_param_groups(
     return param_groups
 
 
-def _spline_data_or_none(spline: Optional[_Spline1D]) -> Optional[torch.Tensor]:
+def _spline_data_or_none(spline: _Spline1D | None) -> torch.Tensor | None:
     """Return spline.data.detach().clone() or None; avoids union-attr on optional."""
     if spline is None:
         return None
@@ -485,7 +481,7 @@ def estimate_defocus_2d_linear(
     initial_defocus_gradient_angle: float = 0.0,
     defocus_gradient_magnitude_lr: float = 0.05,
     defocus_gradient_angle_lr: float = 50.0,
-    fix_defocus_0: Optional[float] = None,
+    fix_defocus_0: float | None = None,
     debug: bool = False,
     optimize_phase_shift: bool = False,
     phase_shift_model: Literal["grid", "quadratic"] = "grid",
@@ -495,8 +491,8 @@ def estimate_defocus_2d_linear(
     voltage_kev: float = 300.0,
     spherical_aberration_mm: float = 2.7,
     amplitude_contrast_fraction: float = 0.10,
-    laser_params: Optional[LaserParams] = None,
-    axis_mask: Optional[torch.Tensor] = None,
+    laser_params: LaserParams | None = None,
+    axis_mask: torch.Tensor | None = None,
     defocus_bounds_microns: tuple[float, float] | None = None,
     phase_shift_bounds_degrees: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float | None = None,

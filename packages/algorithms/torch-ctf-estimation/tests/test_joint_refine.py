@@ -145,9 +145,7 @@ def test_refine_defocus_and_thickness_2d_early_stops_before_n_iterations():
         pixel_spacing_angstroms=1.5,
         n_iterations=n_iterations,
         thickness_grid_resolution=(1, 1, 1),
-        early_stopper=make_early_stopper(
-            patience=1, window_size=2, tolerance=1e6
-        ),
+        early_stopper=make_early_stopper(patience=1, window_size=2, tolerance=1e6),
     )
     assert out2d.defocus_model_type == "grid"
     assert thick2d.loss_trace is not None

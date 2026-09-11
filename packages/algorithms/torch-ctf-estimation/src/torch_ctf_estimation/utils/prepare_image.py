@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import einops
-import torch
 from torch_fourier_rescale import fourier_rescale_2d
 
 from torch_ctf_estimation.utils.normalize import normalize_image
+
+if TYPE_CHECKING:
+    import torch
 
 
 def prepare_image_for_ctf(

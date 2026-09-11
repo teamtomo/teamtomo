@@ -1,7 +1,6 @@
 """Estimate CTF in 1D from a power spectrum."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_to_spatial_frequency
@@ -35,7 +34,7 @@ def estimate_ctf_1d(
     refine_steps: int = 40,
     refine_defocus_lr: float = 0.01,
     refine_b_factor_lr: float = 1.0,
-    initial_defocus: Optional[float] = None,
+    initial_defocus: float | None = None,
     background_result: _Background1DResult | None = None,
     optimize_phase_shift: bool = False,
     initial_phase_shift: float = 0.0,
@@ -105,7 +104,7 @@ def estimate_ctf_1d(
         Initial phase shift in degrees when optimize_phase_shift is True. Default 0.0.
     phase_shift_range : tuple[float, float] or None
         (low, high) phase shift bounds in degrees. If None, phase is unbounded
-        during refinement (grid search uses 0–180° internally).
+        during refinement (grid search uses 0-180 degrees internally).
     phase_shift_step : float
         Phase shift grid step in degrees for grid search. Default 5.0.
     phase_shift_lr : float
@@ -262,10 +261,10 @@ def estimate_ctf_1d(
     # Step 3: Refinement — gradient descent from grid (unless refine_steps<=0)
     # -------------------------------------------------------------------------
     if refine_steps > 0:
-        initial_B_float: Optional[float] = None
+        initial_B_float: float | None = None
         if grid_result.best_B is not None:
             initial_B_float = float(grid_result.best_B.detach().cpu().item())
-        initial_phase_float: Optional[float] = None
+        initial_phase_float: float | None = None
         if grid_result.best_phase_shift is not None:
             initial_phase_float = float(
                 grid_result.best_phase_shift.detach().cpu().item()

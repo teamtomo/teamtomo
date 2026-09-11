@@ -188,7 +188,7 @@ def _equiphase_s_scale_window(
     defocus_um: float | torch.Tensor,
     astigmatism_um: float | torch.Tensor,
 ) -> tuple[float, float]:
-    """Scale window around shell |q| for the local χ root (not the Cs-turnover alias)."""
+    """Scale window around shell |q| for the local chi root (not Cs-turnover alias)."""
     if isinstance(defocus_um, torch.Tensor):
         df = abs(float(defocus_um.detach().cpu().reshape(-1)[0].item()))
     else:
