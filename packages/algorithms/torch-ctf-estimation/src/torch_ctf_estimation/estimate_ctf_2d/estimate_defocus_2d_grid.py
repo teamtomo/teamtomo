@@ -7,7 +7,7 @@ Optimisation fits the grid control points plus optional astigmatism and phase sh
 
 import math
 from collections.abc import Callable
-from typing import Literal, Optional
+from typing import Literal
 
 import einops
 import torch
@@ -72,7 +72,7 @@ def _setup_grid_defocus_and_phase(
     phase_shift_model: Literal["grid", "quadratic"],
     initial_phase_shift: float,
     phase_shift_quadratic_perpendicular_axis: bool = False,
-) -> tuple[CubicCatmullRomGrid3d, Optional[PhaseShiftModels]]:
+) -> tuple[CubicCatmullRomGrid3d, PhaseShiftModels | None]:
     """
     Create the 3D defocus spline grid and optional phase shift models.
 
@@ -104,7 +104,7 @@ def _build_grid_param_groups(
     angle_v: torch.Tensor,
     astigmatism_lr: float,
     astigmatism_angle_lr: float,
-    phase_models: Optional[PhaseShiftModels],
+    phase_models: PhaseShiftModels | None,
     phase_shift_lr: float,
 ) -> list[dict]:
     """Build Adam param groups: defocus grid, then astigmatism, then phase."""
@@ -176,8 +176,8 @@ def estimate_defocus_2d_grid(
     voltage_kev: float = 300.0,
     spherical_aberration_mm: float = 2.7,
     amplitude_contrast_fraction: float = 0.10,
-    laser_params: Optional[LaserParams] = None,
-    axis_mask: Optional[torch.Tensor] = None,
+    laser_params: LaserParams | None = None,
+    axis_mask: torch.Tensor | None = None,
     defocus_bounds_microns: tuple[float, float] | None = None,
     phase_shift_bounds_degrees: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float | None = None,

@@ -16,7 +16,7 @@ except ModuleNotFoundError as err:
 def _fit_band_background_subtracted_normalized(
     results1d: Defocus1DResults,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Fit-band background-subtracted power, min-max normalized (same as plot_1d panel 3)."""
+    """Fit-band background-subtracted power, min-max normalized (plot_1d panel 3)."""
     if (
         results1d.background_model is None
         or results1d.low_frequency_fit is None
@@ -55,7 +55,9 @@ def _simulated_ctf2_fit_band(
 ) -> torch.Tensor:
     """Simulated CTF^2 on the 1D fit band (same method as plot_1d panel 3)."""
     if results1d.ctf_model is None or results1d.low_frequency_fit is None:
-        raise ValueError("Simulated CTF^2 plot requires ctf_model and fit-range limits.")
+        raise ValueError(
+            "Simulated CTF^2 plot requires ctf_model and fit-range limits."
+        )
 
     freqs = results1d.frequencies_1d
     fit_mask = (freqs >= results1d.low_frequency_fit) & (
@@ -97,6 +99,8 @@ def plot_1d_spectrum(results1d: Defocus1DResults) -> None:
 
     # Plot 1: 1D Power Spectrum with background
     ax1 = axes[0, 0]
+    if results1d.powerspectrum_1d is None:
+        raise ValueError("Defocus1DResults.powerspectrum_1d is required")
     freqs = results1d.frequencies_1d.detach().cpu().numpy()
     power_spec = results1d.powerspectrum_1d.detach().cpu().numpy()
 
@@ -173,8 +177,8 @@ def plot_1d_spectrum(results1d: Defocus1DResults) -> None:
         and results1d.low_frequency_fit is not None
     ):
         ax3 = axes[1, 0]
-        fit_freqs, corrected_power_normalized = _fit_band_background_subtracted_normalized(
-            results1d
+        fit_freqs, corrected_power_normalized = (
+            _fit_band_background_subtracted_normalized(results1d)
         )
         fit_freqs_np = fit_freqs.numpy()
 
@@ -342,7 +346,9 @@ def plot_2d_spectrum(
     if results2d.envelope_B is not None:
         ctf_info.append(f"Envelope B: {results2d.envelope_B:.1f}")
     if results2d.cross_correlation_final is not None:
-        ctf_info.append(f"2D cross-correlation: {results2d.cross_correlation_final:.3f}")
+        ctf_info.append(
+            f"2D cross-correlation: {results2d.cross_correlation_final:.3f}"
+        )
     ctf_info.extend(
         [
             "",
@@ -470,7 +476,9 @@ def plot_2d_spectrum_images(
     axes[0].set_title("Measured power spectrum (2D)")
     axes[0].axis("off")
 
-    axes[1].imshow(simulated_img, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
+    axes[1].imshow(
+        simulated_img, cmap="gray", vmin=0, vmax=255, interpolation="nearest"
+    )
     axes[1].set_title("Simulated CTF^2 (2D fit)")
     axes[1].axis("off")
 

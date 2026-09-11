@@ -62,8 +62,9 @@ class CTFFittingParams(_EarlyStoppingMixin):
     phase_shift_range_degrees: tuple[float, float] | None = Field(
         default=None,
         description=(
-            "Phase shift bounds in degrees for 1D/2D fitting. Default (0, 180) when unset. "
-            "Equal values, e.g. (45.0, 45.0), use a known fixed phase (overrides optimize_phase_shift)."
+            "Phase shift bounds in degrees for 1D/2D fitting. Default (0, 180) "
+            "when unset. Equal values, e.g. (45.0, 45.0), use a known fixed phase "
+            "(overrides optimize_phase_shift)."
         ),
     )
     patch_sidelength: int = 256

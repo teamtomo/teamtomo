@@ -1,7 +1,5 @@
 """Estimate sample thickness in 1D from a power spectrum."""
 
-from typing import Optional
-
 import einops
 import torch
 from torch_ctf.ctf_thickness import calculate_ctf_thickness_1d
@@ -29,13 +27,13 @@ def estimate_thickness_1d(
     phase_shift_deg: float = 0.0,
     thickness_range_angstroms: tuple[float, float] = (300.0, 4000.0),
     thickness_step_angstroms: float = 100.0,
-    background_result: Optional[_Background1DResult] = None,
+    background_result: _Background1DResult | None = None,
     use_equiphase: bool = False,
-    equiphase_defocus_um: Optional[float] = None,
-    equiphase_astigmatism_um: Optional[float] = None,
-    equiphase_astigmatism_angle_deg: Optional[float] = None,
-    equiphase_phase_shift_deg: Optional[float] = None,
-    laser_params: Optional[LaserParams] = None,
+    equiphase_defocus_um: float | None = None,
+    equiphase_astigmatism_um: float | None = None,
+    equiphase_astigmatism_angle_deg: float | None = None,
+    equiphase_phase_shift_deg: float | None = None,
+    laser_params: LaserParams | None = None,
     equiphase_n_theta: int = 64,
 ) -> Thickness1DResults:
     """

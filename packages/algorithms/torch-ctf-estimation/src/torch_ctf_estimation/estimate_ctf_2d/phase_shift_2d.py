@@ -2,7 +2,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
@@ -18,9 +18,9 @@ class PhaseShiftModels:
     When not optimizing phase, u_grid and v_grid are None and quad_params is None.
     """
 
-    u_grid: Optional[CubicCatmullRomGrid3d] = None
-    v_grid: Optional[CubicCatmullRomGrid3d] = None
-    quad_params: Optional[dict[str, torch.nn.Parameter]] = None
+    u_grid: CubicCatmullRomGrid3d | None = None
+    v_grid: CubicCatmullRomGrid3d | None = None
+    quad_params: dict[str, torch.nn.Parameter] | None = None
     quadratic_perpendicular_axis: bool = False
 
 
@@ -31,7 +31,7 @@ def init_phase_shift_models(
     grid_resolution: tuple[int, int, int],
     device: torch.device,
     phase_shift_quadratic_perpendicular_axis: bool = False,
-) -> Optional[PhaseShiftModels]:
+) -> PhaseShiftModels | None:
     """
     Initialise phase shift models (grid u/v or quadratic params).
 
@@ -87,10 +87,10 @@ def init_phase_shift_models(
 
 def phase_shift_at_positions(
     positions_t: torch.Tensor,
-    phase_models: Optional[PhaseShiftModels],
+    phase_models: PhaseShiftModels | None,
     phase_shift_bounds: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float | None = None,
-) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
     """
     Evaluate phase shift (and u, v for unit-circle penalty) at normalised positions.
 
@@ -145,7 +145,7 @@ def phase_shift_at_positions(
 
 
 def clamp_phase_shift_after_step(
-    phase_models: Optional[PhaseShiftModels],
+    phase_models: PhaseShiftModels | None,
     phase_shift_bounds: tuple[float, float] | None = None,
 ) -> None:
     """Clamp quadratic C and grid u/v mean phase after optimizer step."""
@@ -167,9 +167,7 @@ def clamp_phase_shift_after_step(
         with torch.no_grad():
             u_mean = phase_models.u_grid.data.mean()
             v_mean = phase_models.v_grid.data.mean()
-            phase_deg = (
-                0.5 * torch.atan2(v_mean, u_mean) * (180.0 / math.pi)
-            ).item()
+            phase_deg = (0.5 * torch.atan2(v_mean, u_mean) * (180.0 / math.pi)).item()
             phase_deg = max(lo, min(hi, phase_deg))
             theta_rad = phase_deg * (math.pi / 180.0)
             u_new = math.cos(2.0 * theta_rad)
@@ -179,9 +177,9 @@ def clamp_phase_shift_after_step(
 
 
 def build_phase_shift_result(
-    phase_models: Optional[PhaseShiftModels],
+    phase_models: PhaseShiftModels | None,
     _phase_shift_model: Literal["grid", "quadratic"],
-) -> tuple[Optional[float], Optional[object]]:
+) -> tuple[float | None, object | None]:
     """
     Build (final_phase_shift_deg, final_phase_shift_model_obj) for Defocus2DResults.
 
@@ -215,7 +213,7 @@ def build_phase_shift_result(
 
 
 def phase_shift_param_groups(
-    phase_models: Optional[PhaseShiftModels],
+    phase_models: PhaseShiftModels | None,
     phase_shift_lr: float,
 ) -> list[dict]:
     """Return param groups for Adam for phase shift models."""
@@ -233,8 +231,8 @@ def phase_shift_param_groups(
 
 
 def phase_shift_trace_value(
-    phase_models: Optional[PhaseShiftModels],
-) -> Optional[float]:
+    phase_models: PhaseShiftModels | None,
+) -> float | None:
     """Single scalar for trace list (mean phase this step)."""
     if phase_models is None:
         return None

@@ -523,7 +523,9 @@ def grid_search_defocus_and_envelope_1d(
         Phase shift grid step in degrees when optimize_phase_shift is True. Default 5.0.
     phase_shift_range : tuple[float, float] or None
         (low, high) phase shift bounds in degrees for the grid search. If None,
-        a wide internal range (0–180°) is used for search only.
+        a wide internal range (0-180 degrees) is used for search only.
+    fixed_phase_shift_deg : float
+        Phase shift in degrees used when optimize_phase_shift is False.
 
     Returns
     -------
@@ -686,7 +688,7 @@ def grid_search_defocus_and_envelope_1d(
 
 def refine_defocus_and_b_factor_1d(
     initial_defocus: float,
-    initial_B: Optional[float],
+    initial_B: float | None,
     raps_in_fit_range: torch.Tensor,
     spatial_freqs: torch.Tensor,
     fit_mask: torch.Tensor,
@@ -700,12 +702,12 @@ def refine_defocus_and_b_factor_1d(
     n_iterations: int = 100,
     defocus_lr: float = 0.01,
     b_factor_lr: float = 1.0,
-    initial_phase_shift: Optional[float] = None,
+    initial_phase_shift: float | None = None,
     optimize_phase_shift: bool = False,
     phase_shift_lr: float = 5.0,
     phase_shift_range: tuple[float, float] | None = None,
     early_stopper: Callable[[float], bool] | None = None,
-) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
     """
     Refine defocus (and optionally B factor) by gradient descent to maximise ZNCC.
 

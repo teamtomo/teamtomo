@@ -11,7 +11,7 @@ This module is a diagnostic. It does not replace the 1D thickness grid.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 from torch_ctf import calculate_ctf_1d
@@ -22,7 +22,9 @@ from torch_ctf_estimation.metrics.fit_metrics import (
     l2_normalized_cross_correlation,
     pearson_r_flat,
 )
-from torch_ctf_estimation.models.results_models import Thickness1DResults
+
+if TYPE_CHECKING:
+    from torch_ctf_estimation.models.results_models import Thickness1DResults
 
 
 class GofResolution1DResult(NamedTuple):
@@ -40,8 +42,10 @@ def electron_wavelength_angstrom(voltage_kev: float) -> float:
     return float(lam_m.detach().cpu().item()) * 1.0e10
 
 
-def thickness_from_first_node_angstroms(d_angstroms: float, voltage_kev: float) -> float:
-    """t = 1 / (lambda * g^2) = d^2 / lambda (first CTF_t node)."""
+def thickness_from_first_node_angstroms(
+    d_angstroms: float, voltage_kev: float
+) -> float:
+    """T = 1 / (lambda * g^2) = d^2 / lambda (first CTF_t node)."""
     if d_angstroms <= 0.0 or not torch.isfinite(torch.tensor(d_angstroms)):
         return float("nan")
     return (d_angstroms**2) / electron_wavelength_angstrom(voltage_kev)
@@ -144,9 +148,7 @@ def estimate_gof_resolution_1d(
     fit_res = interpolate_cc_drop_angstroms(spacing[valid], r[valid], cc_threshold)
     return GofResolution1DResult(
         fit_res_A=fit_res,
-        thickness_from_node_A=thickness_from_first_node_angstroms(
-            fit_res, voltage_kev
-        ),
+        thickness_from_node_A=thickness_from_first_node_angstroms(fit_res, voltage_kev),
         spacing_A=spacing[valid],
         window_pearson_r=r[valid],
     )
@@ -234,7 +236,7 @@ def simulate_thickness_abs_ctf_1d(
     pixel_spacing_angstroms: float,
     phase_shift_deg: float = 0.0,
 ) -> torch.Tensor:
-    """|CTF_t| amplitude transfer (sinc × sin χ)."""
+    """|CTF_t| amplitude transfer (sinc * sin chi)."""
     ctf = calculate_ctf_thickness_1d(
         return_power_spectrum=False,
         sample_thickness_angstrom=thickness_angstroms,
@@ -297,7 +299,7 @@ def estimate_gof_by_cycles(
         if cycles_per_window <= 1.0 + 1e-6:
             i1 = peaks[i + 1]
         else:
-            i1 = int(round(i0 + cycles_per_window * span))
+            i1 = round(i0 + cycles_per_window * span)
             i1 = min(max(i1, i0 + min_bins), n - 1)
         if i1 - i0 < min_bins:
             continue
@@ -327,9 +329,7 @@ def estimate_gof_by_cycles(
     fit_res = interpolate_cc_drop_angstroms(spacing, cc, cc_threshold)
     return GofResolution1DResult(
         fit_res_A=fit_res,
-        thickness_from_node_A=thickness_from_first_node_angstroms(
-            fit_res, voltage_kev
-        ),
+        thickness_from_node_A=thickness_from_first_node_angstroms(fit_res, voltage_kev),
         spacing_A=spacing,
         window_pearson_r=cc,
     )

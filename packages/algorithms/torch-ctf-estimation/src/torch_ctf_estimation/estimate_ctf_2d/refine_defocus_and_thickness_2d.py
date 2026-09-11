@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,8 +50,8 @@ def refine_defocus_and_thickness_2d(
     thickness_lr: float = 50.0,
     thickness_grid_resolution: tuple[int, int, int] | None = None,
     defocus_bounds_microns: tuple[float, float] | None = None,
-    laser_params: Optional[LaserParams] = None,
-    axis_mask: Optional[torch.Tensor] = None,
+    laser_params: LaserParams | None = None,
+    axis_mask: torch.Tensor | None = None,
     early_stopper: Callable[[float], bool] | None = None,
 ) -> tuple[Defocus2DResults, Thickness2DResults]:
     """Jointly refine 2D defocus and thickness with the thickness-modulated CTF.
@@ -74,6 +74,12 @@ def refine_defocus_and_thickness_2d(
         Fit band in Angstroms.
     pixel_spacing_angstroms : float
         Pixel size after any rescale.
+    voltage_kev : float, optional
+        Acceleration voltage in keV. Default 300.0.
+    spherical_aberration_mm : float, optional
+        Spherical aberration in mm. Default 2.7.
+    amplitude_contrast_fraction : float, optional
+        Amplitude contrast fraction (0-1). Default 0.07.
     n_iterations, defocus_lr, thickness_lr :
         Optimiser settings.
     thickness_grid_resolution : tuple[int, int, int] | None
@@ -169,7 +175,10 @@ def refine_defocus_and_thickness_2d(
         )
         param_groups = [
             {"params": [defocus_0_param], "lr": defocus_lr},
-            {"params": [grad_mag_param, angle_u_param, angle_v_param], "lr": defocus_lr},
+            {
+                "params": [grad_mag_param, angle_u_param, angle_v_param],
+                "lr": defocus_lr,
+            },
             {"params": list(thickness_model.parameters()), "lr": thickness_lr},
         ]
     else:
@@ -289,10 +298,12 @@ def refine_defocus_and_thickness_2d(
         av = float(angle_v_param.detach().cpu().item())
         angle_deg = (math.atan2(av, au) * 180.0 / math.pi + 180.0) % 180.0
         mean_defocus = float(defocus_0_param.detach().cpu().item())
-        updated_defocus: LinearDefocusModel | CubicCatmullRomGrid3d = LinearDefocusModel(
-            defocus_0=mean_defocus,
-            defocus_gradient_magnitude=float(grad_mag_param.detach().cpu().item()),
-            defocus_gradient_angle=angle_deg,
+        updated_defocus: LinearDefocusModel | CubicCatmullRomGrid3d = (
+            LinearDefocusModel(
+                defocus_0=mean_defocus,
+                defocus_gradient_magnitude=float(grad_mag_param.detach().cpu().item()),
+                defocus_gradient_angle=angle_deg,
+            )
         )
         model_type = "linear"
     else:

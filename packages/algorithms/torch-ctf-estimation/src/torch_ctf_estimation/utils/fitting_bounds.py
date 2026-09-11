@@ -51,7 +51,7 @@ def resolve_phase_shift_fitting(
     phase_shift_deg : float
         Phase shift used in the CTF (fixed value or initial for optimisation).
     phase_bounds : tuple[float, float]
-        Effective bounds (always set; defaults to 0–180°).
+        Effective bounds (always set; defaults to 0-180 degrees).
     """
     phase_bounds = resolve_phase_shift_bounds(phase_shift_range_degrees)
     if bounds_are_fixed(phase_bounds):
