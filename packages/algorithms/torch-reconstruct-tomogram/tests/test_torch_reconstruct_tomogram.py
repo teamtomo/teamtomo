@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import torch
-from torch_tilt_series import TiltSeries
+from torch_tilt_series import TiltSeries, load_tilt_series_images
 
 import torch_reconstruct_tomogram
 from torch_reconstruct_tomogram import (
@@ -240,3 +240,78 @@ def test_reconstruct_subvolume_rotation_includes_tomo2sample(tmp_path, monkeypat
     )
     expected = torch.linalg.pinv(expected_forward)
     assert torch.allclose(captured["rotation_matrices"], expected, atol=1e-5)
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_reconstruct_subvolume_accepts_preloaded_images(device, tmp_path):
+    tilt_series = make_tilt_series(tmp_path, device)
+    point = torch.tensor([0.0, 0.0, 0.0], device=device)
+
+    from_disk = reconstruct_subvolume(tilt_series, point, sidelength=8)
+    preloaded = reconstruct_subvolume(
+        tilt_series,
+        point,
+        sidelength=8,
+        images=load_tilt_series_images(tilt_series),
+    )
+    assert torch.allclose(from_disk, preloaded)
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_reconstruct_tomogram_accepts_preloaded_images(device, tmp_path):
+    tilt_series = make_tilt_series(tmp_path, device)
+
+    from_disk = reconstruct_tomogram(tilt_series, (16, 16, 16), sidelength=8)
+    preloaded = reconstruct_tomogram(
+        tilt_series,
+        (16, 16, 16),
+        sidelength=8,
+        images=load_tilt_series_images(tilt_series),
+    )
+    assert torch.allclose(from_disk, preloaded)
+
+
+def test_preloaded_images_must_match_tilt_series_geometry(tmp_path):
+    tilt_series = make_tilt_series(tmp_path)
+    point = torch.tensor([0.0, 0.0, 0.0])
+    # geometry describes 3 tilts, so a 2-image stack is a caller error
+    too_few = torch.zeros((2, 32, 32))
+    with pytest.raises(ValueError, match="2 tilts but tilt_series geometry"):
+        reconstruct_subvolume(tilt_series, point, sidelength=8, images=too_few)
+
+
+def test_preloaded_images_still_go_through_preprocessing(tmp_path):
+    # `images` replaces the loading step only, so `preprocess` must still
+    # apply to what the caller hands over. This is what lets two half-stacks
+    # be preprocessed identically.
+    tilt_series = make_tilt_series(tmp_path)
+    point = torch.tensor([0.0, 0.0, 0.0])
+    images = load_tilt_series_images(tilt_series)
+
+    preprocessed = reconstruct_subvolume(
+        tilt_series, point, sidelength=8, images=images, preprocess=True
+    )
+    raw = reconstruct_subvolume(
+        tilt_series, point, sidelength=8, images=images, preprocess=False
+    )
+    assert not torch.allclose(preprocessed, raw)
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_two_image_stacks_share_one_tilt_series_alignment(device, tmp_path):
+    # the motivating case: even/odd halves of a dose-fractionated movie are
+    # reconstructed through one shared alignment, and neither half is on disk
+    tilt_series = make_tilt_series(tmp_path, device)
+    images = load_tilt_series_images(tilt_series)
+    generator = torch.Generator().manual_seed(0)
+    noise = torch.randn(images.shape, generator=generator).to(images.device)
+
+    half_a = reconstruct_tomogram(
+        tilt_series, (16, 16, 16), sidelength=8, images=images + noise
+    )
+    half_b = reconstruct_tomogram(
+        tilt_series, (16, 16, 16), sidelength=8, images=images - noise
+    )
+    assert half_a.shape == (16, 16, 16)
+    assert half_b.shape == (16, 16, 16)
+    assert not torch.allclose(half_a, half_b)
