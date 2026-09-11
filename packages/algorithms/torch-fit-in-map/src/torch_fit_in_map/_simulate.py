@@ -77,6 +77,9 @@ class PotentialSimulator(Protocol):
             Target device for the output tensor.
         config : PotentialSimulatorConfig or None
             Simulator options. ``None`` uses the default configuration.
+            :func:`fit_map_in_structure` and :func:`fit_structure_in_map` only
+            pass this to the default simulator, so custom simulators may omit
+            this parameter.
 
         Returns
         -------

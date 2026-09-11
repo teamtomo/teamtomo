@@ -230,6 +230,38 @@ def apply_alignment(
     )
 
 
+def _simulate_structure(
+    atoms: pd.DataFrame,
+    simulator: PotentialSimulator | None,
+    simulator_config: PotentialSimulatorConfig | None,
+    pixel_size: float,
+    box_size: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Simulate *atoms* with a custom simulator or the configured default one.
+
+    ``config`` is only passed to the default simulator, so custom simulators
+    implementing ``simulate(atoms, pixel_size, box_size, device)`` without a
+    ``config`` parameter keep working.
+    """
+    if simulator is not None and simulator_config is not None:
+        raise ValueError(
+            "simulator and simulator_config are mutually exclusive; "
+            "simulator_config only configures the default simulator."
+        )
+    if simulator is None:
+        return DEFAULT_POTENTIAL_SIMULATOR.simulate(
+            atoms=atoms,
+            pixel_size=pixel_size,
+            box_size=box_size,
+            device=device,
+            config=simulator_config,
+        )
+    return simulator.simulate(
+        atoms=atoms, pixel_size=pixel_size, box_size=box_size, device=device
+    )
+
+
 def fit_map_in_structure(
     mobile_map: torch.Tensor,
     reference_atoms: pd.DataFrame,
@@ -288,21 +320,13 @@ def fit_map_in_structure(
     ValueError
         If both ``simulator`` and ``simulator_config`` are supplied.
     """
-    if simulator is not None and simulator_config is not None:
-        raise ValueError(
-            "simulator and simulator_config are mutually exclusive; "
-            "simulator_config only configures the default simulator."
-        )
-    if simulator is None:
-        simulator = DEFAULT_POTENTIAL_SIMULATOR
-
-    device = mobile_map.device
-    simulated = simulator.simulate(
-        atoms=reference_atoms,
+    simulated = _simulate_structure(
+        reference_atoms,
+        simulator,
+        simulator_config,
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
-        device=device,
-        config=simulator_config,
+        device=mobile_map.device,
     )
 
     mobile_map, simulated, common_px = normalise_voxel_sizes(
@@ -380,21 +404,13 @@ def fit_structure_in_map(
     ValueError
         If both ``simulator`` and ``simulator_config`` are supplied.
     """
-    if simulator is not None and simulator_config is not None:
-        raise ValueError(
-            "simulator and simulator_config are mutually exclusive; "
-            "simulator_config only configures the default simulator."
-        )
-    if simulator is None:
-        simulator = DEFAULT_POTENTIAL_SIMULATOR
-
-    device = reference_map.device
-    simulated = simulator.simulate(
-        atoms=mobile_atoms,
+    simulated = _simulate_structure(
+        mobile_atoms,
+        simulator,
+        simulator_config,
         pixel_size=pixel_size_angstroms,
         box_size=box_size,
-        device=device,
-        config=simulator_config,
+        device=reference_map.device,
     )
 
     reference_map, simulated, common_px = normalise_voxel_sizes(

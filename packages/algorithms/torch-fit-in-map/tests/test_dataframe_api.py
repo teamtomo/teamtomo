@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 from torch_calculate_electrostatic_potential import (
     GridConfig,
@@ -216,3 +217,63 @@ def test_default_simulator_supports_bonded_scattering_factors():
     assert volume.shape == (12, 12, 12)
     assert torch.isfinite(volume).all()
     assert volume.abs().sum() > 0
+
+
+class _SimulatorWithoutConfig(_GaussianSimulator):
+    """Custom simulator whose ``simulate`` does not accept ``config``."""
+
+    def simulate(self, atoms, pixel_size, box_size, device=None):
+        return super().simulate(atoms, pixel_size, box_size, device)
+
+
+def test_custom_simulator_without_config_parameter():
+    """Custom simulators need not accept ``config``."""
+    atoms = _make_atoms()
+    sim = _SimulatorWithoutConfig()
+    box = 24
+    px = 2.0
+    volume = sim.simulate(atoms, px, box)
+    exhaustive_config = ExhaustiveSearchConfig(
+        angular_step_degrees=90.0, pixel_size_angstroms=px
+    )
+
+    structure_in_map = fit_structure_in_map(
+        atoms,
+        volume,
+        px,
+        box,
+        simulator=sim,
+        exhaustive_config=exhaustive_config,
+        gradient_config=None,
+        verbose=False,
+    )
+    map_in_structure = fit_map_in_structure(
+        volume,
+        atoms,
+        px,
+        box,
+        simulator=sim,
+        exhaustive_config=exhaustive_config,
+        gradient_config=None,
+        verbose=False,
+    )
+    assert np.isfinite(structure_in_map.score)
+    assert np.isfinite(map_in_structure.score)
+
+
+@pytest.mark.parametrize("fit", [fit_structure_in_map, fit_map_in_structure])
+def test_simulator_and_simulator_config_are_mutually_exclusive(fit):
+    """A custom simulator cannot be combined with a default-simulator config."""
+    atoms = _make_atoms()
+    volume = torch.zeros(8, 8, 8)
+    args = (atoms, volume) if fit is fit_structure_in_map else (volume, atoms)
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        fit(
+            *args,
+            2.0,
+            8,
+            simulator=_GaussianSimulator(),
+            simulator_config=PotentialSimulatorConfig(),
+            verbose=False,
+        )
