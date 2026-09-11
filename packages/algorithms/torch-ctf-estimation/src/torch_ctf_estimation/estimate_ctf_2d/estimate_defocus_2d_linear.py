@@ -12,6 +12,7 @@ from typing import Any, Literal, TypeAlias
 
 import einops
 import torch
+from torch_cubic_spline_grids import CubicCatmullRomGrid1d
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_ctf2_t,
@@ -47,11 +48,6 @@ from torch_ctf_estimation.utils.fitting_bounds import (
 
 # Type for 1D spline params; use Any to avoid two TypeAlias assignments
 _Spline1D: TypeAlias = Any
-
-try:
-    from torch_cubic_spline_grids import CubicCatmullRomGrid1d
-except ImportError:
-    CubicCatmullRomGrid1d = None
 
 
 @dataclass
@@ -116,7 +112,7 @@ def _setup_linear_defocus_params(
         if initial_defocus_gradient_magnitude != 0
         else 0.05
     )
-    use_linear_splines = nt > 1 and CubicCatmullRomGrid1d is not None
+    use_linear_splines = nt > 1
 
     if use_linear_splines:
         if fix_defocus_0 is not None:
