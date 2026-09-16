@@ -6,6 +6,7 @@ width. `bv` is the batch of volumes, `bp` the batch of projections.
 """
 
 from std.atomic import Atomic, Ordering
+from std.builtin.device_passable import DevicePassable, DeviceTypeEncoder
 from std.python import PythonObject
 
 from layout import Coord, TensorLayout, TileTensor
@@ -87,6 +88,100 @@ struct FourierSliceParams(Copyable, Movable):
     def two_pi_over_sidelength(self) -> Float32:
         """Phase-ramp scale `-2*pi / sidelength` (3D volume-frame shift)."""
         return -2.0 * PI / Float32(self.sidelength)
+
+    @always_inline
+    def to_device(self, total: Int) -> DeviceParams:
+        """Wire form of `self` for a single GPU kernel-launch argument.
+
+        `total` (the launch's thread count, used only for the in-kernel bounds
+        check) travels alongside since it has nowhere else to live once a kernel
+        takes one params struct instead of a flat scalar list. `interp` is
+        omitted -- it becomes the kernel's comptime specialisation parameter,
+        not a runtime field (see `DeviceParams.to_params`).
+        """
+        return DeviceParams(
+            Int64(total),
+            Int64(self.bp),
+            Int64(self.sidelength),
+            Int64(self.proj_sidelength),
+            Int64(self.bv_rot),
+            Int64(self.bv_shift_2d),
+            self.oversampling,
+            self.radius_cutoff_sq,
+            Int32(self.has_shifts_2d),
+            Int32(self.has_weights),
+            Int32(self.friedel_double),
+            Int32(self.skip_redundant),
+            self.ewald_curvature,
+            Int32(self.has_shifts_3d),
+            Int64(self.bv_shift_3d),
+        )
+
+
+@fieldwise_init
+struct DeviceParams(Copyable, DevicePassable, Movable):
+    """`FourierSliceParams`, fixed-width for the host->device kernel-launch ABI.
+
+    GPU kernel arguments must conform to `DevicePassable`, which `Int` does not
+    (a kernel-launch argument must be fixed-width) and neither does `Bool`
+    (Mojo's `Bool` isn't reflectable yet, see `device_passable.mojo`); everywhere
+    else -- the CPU entry points, the shared pixel/gather math, this struct's
+    own `Int`-typed twin -- keeps using plain `Int`/semantic `!= 0` flags. This
+    struct exists solely to cross that one host->device boundary as a single
+    argument: real counts get `Int64` (matching `Int`'s native width, so large
+    volumes/batches can't overflow), and the boolean-shaped fields get `Int32`
+    (the smallest fixed-width stand-in for a flag, since `Bool` isn't eligible).
+    `FourierSliceParams.to_device` builds it and `to_params` unpacks it back on
+    the device side.
+    """
+
+    comptime device_type = Self
+
+    var total: Int64
+    var bp: Int64
+    var sidelength: Int64
+    var proj_sidelength: Int64
+    var bv_rot: Int64
+    var bv_shift_2d: Int64
+    var oversampling: Float32
+    var radius_cutoff_sq: Float32
+    var has_shifts_2d: Int32
+    var has_weights: Int32
+    var friedel_double: Int32
+    var skip_redundant: Int32
+    var ewald_curvature: Float32
+    var has_shifts_3d: Int32
+    var bv_shift_3d: Int64
+
+    def _to_device_type(
+        self, mut encoder: Some[DeviceTypeEncoder], target: MutOpaquePointer[_]
+    ):
+        encoder.encode(self, target)
+
+    @staticmethod
+    def get_type_name() -> String:
+        return "DeviceParams"
+
+    @always_inline
+    def to_params(self, interp: Int) -> FourierSliceParams:
+        """Rebuild the full `FourierSliceParams` on the device side."""
+        return FourierSliceParams(
+            Int(self.bp),
+            Int(self.sidelength),
+            Int(self.proj_sidelength),
+            Int(self.bv_rot),
+            Int(self.bv_shift_2d),
+            self.oversampling,
+            self.radius_cutoff_sq,
+            Int(self.has_shifts_2d),
+            interp,
+            Int(self.has_weights),
+            Int(self.friedel_double),
+            Int(self.skip_redundant),
+            self.ewald_curvature,
+            Int(self.has_shifts_3d),
+            Int(self.bv_shift_3d),
+        )
 
 
 # --------------------------------------------------------------------------

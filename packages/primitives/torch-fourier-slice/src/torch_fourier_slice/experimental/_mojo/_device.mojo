@@ -1,15 +1,17 @@
 """GPU plumbing: the per-pixel kernels and their launchers.
 
-Each kernel runs one thread per rfft output pixel; `FourierSliceParams` isn't
-`DevicePassable`, so the kernels take its (primitive) fields as scalars and
-rebuild it on the device (only the per-pixel math is shared with the CPU path).
-The kernels read and write torch device memory in place -- the Python caller
-passes raw device addresses (see `fourier_slice_kernels.mojo` / `experimental/_gpu.py`), so
-there is no host<->device staging here.
+Each kernel runs one thread per rfft output pixel. `FourierSliceParams` itself
+isn't `DevicePassable` (`Int` isn't a fixed-width kernel-argument type), so
+each launcher packs it into one `DeviceParams` (see `_common.mojo`) and every
+kernel takes that as its single params argument, unpacking it back to a
+`FourierSliceParams` on entry -- the per-pixel math is shared with the CPU
+path unchanged. The kernels read and write torch device memory in place --
+the Python caller passes raw device addresses (see `fourier_slice_kernels.mojo`
+/ `experimental/_gpu.py`), so there is no host<->device staging here.
 """
 
-from std.math import ceildiv
 from std.gpu import global_idx
+from std.math import ceildiv
 from std.memory import OpaquePointer
 
 from max.gpu.host import DeviceContext
@@ -19,6 +21,7 @@ from _common import (
     BackprojectGradBuffers,
     BackprojectLine2DGradBuffers,
     BackprojectLineGradBuffers,
+    DeviceParams,
     Float32Ptr,
     ForwardGradBuffers,
     ForwardLine2DGradBuffers,
@@ -55,7 +58,7 @@ from _pose_grad import (
 
 
 # ---------------------------------------------------------------------------
-# Kernels (one thread per rfft pixel; rebuild `p` from primitive scalars)
+# Kernels (one thread per rfft pixel; unpack `dp` back to `p` on entry)
 # ---------------------------------------------------------------------------
 
 
@@ -67,55 +70,19 @@ def _project_gpu_kernel[
     shifts_2d: Float32Ptr,
     shifts_3d: Float32Ptr,
     proj: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    bv_shift_2d64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    ewald_curvature: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var bv_shift_2d = Int(bv_shift_2d64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        0,
-        0,
-        0,
-        ewald_curvature,
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var psh = p.proj_sidelength_half()
     var x = idx % psh
     var t = idx // psh
-    var y = t % proj_sidelength
-    var vp = t // proj_sidelength
+    var y = t % p.proj_sidelength
+    var vp = t // p.proj_sidelength
     _project_pixel[interp](
-        rec, rot, shifts_2d, shifts_3d, proj, vp // bp, vp % bp, y, x, p
+        rec, rot, shifts_2d, shifts_3d, proj, vp // p.bp, vp % p.bp, y, x, p
     )
 
 
@@ -129,59 +96,17 @@ def _scatter_gpu_kernel[
     shifts_3d: Float32Ptr,
     vol: Float32Ptr,
     wvol: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    bv_shift_2d64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    has_weights64: Int64,
-    friedel_double64: Int64,
-    skip_redundant64: Int64,
-    ewald_curvature: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var bv_shift_2d = Int(bv_shift_2d64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var has_weights = Int(has_weights64)
-    var friedel_double = Int(friedel_double64)
-    var skip_redundant = Int(skip_redundant64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        has_weights,
-        friedel_double,
-        skip_redundant,
-        ewald_curvature,
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var psh = p.proj_sidelength_half()
     var x = idx % psh
     var t = idx // psh
-    var y = t % proj_sidelength
-    var vp = t // proj_sidelength
+    var y = t % p.proj_sidelength
+    var vp = t // p.proj_sidelength
     _scatter_pixel[interp](
         inp,
         weights,
@@ -190,8 +115,8 @@ def _scatter_gpu_kernel[
         shifts_3d,
         vol,
         wvol,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         y,
         x,
         p,
@@ -205,48 +130,17 @@ def _project_line_gpu_kernel[
     direction: Float32Ptr,
     shifts_3d: Float32Ptr,
     line: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        1,  # bv_shift_2d (unused)
-        oversampling,
-        radius_cutoff_sq,
-        0,  # has_shifts_2d (unused: a line has no image plane)
-        interp,
-        0,  # has_weights
-        0,  # friedel_double
-        0,  # skip_redundant
-        0.0,  # ewald_curvature (unused for a 1D line)
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
     _project_line_pixel[interp](
-        rec, direction, shifts_3d, line, vp // bp, vp % bp, x, p
+        rec, direction, shifts_3d, line, vp // p.bp, vp % p.bp, x, p
     )
 
 
@@ -259,52 +153,26 @@ def _scatter_line_gpu_kernel[
     shifts_3d: Float32Ptr,
     vol: Float32Ptr,
     wvol: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_weights64: Int64,
-    friedel_double64: Int64,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_weights = Int(has_weights64)
-    var friedel_double = Int(friedel_double64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        1,  # bv_shift_2d (unused)
-        oversampling,
-        radius_cutoff_sq,
-        0,  # has_shifts_2d (unused)
-        interp,
-        has_weights,
-        friedel_double,
-        0,  # skip_redundant (a line has no redundant half to skip)
-        0.0,  # ewald_curvature (unused for a 1D line)
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
     _scatter_line_pixel[interp](
-        inp, weights, direction, shifts_3d, vol, wvol, vp // bp, vp % bp, x, p
+        inp,
+        weights,
+        direction,
+        shifts_3d,
+        vol,
+        wvol,
+        vp // p.bp,
+        vp % p.bp,
+        x,
+        p,
     )
 
 
@@ -315,48 +183,17 @@ def _project_line2d_gpu_kernel[
     direction: Float32Ptr,
     shifts_2d: Float32Ptr,
     line: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    bv_shift_2d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        0,  # has_weights
-        0,  # friedel_double
-        0,  # skip_redundant
-        0.0,  # ewald_curvature
-        0,  # has_shifts_3d
-        1,  # bv_shift_3d
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
     _project_line2d_pixel[interp](
-        img, direction, shifts_2d, line, vp // bp, vp % bp, x, p
+        img, direction, shifts_2d, line, vp // p.bp, vp % p.bp, x, p
     )
 
 
@@ -369,86 +206,26 @@ def _scatter_line2d_gpu_kernel[
     shifts_2d: Float32Ptr,
     vol: Float32Ptr,
     wvol: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_weights64: Int64,
-    friedel_double64: Int64,
-    has_shifts_2d64: Int64,
-    bv_shift_2d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_weights = Int(has_weights64)
-    var friedel_double = Int(friedel_double64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        has_weights,
-        friedel_double,
-        0,
-        0.0,
-        0,
-        1,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
     _scatter_line2d_pixel[interp](
-        inp, weights, direction, shifts_2d, vol, wvol, vp // bp, vp % bp, x, p
-    )
-
-
-def _line2d_grad_params[
-    interp: Int
-](
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    friedel_double: Int,
-    has_shifts_2d: Int,
-    bv_shift_2d: Int,
-) -> FourierSliceParams:
-    """Rebuild a 2D line grad kernel's `FourierSliceParams` (unused fields zeroed).
-    """
-    return FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        0,
-        friedel_double,
-        0,
-        0.0,
-        0,
-        1,
+        inp,
+        weights,
+        direction,
+        shifts_2d,
+        vol,
+        wvol,
+        vp // p.bp,
+        vp % p.bp,
+        x,
+        p,
     )
 
 
@@ -461,37 +238,12 @@ def _forward_line2d_pose_grad_kernel[
     grad_line: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    bv_shift_2d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = _line2d_grad_params[interp](
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        oversampling,
-        radius_cutoff_sq,
-        0,
-        has_shifts_2d,
-        bv_shift_2d,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
@@ -502,8 +254,8 @@ def _forward_line2d_pose_grad_kernel[
         grad_line,
         grad_dir,
         grad_shift,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         x,
         p,
     )
@@ -518,37 +270,12 @@ def _backproject_line2d_pose_grad_kernel[
     lines: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    bv_shift_2d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = _line2d_grad_params[interp](
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        oversampling,
-        radius_cutoff_sq,
-        0,
-        has_shifts_2d,
-        bv_shift_2d,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
@@ -559,8 +286,8 @@ def _backproject_line2d_pose_grad_kernel[
         lines,
         grad_dir,
         grad_shift,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         x,
         p,
     )
@@ -572,75 +299,17 @@ def _weight_line2d_grad_kernel[
     gwimg: Float32Ptr,
     direction: Float32Ptr,
     grad_weight: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    friedel_double64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var friedel_double = Int(friedel_double64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = _line2d_grad_params[interp](
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        oversampling,
-        radius_cutoff_sq,
-        friedel_double,
-        0,  # has_shifts_2d (weight grad has no shift)
-        1,  # bv_shift_2d
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
     _weight_line2d_grad_pixel[interp](
-        gwimg, direction, grad_weight, vp // bp, vp % bp, x, p
-    )
-
-
-def _line_grad_params[
-    interp: Int
-](
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_weights: Int,
-    friedel_double: Int,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
-) -> FourierSliceParams:
-    """Rebuild a line kernel's `FourierSliceParams` (unused slice fields zeroed).
-    """
-    return FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        1,  # bv_shift_2d (unused)
-        oversampling,
-        radius_cutoff_sq,
-        0,  # has_shifts_2d (unused)
-        interp,
-        has_weights,
-        friedel_double,
-        0,  # skip_redundant (a line has no redundant half)
-        0.0,  # ewald_curvature (unused for a 1D line)
-        has_shifts_3d,
-        bv_shift_3d,
+        gwimg, direction, grad_weight, vp // p.bp, vp % p.bp, x, p
     )
 
 
@@ -653,38 +322,12 @@ def _forward_line_pose_grad_kernel[
     grad_line: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = _line_grad_params[interp](
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        oversampling,
-        radius_cutoff_sq,
-        0,
-        0,
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
@@ -695,8 +338,8 @@ def _forward_line_pose_grad_kernel[
         grad_line,
         grad_dir,
         grad_shift_3d,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         x,
         p,
     )
@@ -711,38 +354,12 @@ def _backproject_line_pose_grad_kernel[
     lines: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = _line_grad_params[interp](
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        oversampling,
-        radius_cutoff_sq,
-        0,
-        0,
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
@@ -753,8 +370,8 @@ def _backproject_line_pose_grad_kernel[
         lines,
         grad_dir,
         grad_shift_3d,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         x,
         p,
     )
@@ -766,41 +383,17 @@ def _weight_line_grad_kernel[
     gwvol: Float32Ptr,
     direction: Float32Ptr,
     grad_weight: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    friedel_double64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var friedel_double = Int(friedel_double64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = _line_grad_params[interp](
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        oversampling,
-        radius_cutoff_sq,
-        0,
-        friedel_double,
-        0,
-        1,
-    )
+    var p = dp.to_params(interp)
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
     _weight_line_grad_pixel[interp](
-        gwvol, direction, grad_weight, vp // bp, vp % bp, x, p
+        gwvol, direction, grad_weight, vp // p.bp, vp % p.bp, x, p
     )
 
 
@@ -815,53 +408,17 @@ def _forward_pose_grad_kernel[
     grad_rot: Float32Ptr,
     grad_shift: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    bv_shift_2d64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    ewald_curvature: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var bv_shift_2d = Int(bv_shift_2d64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        0,
-        0,
-        0,
-        ewald_curvature,
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var psh = p.proj_sidelength_half()
     var x = idx % psh
     var t = idx // psh
-    var y = t % proj_sidelength
-    var vp = t // proj_sidelength
+    var y = t % p.proj_sidelength
+    var vp = t // p.proj_sidelength
     _forward_pose_grad_pixel[interp](
         rec,
         rot,
@@ -871,8 +428,8 @@ def _forward_pose_grad_kernel[
         grad_rot,
         grad_shift,
         grad_shift_3d,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         y,
         x,
         p,
@@ -890,53 +447,17 @@ def _backproject_pose_grad_kernel[
     grad_rot: Float32Ptr,
     grad_shift: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    bv_shift_2d64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    has_shifts_2d64: Int64,
-    ewald_curvature: Float32,
-    has_shifts_3d64: Int64,
-    bv_shift_3d64: Int64,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var bv_shift_2d = Int(bv_shift_2d64)
-    var has_shifts_2d = Int(has_shifts_2d64)
-    var has_shifts_3d = Int(has_shifts_3d64)
-    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        has_shifts_2d,
-        interp,
-        0,
-        0,
-        0,
-        ewald_curvature,
-        has_shifts_3d,
-        bv_shift_3d,
-    )
+    var p = dp.to_params(interp)
     var psh = p.proj_sidelength_half()
     var x = idx % psh
     var t = idx // psh
-    var y = t % proj_sidelength
-    var vp = t // proj_sidelength
+    var y = t % p.proj_sidelength
+    var vp = t // p.proj_sidelength
     _backproject_pose_grad_pixel[interp](
         grad_rec,
         rot,
@@ -946,8 +467,8 @@ def _backproject_pose_grad_kernel[
         grad_rot,
         grad_shift,
         grad_shift_3d,
-        vp // bp,
-        vp % bp,
+        vp // p.bp,
+        vp % p.bp,
         y,
         x,
         p,
@@ -960,56 +481,24 @@ def _weight_grad_kernel[
     gwvol: Float32Ptr,
     rot: Float32Ptr,
     grad_weight: Float32Ptr,
-    total64: Int64,
-    bp64: Int64,
-    sidelength64: Int64,
-    proj_sidelength64: Int64,
-    bv_rot64: Int64,
-    bv_shift_2d64: Int64,
-    oversampling: Float32,
-    radius_cutoff_sq: Float32,
-    friedel_double64: Int64,
-    ewald_curvature: Float32,
+    dp: DeviceParams,
 ):
-    var total = Int(total64)
-    var bp = Int(bp64)
-    var sidelength = Int(sidelength64)
-    var proj_sidelength = Int(proj_sidelength64)
-    var bv_rot = Int(bv_rot64)
-    var bv_shift_2d = Int(bv_shift_2d64)
-    var friedel_double = Int(friedel_double64)
     var idx = global_idx.x
-    if idx >= total:
+    if idx >= Int(dp.total):
         return
-    var p = FourierSliceParams(
-        bp,
-        sidelength,
-        proj_sidelength,
-        bv_rot,
-        bv_shift_2d,
-        oversampling,
-        radius_cutoff_sq,
-        0,
-        interp,
-        0,
-        friedel_double,
-        0,
-        ewald_curvature,
-        0,
-        0,
-    )
+    var p = dp.to_params(interp)
     var psh = p.proj_sidelength_half()
     var x = idx % psh
     var t = idx // psh
-    var y = t % proj_sidelength
-    var vp = t // proj_sidelength
+    var y = t % p.proj_sidelength
+    var vp = t // p.proj_sidelength
     _weight_grad_pixel[interp](
-        gwvol, rot, grad_weight, vp // bp, vp % bp, y, x, p
+        gwvol, rot, grad_weight, vp // p.bp, vp % p.bp, y, x, p
     )
 
 
 # ---------------------------------------------------------------------------
-# Launchers (unpack `p` to device scalars)
+# Launchers (pack `p` + `total` into one `DeviceParams` kernel argument)
 #
 # `stream_addr` selects the GPU stream the kernel is enqueued on:
 #   != 0 : a foreign (torch) stream address (CUDA CUstream). Enqueuing on it
@@ -1032,6 +521,7 @@ def _launch_project[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         # CUDA: enqueue on torch's stream (Metal has no external-stream API).
         var stream = ctx.create_external_stream(
@@ -1045,18 +535,7 @@ def _launch_project[
             buffers.shifts_2d,
             buffers.shifts_3d,
             buffers.proj,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            Int64(p.bv_shift_2d),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            p.ewald_curvature,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1067,18 +546,7 @@ def _launch_project[
         buffers.shifts_2d,
         buffers.shifts_3d,
         buffers.proj,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        Int64(p.bv_shift_2d),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        p.ewald_curvature,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1094,6 +562,7 @@ def _launch_scatter[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1108,21 +577,7 @@ def _launch_scatter[
             buffers.shifts_3d,
             buffers.vol,
             buffers.wvol,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            Int64(p.bv_shift_2d),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            Int64(p.has_weights),
-            Int64(p.friedel_double),
-            Int64(p.skip_redundant),
-            p.ewald_curvature,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1135,21 +590,7 @@ def _launch_scatter[
         buffers.shifts_3d,
         buffers.vol,
         buffers.wvol,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        Int64(p.bv_shift_2d),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        Int64(p.has_weights),
-        Int64(p.friedel_double),
-        Int64(p.skip_redundant),
-        p.ewald_curvature,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1165,6 +606,7 @@ def _launch_project_line[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1176,15 +618,7 @@ def _launch_project_line[
             buffers.direction,
             buffers.shifts_3d,
             buffers.line,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1194,15 +628,7 @@ def _launch_project_line[
         buffers.direction,
         buffers.shifts_3d,
         buffers.line,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1218,6 +644,7 @@ def _launch_scatter_line[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1231,17 +658,7 @@ def _launch_scatter_line[
             buffers.shifts_3d,
             buffers.vol,
             buffers.wvol,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_weights),
-            Int64(p.friedel_double),
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1253,17 +670,7 @@ def _launch_scatter_line[
         buffers.shifts_3d,
         buffers.vol,
         buffers.wvol,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_weights),
-        Int64(p.friedel_double),
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1279,6 +686,7 @@ def _launch_project_line2d[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1292,15 +700,7 @@ def _launch_project_line2d[
             buffers.direction,
             buffers.shifts_2d,
             buffers.line,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            Int64(p.bv_shift_2d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1310,15 +710,7 @@ def _launch_project_line2d[
         buffers.direction,
         buffers.shifts_2d,
         buffers.line,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        Int64(p.bv_shift_2d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1334,6 +726,7 @@ def _launch_scatter_line2d[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1349,17 +742,7 @@ def _launch_scatter_line2d[
             buffers.shifts_2d,
             buffers.vol,
             buffers.wvol,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_weights),
-            Int64(p.friedel_double),
-            Int64(p.has_shifts_2d),
-            Int64(p.bv_shift_2d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1371,17 +754,7 @@ def _launch_scatter_line2d[
         buffers.shifts_2d,
         buffers.vol,
         buffers.wvol,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_weights),
-        Int64(p.friedel_double),
-        Int64(p.has_shifts_2d),
-        Int64(p.bv_shift_2d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1397,6 +770,7 @@ def _launch_forward_line2d_pose_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1412,15 +786,7 @@ def _launch_forward_line2d_pose_grad[
             buffers.grad_line,
             buffers.grad_dir,
             buffers.grad_shift,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            Int64(p.bv_shift_2d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1432,15 +798,7 @@ def _launch_forward_line2d_pose_grad[
         buffers.grad_line,
         buffers.grad_dir,
         buffers.grad_shift,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        Int64(p.bv_shift_2d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1456,6 +814,7 @@ def _launch_backproject_line2d_pose_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1471,15 +830,7 @@ def _launch_backproject_line2d_pose_grad[
             buffers.lines,
             buffers.grad_dir,
             buffers.grad_shift,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            Int64(p.bv_shift_2d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1491,15 +842,7 @@ def _launch_backproject_line2d_pose_grad[
         buffers.lines,
         buffers.grad_dir,
         buffers.grad_shift,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        Int64(p.bv_shift_2d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1515,6 +858,7 @@ def _launch_weight_line2d_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1527,14 +871,7 @@ def _launch_weight_line2d_grad[
             buffers.gwimg,
             buffers.direction,
             buffers.grad_weight,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.friedel_double),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1543,14 +880,7 @@ def _launch_weight_line2d_grad[
         buffers.gwimg,
         buffers.direction,
         buffers.grad_weight,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.friedel_double),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1566,6 +896,7 @@ def _launch_forward_line_pose_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1581,15 +912,7 @@ def _launch_forward_line_pose_grad[
             buffers.grad_line,
             buffers.grad_dir,
             buffers.grad_shift_3d,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1601,15 +924,7 @@ def _launch_forward_line_pose_grad[
         buffers.grad_line,
         buffers.grad_dir,
         buffers.grad_shift_3d,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1625,6 +940,7 @@ def _launch_backproject_line_pose_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1640,15 +956,7 @@ def _launch_backproject_line_pose_grad[
             buffers.lines,
             buffers.grad_dir,
             buffers.grad_shift_3d,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1660,15 +968,7 @@ def _launch_backproject_line_pose_grad[
         buffers.lines,
         buffers.grad_dir,
         buffers.grad_shift_3d,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1684,6 +984,7 @@ def _launch_weight_line_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1694,14 +995,7 @@ def _launch_weight_line_grad[
             buffers.gwvol,
             buffers.direction,
             buffers.grad_weight,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.friedel_double),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1710,14 +1004,7 @@ def _launch_weight_line_grad[
         buffers.gwvol,
         buffers.direction,
         buffers.grad_weight,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.friedel_double),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1733,6 +1020,7 @@ def _launch_forward_pose_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1748,18 +1036,7 @@ def _launch_forward_pose_grad[
             buffers.grad_rot,
             buffers.grad_shift,
             buffers.grad_shift_3d,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            Int64(p.bv_shift_2d),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            p.ewald_curvature,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1773,18 +1050,7 @@ def _launch_forward_pose_grad[
         buffers.grad_rot,
         buffers.grad_shift,
         buffers.grad_shift_3d,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        Int64(p.bv_shift_2d),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        p.ewald_curvature,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1800,6 +1066,7 @@ def _launch_backproject_pose_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1817,18 +1084,7 @@ def _launch_backproject_pose_grad[
             buffers.grad_rot,
             buffers.grad_shift,
             buffers.grad_shift_3d,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            Int64(p.bv_shift_2d),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.has_shifts_2d),
-            p.ewald_curvature,
-            Int64(p.has_shifts_3d),
-            Int64(p.bv_shift_3d),
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1842,18 +1098,7 @@ def _launch_backproject_pose_grad[
         buffers.grad_rot,
         buffers.grad_shift,
         buffers.grad_shift_3d,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        Int64(p.bv_shift_2d),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.has_shifts_2d),
-        p.ewald_curvature,
-        Int64(p.has_shifts_3d),
-        Int64(p.bv_shift_3d),
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1869,6 +1114,7 @@ def _launch_weight_grad[
     p: FourierSliceParams,
     stream_addr: Int,
 ) raises:
+    var dp = p.to_device(total)
     if stream_addr != 0:
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
@@ -1879,16 +1125,7 @@ def _launch_weight_grad[
             buffers.gwvol,
             buffers.rot,
             buffers.grad_weight,
-            Int64(total),
-            Int64(p.bp),
-            Int64(p.sidelength),
-            Int64(p.proj_sidelength),
-            Int64(p.bv_rot),
-            Int64(p.bv_shift_2d),
-            p.oversampling,
-            p.radius_cutoff_sq,
-            Int64(p.friedel_double),
-            p.ewald_curvature,
+            dp,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1897,16 +1134,7 @@ def _launch_weight_grad[
         buffers.gwvol,
         buffers.rot,
         buffers.grad_weight,
-        Int64(total),
-        Int64(p.bp),
-        Int64(p.sidelength),
-        Int64(p.proj_sidelength),
-        Int64(p.bv_rot),
-        Int64(p.bv_shift_2d),
-        p.oversampling,
-        p.radius_cutoff_sq,
-        Int64(p.friedel_double),
-        p.ewald_curvature,
+        dp,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
