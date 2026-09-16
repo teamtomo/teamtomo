@@ -58,6 +58,7 @@ repository = "https://github.com/teamtomo/teamtomo"
 
 [project.optional-dependencies]
 mojo = [
+    "max>=26.5.0",
     "mojo==1.0.0",
 ]
 

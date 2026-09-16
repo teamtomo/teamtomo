@@ -55,7 +55,7 @@ def kernels():
     if _LOAD_ERROR is not None:
         raise ImportError(
             "experimental Mojo kernels failed to load. Install the optional "
-            "'mojo' package: pip install 'mojo==1.0.0b2' --prerelease allow"
+            "'mojo' extra: pip install 'torch-fourier-slice[mojo]'"
         ) from _LOAD_ERROR
     return _MODULE
 

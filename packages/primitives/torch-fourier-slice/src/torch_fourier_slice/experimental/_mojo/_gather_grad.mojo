@@ -160,7 +160,7 @@ def _interp3d_with_grad[
 
 @always_inline
 def _pack2d(val: C2, gy: C2, gx: C2) -> C6:
-    return C6(val[0], val[1], gy[0], gy[1], gx[0], gx[1])
+    return C6(val[0], val[1], gy[0], gy[1], gx[0], gx[1], 0.0, 0.0)
 
 
 @always_inline

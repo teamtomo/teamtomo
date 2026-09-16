@@ -1,8 +1,9 @@
 """Experimental Mojo-backed kernels for torch-fourier-slice.
 
 The same Fourier-slice operators as ``torch_fourier_slice``, with the compute
-kernels written in Mojo (1.0.0b2) and exposed to Python via Mojo's Python
-interop. APIs here are experimental and may change without notice.
+kernels written in Mojo (1.0.0, using the ``max`` package for GPU support) and
+exposed to Python via Mojo's Python interop. APIs here are experimental and
+may change without notice.
 
 Importing this package eagerly compiles + loads every Mojo kernel module (via
 ``mojo.importer``); use :func:`mojo_kernels_available` to check whether that

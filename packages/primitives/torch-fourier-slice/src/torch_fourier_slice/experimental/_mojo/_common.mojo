@@ -12,16 +12,20 @@ from layout import Coord, TensorLayout, TileTensor
 
 comptime C2 = SIMD[DType.float32, 2]  # a complex value as (re, im)
 comptime C6 = SIMD[
-    DType.float32, 6
-]  # value + 2 spatial gradients, each (re, im) -- 2D interp-with-grad
+    DType.float32, 8
+]  # value + 2 spatial gradients, each (re, im) -- 2D interp-with-grad;
+# padded to 8 lanes (SIMD widths must be a power of two), lanes 6-7 unused
 comptime C8 = SIMD[
     DType.float32, 8
 ]  # value + 3 spatial gradients, each (re, im)
 # Raw pointer into a contiguous float32 buffer (a torch tensor viewed as real float32,
 # on CPU or GPU). Grouped into `Buffers` where several travel together; used bare only
-# where a single buffer is passed. Origin erased (MutAnyOrigin) as it aliases foreign
-# torch memory the kernels read/write in place.
-comptime Float32Ptr = UnsafePointer[Scalar[DType.float32], MutAnyOrigin]
+# where a single buffer is passed. Origin erased (UntrackedOrigin) as it aliases foreign
+# torch memory the kernels read/write in place -- lifetime is managed explicitly by the
+# Python caller, not tracked by Mojo (and a struct field may not expose AnyOrigin).
+comptime Float32Ptr = UnsafePointer[
+    Scalar[DType.float32], UntrackedOrigin[mut=True]
+]
 comptime BLOCK = 256
 comptime PI: Float32 = 3.14159265358979323846
 

@@ -44,12 +44,13 @@ Tensor layouts (C-contiguous, rfft with DC at the origin):
     shifts_3d   float32 [bv_shift_3d, bp, 3]
 """
 
-from std.algorithm import parallelize
 from std.os import abort
-from std.gpu.host import DeviceContext
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.sys import num_physical_cores
+
+from max.algorithm import parallelize
+from max.gpu.host import DeviceContext
 
 from _common import (
     CUBIC,

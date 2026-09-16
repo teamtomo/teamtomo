@@ -10,8 +10,9 @@ there is no host<->device staging here.
 
 from std.math import ceildiv
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
 from std.memory import OpaquePointer
+
+from max.gpu.host import DeviceContext
 
 from _common import (
     BLOCK,
@@ -66,19 +67,28 @@ def _project_gpu_kernel[
     shifts_2d: Float32Ptr,
     shifts_3d: Float32Ptr,
     proj: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    bv_shift_2d: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
+    bv_shift_2d64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
+    has_shifts_2d64: Int64,
     ewald_curvature: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var bv_shift_2d = Int(bv_shift_2d64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -119,22 +129,34 @@ def _scatter_gpu_kernel[
     shifts_3d: Float32Ptr,
     vol: Float32Ptr,
     wvol: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    bv_shift_2d: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
+    bv_shift_2d64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
-    has_weights: Int,
-    friedel_double: Int,
-    skip_redundant: Int,
+    has_shifts_2d64: Int64,
+    has_weights64: Int64,
+    friedel_double64: Int64,
+    skip_redundant64: Int64,
     ewald_curvature: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var bv_shift_2d = Int(bv_shift_2d64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var has_weights = Int(has_weights64)
+    var friedel_double = Int(friedel_double64)
+    var skip_redundant = Int(skip_redundant64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -183,16 +205,23 @@ def _project_line_gpu_kernel[
     direction: Float32Ptr,
     shifts_3d: Float32Ptr,
     line: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -230,18 +259,27 @@ def _scatter_line_gpu_kernel[
     shifts_3d: Float32Ptr,
     vol: Float32Ptr,
     wvol: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_weights: Int,
-    friedel_double: Int,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_weights64: Int64,
+    friedel_double64: Int64,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_weights = Int(has_weights64)
+    var friedel_double = Int(friedel_double64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -277,16 +315,23 @@ def _project_line2d_gpu_kernel[
     direction: Float32Ptr,
     shifts_2d: Float32Ptr,
     line: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
-    bv_shift_2d: Int,
+    has_shifts_2d64: Int64,
+    bv_shift_2d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -324,18 +369,27 @@ def _scatter_line2d_gpu_kernel[
     shifts_2d: Float32Ptr,
     vol: Float32Ptr,
     wvol: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_weights: Int,
-    friedel_double: Int,
-    has_shifts_2d: Int,
-    bv_shift_2d: Int,
+    has_weights64: Int64,
+    friedel_double64: Int64,
+    has_shifts_2d64: Int64,
+    bv_shift_2d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_weights = Int(has_weights64)
+    var friedel_double = Int(friedel_double64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -407,16 +461,23 @@ def _forward_line2d_pose_grad_kernel[
     grad_line: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
-    bv_shift_2d: Int,
+    has_shifts_2d64: Int64,
+    bv_shift_2d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -457,16 +518,23 @@ def _backproject_line2d_pose_grad_kernel[
     lines: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
-    bv_shift_2d: Int,
+    has_shifts_2d64: Int64,
+    bv_shift_2d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var bv_shift_2d = Int(bv_shift_2d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -504,15 +572,21 @@ def _weight_line2d_grad_kernel[
     gwimg: Float32Ptr,
     direction: Float32Ptr,
     grad_weight: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    friedel_double: Int,
+    friedel_double64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var friedel_double = Int(friedel_double64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -579,16 +653,23 @@ def _forward_line_pose_grad_kernel[
     grad_line: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -630,16 +711,23 @@ def _backproject_line_pose_grad_kernel[
     lines: Float32Ptr,
     grad_dir: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -678,15 +766,21 @@ def _weight_line_grad_kernel[
     gwvol: Float32Ptr,
     direction: Float32Ptr,
     grad_weight: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    friedel_double: Int,
+    friedel_double64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var friedel_double = Int(friedel_double64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -721,19 +815,28 @@ def _forward_pose_grad_kernel[
     grad_rot: Float32Ptr,
     grad_shift: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    bv_shift_2d: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
+    bv_shift_2d64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
+    has_shifts_2d64: Int64,
     ewald_curvature: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var bv_shift_2d = Int(bv_shift_2d64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -787,19 +890,28 @@ def _backproject_pose_grad_kernel[
     grad_rot: Float32Ptr,
     grad_shift: Float32Ptr,
     grad_shift_3d: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    bv_shift_2d: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
+    bv_shift_2d64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    has_shifts_2d: Int,
+    has_shifts_2d64: Int64,
     ewald_curvature: Float32,
-    has_shifts_3d: Int,
-    bv_shift_3d: Int,
+    has_shifts_3d64: Int64,
+    bv_shift_3d64: Int64,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var bv_shift_2d = Int(bv_shift_2d64)
+    var has_shifts_2d = Int(has_shifts_2d64)
+    var has_shifts_3d = Int(has_shifts_3d64)
+    var bv_shift_3d = Int(bv_shift_3d64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -848,17 +960,24 @@ def _weight_grad_kernel[
     gwvol: Float32Ptr,
     rot: Float32Ptr,
     grad_weight: Float32Ptr,
-    total: Int,
-    bp: Int,
-    sidelength: Int,
-    proj_sidelength: Int,
-    bv_rot: Int,
-    bv_shift_2d: Int,
+    total64: Int64,
+    bp64: Int64,
+    sidelength64: Int64,
+    proj_sidelength64: Int64,
+    bv_rot64: Int64,
+    bv_shift_2d64: Int64,
     oversampling: Float32,
     radius_cutoff_sq: Float32,
-    friedel_double: Int,
+    friedel_double64: Int64,
     ewald_curvature: Float32,
 ):
+    var total = Int(total64)
+    var bp = Int(bp64)
+    var sidelength = Int(sidelength64)
+    var proj_sidelength = Int(proj_sidelength64)
+    var bv_rot = Int(bv_rot64)
+    var bv_shift_2d = Int(bv_shift_2d64)
+    var friedel_double = Int(friedel_double64)
     var idx = global_idx.x
     if idx >= total:
         return
@@ -926,18 +1045,18 @@ def _launch_project[
             buffers.shifts_2d,
             buffers.shifts_3d,
             buffers.proj,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
-            p.bv_shift_2d,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
+            Int64(p.bv_shift_2d),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
+            Int64(p.has_shifts_2d),
             p.ewald_curvature,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -948,18 +1067,18 @@ def _launch_project[
         buffers.shifts_2d,
         buffers.shifts_3d,
         buffers.proj,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
-        p.bv_shift_2d,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
+        Int64(p.bv_shift_2d),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
+        Int64(p.has_shifts_2d),
         p.ewald_curvature,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -989,21 +1108,21 @@ def _launch_scatter[
             buffers.shifts_3d,
             buffers.vol,
             buffers.wvol,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
-            p.bv_shift_2d,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
+            Int64(p.bv_shift_2d),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
-            p.has_weights,
-            p.friedel_double,
-            p.skip_redundant,
+            Int64(p.has_shifts_2d),
+            Int64(p.has_weights),
+            Int64(p.friedel_double),
+            Int64(p.skip_redundant),
             p.ewald_curvature,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1016,21 +1135,21 @@ def _launch_scatter[
         buffers.shifts_3d,
         buffers.vol,
         buffers.wvol,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
-        p.bv_shift_2d,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
+        Int64(p.bv_shift_2d),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
-        p.has_weights,
-        p.friedel_double,
-        p.skip_redundant,
+        Int64(p.has_shifts_2d),
+        Int64(p.has_weights),
+        Int64(p.friedel_double),
+        Int64(p.skip_redundant),
         p.ewald_curvature,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1057,15 +1176,15 @@ def _launch_project_line[
             buffers.direction,
             buffers.shifts_3d,
             buffers.line,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1075,15 +1194,15 @@ def _launch_project_line[
         buffers.direction,
         buffers.shifts_3d,
         buffers.line,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1112,17 +1231,17 @@ def _launch_scatter_line[
             buffers.shifts_3d,
             buffers.vol,
             buffers.wvol,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_weights,
-            p.friedel_double,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_weights),
+            Int64(p.friedel_double),
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1134,17 +1253,17 @@ def _launch_scatter_line[
         buffers.shifts_3d,
         buffers.vol,
         buffers.wvol,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_weights,
-        p.friedel_double,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_weights),
+        Int64(p.friedel_double),
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1173,15 +1292,15 @@ def _launch_project_line2d[
             buffers.direction,
             buffers.shifts_2d,
             buffers.line,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
-            p.bv_shift_2d,
+            Int64(p.has_shifts_2d),
+            Int64(p.bv_shift_2d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1191,15 +1310,15 @@ def _launch_project_line2d[
         buffers.direction,
         buffers.shifts_2d,
         buffers.line,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
-        p.bv_shift_2d,
+        Int64(p.has_shifts_2d),
+        Int64(p.bv_shift_2d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1230,17 +1349,17 @@ def _launch_scatter_line2d[
             buffers.shifts_2d,
             buffers.vol,
             buffers.wvol,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_weights,
-            p.friedel_double,
-            p.has_shifts_2d,
-            p.bv_shift_2d,
+            Int64(p.has_weights),
+            Int64(p.friedel_double),
+            Int64(p.has_shifts_2d),
+            Int64(p.bv_shift_2d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1252,17 +1371,17 @@ def _launch_scatter_line2d[
         buffers.shifts_2d,
         buffers.vol,
         buffers.wvol,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_weights,
-        p.friedel_double,
-        p.has_shifts_2d,
-        p.bv_shift_2d,
+        Int64(p.has_weights),
+        Int64(p.friedel_double),
+        Int64(p.has_shifts_2d),
+        Int64(p.bv_shift_2d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1293,15 +1412,15 @@ def _launch_forward_line2d_pose_grad[
             buffers.grad_line,
             buffers.grad_dir,
             buffers.grad_shift,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
-            p.bv_shift_2d,
+            Int64(p.has_shifts_2d),
+            Int64(p.bv_shift_2d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1313,15 +1432,15 @@ def _launch_forward_line2d_pose_grad[
         buffers.grad_line,
         buffers.grad_dir,
         buffers.grad_shift,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
-        p.bv_shift_2d,
+        Int64(p.has_shifts_2d),
+        Int64(p.bv_shift_2d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1352,15 +1471,15 @@ def _launch_backproject_line2d_pose_grad[
             buffers.lines,
             buffers.grad_dir,
             buffers.grad_shift,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
-            p.bv_shift_2d,
+            Int64(p.has_shifts_2d),
+            Int64(p.bv_shift_2d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1372,15 +1491,15 @@ def _launch_backproject_line2d_pose_grad[
         buffers.lines,
         buffers.grad_dir,
         buffers.grad_shift,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
-        p.bv_shift_2d,
+        Int64(p.has_shifts_2d),
+        Int64(p.bv_shift_2d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1408,14 +1527,14 @@ def _launch_weight_line2d_grad[
             buffers.gwimg,
             buffers.direction,
             buffers.grad_weight,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.friedel_double,
+            Int64(p.friedel_double),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1424,14 +1543,14 @@ def _launch_weight_line2d_grad[
         buffers.gwimg,
         buffers.direction,
         buffers.grad_weight,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.friedel_double,
+        Int64(p.friedel_double),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1462,15 +1581,15 @@ def _launch_forward_line_pose_grad[
             buffers.grad_line,
             buffers.grad_dir,
             buffers.grad_shift_3d,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1482,15 +1601,15 @@ def _launch_forward_line_pose_grad[
         buffers.grad_line,
         buffers.grad_dir,
         buffers.grad_shift_3d,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1521,15 +1640,15 @@ def _launch_backproject_line_pose_grad[
             buffers.lines,
             buffers.grad_dir,
             buffers.grad_shift_3d,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1541,15 +1660,15 @@ def _launch_backproject_line_pose_grad[
         buffers.lines,
         buffers.grad_dir,
         buffers.grad_shift_3d,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1575,14 +1694,14 @@ def _launch_weight_line_grad[
             buffers.gwvol,
             buffers.direction,
             buffers.grad_weight,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.friedel_double,
+            Int64(p.friedel_double),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1591,14 +1710,14 @@ def _launch_weight_line_grad[
         buffers.gwvol,
         buffers.direction,
         buffers.grad_weight,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.friedel_double,
+        Int64(p.friedel_double),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1629,18 +1748,18 @@ def _launch_forward_pose_grad[
             buffers.grad_rot,
             buffers.grad_shift,
             buffers.grad_shift_3d,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
-            p.bv_shift_2d,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
+            Int64(p.bv_shift_2d),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
+            Int64(p.has_shifts_2d),
             p.ewald_curvature,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1654,18 +1773,18 @@ def _launch_forward_pose_grad[
         buffers.grad_rot,
         buffers.grad_shift,
         buffers.grad_shift_3d,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
-        p.bv_shift_2d,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
+        Int64(p.bv_shift_2d),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
+        Int64(p.has_shifts_2d),
         p.ewald_curvature,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1698,18 +1817,18 @@ def _launch_backproject_pose_grad[
             buffers.grad_rot,
             buffers.grad_shift,
             buffers.grad_shift_3d,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
-            p.bv_shift_2d,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
+            Int64(p.bv_shift_2d),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.has_shifts_2d,
+            Int64(p.has_shifts_2d),
             p.ewald_curvature,
-            p.has_shifts_3d,
-            p.bv_shift_3d,
+            Int64(p.has_shifts_3d),
+            Int64(p.bv_shift_3d),
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
         )
@@ -1723,18 +1842,18 @@ def _launch_backproject_pose_grad[
         buffers.grad_rot,
         buffers.grad_shift,
         buffers.grad_shift_3d,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
-        p.bv_shift_2d,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
+        Int64(p.bv_shift_2d),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.has_shifts_2d,
+        Int64(p.has_shifts_2d),
         p.ewald_curvature,
-        p.has_shifts_3d,
-        p.bv_shift_3d,
+        Int64(p.has_shifts_3d),
+        Int64(p.bv_shift_3d),
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,
     )
@@ -1760,15 +1879,15 @@ def _launch_weight_grad[
             buffers.gwvol,
             buffers.rot,
             buffers.grad_weight,
-            total,
-            p.bp,
-            p.sidelength,
-            p.proj_sidelength,
-            p.bv_rot,
-            p.bv_shift_2d,
+            Int64(total),
+            Int64(p.bp),
+            Int64(p.sidelength),
+            Int64(p.proj_sidelength),
+            Int64(p.bv_rot),
+            Int64(p.bv_shift_2d),
             p.oversampling,
             p.radius_cutoff_sq,
-            p.friedel_double,
+            Int64(p.friedel_double),
             p.ewald_curvature,
             grid_dim=ceildiv(total, BLOCK),
             block_dim=BLOCK,
@@ -1778,15 +1897,15 @@ def _launch_weight_grad[
         buffers.gwvol,
         buffers.rot,
         buffers.grad_weight,
-        total,
-        p.bp,
-        p.sidelength,
-        p.proj_sidelength,
-        p.bv_rot,
-        p.bv_shift_2d,
+        Int64(total),
+        Int64(p.bp),
+        Int64(p.sidelength),
+        Int64(p.proj_sidelength),
+        Int64(p.bv_rot),
+        Int64(p.bv_shift_2d),
         p.oversampling,
         p.radius_cutoff_sq,
-        p.friedel_double,
+        Int64(p.friedel_double),
         p.ewald_curvature,
         grid_dim=ceildiv(total, BLOCK),
         block_dim=BLOCK,

@@ -282,15 +282,17 @@ under `_mojo/__mojocache__/` (keyed by a source hash; gitignored). Concretely:
   keep in sync; host orchestration and device kernels are both Mojo.
 
 **Costs, honestly:** the first import pays a one-time compile (seconds; cached
-after); the `mojo` toolchain (`pip install "mojo==1.0.0b2" --prerelease allow`)
-must be present; Mojo is early/beta; and on some setups the NVIDIA PTX assembler
-path must be pointed at `ptxas`
+after); the `mojo` + `max` toolchain (`pip install torch-fourier-slice[mojo]`,
+or `pip install mojo max` directly) must be present -- GPU support (Mojo's
+`DeviceContext`, `parallelize`, etc.) moved out of `mojo` into the separate
+`max` package as of Mojo 1.0.0; Mojo is early/beta; and on some setups the
+NVIDIA PTX assembler path must be pointed at `ptxas`
 (`export MODULAR_NVPTX_COMPILER_PATH=$(command -v ptxas)`) before the CUDA build
 succeeds. For a research backend that wants to run on a laptop *and* a cloud
 A100 without a release-engineering department, the trade is very favorable.
 
 ```bash
-pip install "mojo==1.0.0b2" --prerelease allow    # or: uv add ...
+pip install "torch-fourier-slice[mojo]"    # or: uv add --optional mojo max mojo
 python -c "from torch_fourier_slice.experimental import mojo_kernels_available as a; print(a())"
 ```
 
