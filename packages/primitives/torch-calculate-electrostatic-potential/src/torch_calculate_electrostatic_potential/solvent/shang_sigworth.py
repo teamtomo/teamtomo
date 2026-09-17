@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import torch
 
+
 # Table 1, Shang & Sigworth, J Struct Biol 180 (2012).
 @dataclass(frozen=True)
 class _ShangSigworthParams:

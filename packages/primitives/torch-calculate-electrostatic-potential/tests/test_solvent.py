@@ -15,9 +15,9 @@ from torch_calculate_electrostatic_potential import (
     potential_from_structure_3d,
     shang_sigworth_density,
     shang_sigworth_solvent_potential,
+    solvated_potential_from_structure_3d,
     solvent_occupancy_from_structure_3d,
     solvent_potential_from_structure_3d,
-    solvated_potential_from_structure_3d,
     vdw_probe_occupancy,
     vdw_radii_for_atomic_numbers,
 )

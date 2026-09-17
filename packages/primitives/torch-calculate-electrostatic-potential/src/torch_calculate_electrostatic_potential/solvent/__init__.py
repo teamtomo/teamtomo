@@ -1,8 +1,8 @@
 """Continuum solvent geometry and potentials for cryo-EM ESP."""
 
 from .compose import (
-    solvent_potential_from_structure_3d,
     solvated_potential_from_structure_3d,
+    solvent_potential_from_structure_3d,
 )
 from .geometry import distance_to_surface, voxel_centers_zyx
 from .occupancy import solvent_occupancy_from_structure_3d, vdw_probe_occupancy
@@ -21,9 +21,9 @@ __all__ = [
     "distance_to_surface",
     "shang_sigworth_density",
     "shang_sigworth_solvent_potential",
+    "solvated_potential_from_structure_3d",
     "solvent_occupancy_from_structure_3d",
     "solvent_potential_from_structure_3d",
-    "solvated_potential_from_structure_3d",
     "vdw_probe_occupancy",
     "vdw_radii_for_atomic_numbers",
     "voxel_centers_zyx",
