@@ -51,15 +51,9 @@ def _density_from_params(
     rad_dist: torch.Tensor, params: _ShangSigworthParams
 ) -> torch.Tensor:
     """Eq. 1, Shang & Sigworth (2012)."""
-    erf_term = 0.5 + 0.5 * torch.erf(
-        (rad_dist - params.r1) / (_SQRT2 * params.sig1)
-    )
-    g2 = params.a2 * torch.exp(
-        -((rad_dist - params.r2) ** 2) / (2.0 * params.sig2**2)
-    )
-    g3 = params.a3 * torch.exp(
-        -((rad_dist - params.r3) ** 2) / (2.0 * params.sig3**2)
-    )
+    erf_term = 0.5 + 0.5 * torch.erf((rad_dist - params.r1) / (_SQRT2 * params.sig1))
+    g2 = params.a2 * torch.exp(-((rad_dist - params.r2) ** 2) / (2.0 * params.sig2**2))
+    g3 = params.a3 * torch.exp(-((rad_dist - params.r3) ** 2) / (2.0 * params.sig3**2))
     return erf_term + g2 + g3
 
 
@@ -92,5 +86,5 @@ def shang_sigworth_density(
     polar = _density_from_params(dist_map, _POLAR)
     nonpolar = _density_from_params(dist_map, _NONPOLAR)
     is_nonpolar = nearest_atomic_numbers == _NONPOLAR_ATOMIC_NUMBER
-    # Unvisited voxels (Z=0) use polar bulk profile (ρ→1 for large dist).
+    # Unvisited voxels (Z=0) use polar bulk profile (rho→1 for large dist).
     return torch.where(is_nonpolar, nonpolar, polar)

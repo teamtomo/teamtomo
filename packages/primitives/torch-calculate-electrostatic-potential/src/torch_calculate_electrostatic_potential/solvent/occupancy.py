@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import torch
-
 from .geometry import distance_to_surface
 
 if TYPE_CHECKING:
+    import torch
     from torch_structure_manipulation import AtomicStructure
 
-    from ..grid import GridConfig
+    from torch_calculate_electrostatic_potential.grid import GridConfig
 
 
 def vdw_probe_occupancy(

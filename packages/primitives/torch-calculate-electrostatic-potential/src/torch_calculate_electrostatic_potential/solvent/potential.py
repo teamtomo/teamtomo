@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import torch
+from typing import TYPE_CHECKING
 
 from .occupancy import vdw_probe_occupancy
 from .shang_sigworth import shang_sigworth_density
+
+if TYPE_CHECKING:
+    import torch
 
 DEFAULT_ICE_POTENTIAL_V = 3.6
 
@@ -39,7 +42,7 @@ def shang_sigworth_solvent_potential(
     ice_potential_V: float = DEFAULT_ICE_POTENTIAL_V,
     probe_radius: float = 1.4,
 ) -> torch.Tensor:
-    """Shang–Sigworth continuum solvent potential in volts.
+    """Shang-Sigworth continuum solvent potential in volts.
 
     Density is scaled by ``ice_potential_V`` and zeroed where
     ``dist_map < probe_radius`` (probe-excluded protein volume).

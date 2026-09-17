@@ -73,11 +73,11 @@ def test_occupancy_excludes_vdw_plus_probe_for_carbon():
     # A voxel just outside VdW+probe should be solvent.
     excluded_radius = vdw_c + probe_radius
     # Move ~ceil(excluded_radius)+1 voxels along x from center.
-    offset = int(math.ceil(excluded_radius)) + 1
+    offset = math.ceil(excluded_radius) + 1
     assert occupancy[center[0], center[1], center[2] + offset].item() == 1.0
 
     # A voxel inside the excluded ball (along axis, within floor(excluded_radius)-1).
-    inside = max(1, int(math.floor(excluded_radius)) - 1)
+    inside = max(1, math.floor(excluded_radius) - 1)
     assert occupancy[center[0], center[1], center[2] + inside].item() == 0.0
 
 

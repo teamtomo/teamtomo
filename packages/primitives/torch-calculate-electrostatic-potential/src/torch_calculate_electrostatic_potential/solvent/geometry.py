@@ -9,7 +9,7 @@ import torch
 from .vdw import VDW_RADII_A, vdw_radii_for_atomic_numbers
 
 if TYPE_CHECKING:
-    from ..grid import GridConfig
+    from torch_calculate_electrostatic_potential.grid import GridConfig
 
 # Sentinel for voxels never updated by an atom neighborhood.
 _DIST_INIT = 1.0e6
@@ -129,13 +129,11 @@ def distance_to_surface(
         grid_z, grid_y, grid_x = torch.meshgrid(zz, yy, xx, indexing="ij")
         curr_r = (
             torch.sqrt(
-                (grid_z - pos[0]) ** 2
-                + (grid_y - pos[1]) ** 2
-                + (grid_x - pos[2]) ** 2
+                (grid_z - pos[0]) ** 2 + (grid_y - pos[1]) ** 2 + (grid_x - pos[2]) ** 2
             )
             - radius
         )
-        # Only update within the asymptote shell used by Shang–Sigworth.
+        # Only update within the asymptote shell used by Shang-Sigworth.
         in_shell = curr_r < r_asymptote
         slice_dist = dist_map[z0:z1, y0:y1, x0:x1]
         closer = in_shell & (curr_r < slice_dist)

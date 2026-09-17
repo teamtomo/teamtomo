@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from ..structure import potential_from_structure_3d
+from torch_calculate_electrostatic_potential.structure import (
+    potential_from_structure_3d,
+)
+
 from .geometry import distance_to_surface
 from .occupancy import _require_unbatched_structure, vdw_probe_occupancy
 from .potential import (
@@ -17,8 +20,11 @@ if TYPE_CHECKING:
     from torch import Tensor
     from torch_structure_manipulation import AtomicStructure
 
-    from ..grid import GridConfig
-    from ..utils.peng_model import BondedFallback, ScatteringFactors
+    from torch_calculate_electrostatic_potential.grid import GridConfig
+    from torch_calculate_electrostatic_potential.utils.peng_model import (
+        BondedFallback,
+        ScatteringFactors,
+    )
 
 SolventModel = Literal["constant", "shang_sigworth"]
 
@@ -42,7 +48,7 @@ def solvent_potential_from_structure_3d(
     grid_config : GridConfig
         Three-dimensional grid (same as dry ESP).
     model : {"constant", "shang_sigworth"}
-        ``shang_sigworth`` (default) = Shang–Sigworth hydration density times
+        ``shang_sigworth`` (default) = Shang-Sigworth hydration density times
         bulk ice MIP.
         ``constant`` = VdW+probe occupancy times bulk ice MIP.
     probe_radius : float
