@@ -1,16 +1,18 @@
 """Load TiltSeries instances and their raw tilt images.
 
 Alignment metadata is loaded from external alignment formats (current
-support: etomo, via etomofiles, and aretomo, via alnfile); raw tilt image
-pixel data is loaded from the MRC stack a TiltSeries points to, via mrcfile.
+support: etomo, via etomofiles; aretomo, via alnfile; and Warp/M tilt-series
+XML, via xmlfile); raw tilt image pixel data is loaded from the MRC stack a
+TiltSeries points to, via mrcfile.
 """
 
+import warnings
 from pathlib import Path
 
 import numpy as np
 import torch
 
-from torch_tilt_series.tilt_series import TiltSeries, _writable
+from torch_tilt_series.tilt_series import LocalShiftFn, TiltSeries, _writable
 
 
 def from_aretomo_output(
@@ -112,6 +114,84 @@ def from_etomo_directory(
         x_tilts=x_tilts,
         image_path=tilt_stack_path,
         image_indices=df["idx_tilt"].to_numpy(),
+        pixel_spacing=pixel_spacing,
+        device=device,
+    )
+
+
+def from_warp_xml(
+    xml_path: Path | str,
+    pixel_spacing: float | None = None,
+    image_path: Path | str | None = None,
+    local_shifts_2d: LocalShiftFn | None = None,
+    device: torch.device | str = "cpu",
+) -> TiltSeries:
+    """Initialize TiltSeries from a Warp / M tilt-series XML file.
+
+    Reads the global alignment: `Angles`, `AxisAngle`, `AxisOffsetX/Y`
+    (Angstroms) and `UseTilt`. The alignment is in Angstroms and is used as
+    is; `pixel_spacing` only describes the images at `image_path`. It
+    defaults to the CTF `PixelSize` of the XML (the raw-frame pixel) - pass
+    it explicitly when `image_path` is a binned tilt stack. Warp's tomogram z axis
+    points the opposite way to this package's sample z axis, so
+    `levelled2tomo` is set to a z flip: points given in Warp tomogram
+    coordinates (Angstroms, relative to the tomogram centre) project to
+    Warp image coordinates (Angstroms, relative to the image centre).
+
+    Warp's per-tilt local deformation grids (`GridMovementX/Y`) are not
+    evaluated here. If the file carries a non-trivial grid a warning is
+    issued; pass `local_shifts_2d` to apply it (the callable receives the
+    projected positions and must return `-(GridMovementY, GridMovementX)`
+    sampled at those positions). The 4-D `GridVolumeWarp` of M has no
+    equivalent in `TiltSeries` and is ignored.
+    """
+    import xmlfile
+
+    xml_path = Path(xml_path)
+    root = xmlfile.read(xml_path).root
+
+    def child(tag: str) -> xmlfile.XmlElement:
+        element = root.find(tag)
+        if element is None:
+            raise ValueError(f"{xml_path} has no <{tag}> element")
+        return element
+
+    tilt_angles = np.asarray(xmlfile.text_to_list(child("Angles"), float))
+    tilt_axis_angle = np.asarray(xmlfile.text_to_list(child("AxisAngle"), float))
+    offset_x = np.asarray(xmlfile.text_to_list(child("AxisOffsetX"), float))
+    offset_y = np.asarray(xmlfile.text_to_list(child("AxisOffsetY"), float))
+    use_tilt = np.asarray(xmlfile.text_to_list(child("UseTilt"), bool))
+    if pixel_spacing is None:
+        pixel_spacing = float(xmlfile.params_to_dict(child("CTF"))["PixelSize"])
+
+    # Offsets are added after the in-plane rotation, in Angstroms, as (y, x).
+    sample_translations = np.stack([offset_y, offset_x], axis=-1)
+
+    # Drop tilts Warp excluded, as the etomo loader does for excluded views.
+    # Valid tilt indices into the raw (unfiltered) tilt stack, 0-indexed.
+    idx_valid = np.flatnonzero(use_tilt)
+
+    for tag in ("GridMovementX", "GridMovementY"):
+        grid = root.find(tag)
+        if grid is not None and np.any(xmlfile.grid_to_array(grid)):
+            if local_shifts_2d is None:
+                warnings.warn(
+                    f"{xml_path.name} has a non-zero {tag}; it is not applied. "
+                    "Pass local_shifts_2d to include Warp's local deformation.",
+                    stacklevel=2,
+                )
+            break
+
+    # Warp tomogram z -> sample z: z flip (zyxw).
+    z_flip = torch.diag(torch.tensor([-1.0, 1.0, 1.0, 1.0]))
+    return TiltSeries(
+        tilt_angles=tilt_angles[idx_valid],
+        tilt_axis_angle=tilt_axis_angle[idx_valid],
+        sample_translations=sample_translations[idx_valid],
+        levelled2tomo=z_flip,
+        local_shifts_2d=local_shifts_2d,
+        image_path=image_path,
+        image_indices=idx_valid,
         pixel_spacing=pixel_spacing,
         device=device,
     )
