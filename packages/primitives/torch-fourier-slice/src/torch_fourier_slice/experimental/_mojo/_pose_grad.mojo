@@ -1,18 +1,25 @@
 """Per-pixel backward ops for gradients w.r.t. rotations, shifts_2d and weights.
 
 These complement the volume/projection gradients (which are the plain
-scatter / forward-projection adjoints). For one output pixel they accumulate:
+scatter / forward-projection adjoints). For one output pixel they compute:
 
 - a 3x3 rotation-matrix gradient, via the chain rule through the rotated sample
   coordinate using the analytical spatial gradient of the interpolated field;
 - a 2-vector shift gradient, via the derivative of the phase ramp;
 - (backprojection only) a real weight gradient, the adjoint of the weight splat.
 
-Accumulators are per pose, so contributions are added atomically. `Re[a conj(b)]`
-for two complex `(re, im)` pairs is the lane dot product `a[0]b[0] + a[1]b[1]`.
+Accumulators are per pose. `_pose_grad_terms` is the pure (no side effects) core:
+it returns one pixel's contribution as a `SIMD[DType.float32, 16]`
+`[rot(9), shift_2d(2), shift_3d(3)]` (padded from 14 to the next power of two --
+SIMD widths must be one -- lanes 14-15 unused) rather than adding it in directly,
+so the caller (CPU driver or GPU kernel) decides how to accumulate -- every pixel
+of a pose targets the *same* ~14 scalars (unlike the volume/projection scatter,
+whose targets are spread across the volume), which is far more contended and is
+why the GPU kernel reduces across a warp before a single atomic add per warp; see
+`_device.mojo`. `Re[a conj(b)]` for complex `(re, im)` pairs is the lane dot
+product `a[0]b[0] + a[1]b[1]`.
 """
 
-from std.atomic import Atomic, Ordering
 from std.math import cos, floor, sin
 
 from layout import TileTensor, row_major
@@ -52,7 +59,8 @@ def _phase_factor(
     kx: Float32,
     p: FourierSliceParams,
 ) -> C2:
-    """Combined shift phase factor exp(i*phase) for this pixel (identity if none)."""
+    """Combined shift phase factor exp(i*phase) for this pixel (identity if none).
+    """
     if p.has_shifts_2d == 0 and p.has_shifts_3d == 0:
         return C2(1.0, 0.0)
     var phase = _shift_phase(
@@ -62,12 +70,7 @@ def _phase_factor(
 
 
 @always_inline
-def _accumulate_pose_grads(
-    grad_rot: Float32Ptr,
-    grad_shift: Float32Ptr,
-    grad_shift_3d: Float32Ptr,
-    i_bv: Int,
-    i_bp: Int,
+def _pose_grad_terms(
     coord_y: Float32,
     coord_x: Float32,
     sx: Float32,
@@ -83,8 +86,16 @@ def _accumulate_pose_grads(
     shift_cotangent: C2,
     modulated: C2,
     p: FourierSliceParams,
-):
-    """Atomically add this pixel's rotation (3x3) and shift (2D + 3D) contributions.
+) -> SIMD[DType.float32, 16]:
+    """This pixel's rotation (3x3) and shift (2D + 3D) gradient contribution.
+
+    Pure -- no side effects, no accumulator pointers -- so the caller (CPU
+    driver or GPU kernel) decides how to add it in. Layout: `[rot(9),
+    shift_2d(2), shift_3d(3)]`, `rot` row-major matching `grad_rot`'s storage
+    (index `i` <-> `grad_rot[rbase + i]`). Components gated by a uniform flag
+    (`p.ewald_curvature`, `p.has_shifts_2d`, `p.has_shifts_3d` -- the same for
+    every pixel in a launch) are left at their zero-initialized value rather
+    than computed.
 
     `rot_cotangent` is the cotangent paired with the interp spatial gradient
     (already augmented for the 3D-shift coupling by the caller);
@@ -93,53 +104,39 @@ def _accumulate_pose_grads(
     ramps with the image coords (coord_y, coord_x); the 3D shift ramps with the
     rotated sample coordinate (kz, ky, kx).
     """
-    # rows of R map to (kz, ky, kx) outputs; columns to (sz, sy, sx) inputs.
-    var rb = 0 if p.bv_rot == 1 else i_bv
-    var rbase = (rb * p.bp + i_bp) * 9
     var dx = _redot(rot_cotangent, gx)
     var dy = _redot(rot_cotangent, gy)
     var dz = _redot(rot_cotangent, gz)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 1, dz * sy)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 2, dz * sx)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 4, dy * sy)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 5, dy * sx)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 7, dx * sy)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 8, dx * sx)
+    var out = SIMD[DType.float32, 16](0)
+    out[1] = dz * sy
+    out[2] = dz * sx
+    out[4] = dy * sy
+    out[5] = dy * sx
+    out[7] = dx * sy
+    out[8] = dx * sx
     # z-input column: only non-zero when Ewald curvature bends the slice (sz != 0).
     if p.ewald_curvature != 0.0:
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 0, dz * sz)
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 3, dy * sz)
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](grad_rot + rbase + 6, dx * sz)
+        out[0] = dz * sz
+        out[3] = dy * sz
+        out[6] = dx * sz
 
     if p.has_shifts_2d != 0:
-        var sb = 0 if p.bv_shift_2d == 1 else i_bv
-        var sbase = (sb * p.bp + i_bp) * 2
         var scale = p.two_pi_over_proj_sidelength()
         var pgr = _cmul(C2(0.0, scale * coord_y), modulated)
         var pgc = _cmul(C2(0.0, scale * coord_x), modulated)
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift + sbase + 0, _redot(shift_cotangent, pgr)
-        )
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift + sbase + 1, _redot(shift_cotangent, pgc)
-        )
+        out[9] = _redot(shift_cotangent, pgr)
+        out[10] = _redot(shift_cotangent, pgc)
 
     if p.has_shifts_3d != 0:
-        var sb3 = 0 if p.bv_shift_3d == 1 else i_bv
-        var s3 = (sb3 * p.bp + i_bp) * 3
         var scale3 = p.two_pi_over_sidelength()
         var p3z = _cmul(C2(0.0, scale3 * kz), modulated)
         var p3y = _cmul(C2(0.0, scale3 * ky), modulated)
         var p3x = _cmul(C2(0.0, scale3 * kx), modulated)
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift_3d + s3 + 0, _redot(shift_cotangent, p3z)
-        )
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift_3d + s3 + 1, _redot(shift_cotangent, p3y)
-        )
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift_3d + s3 + 2, _redot(shift_cotangent, p3x)
-        )
+        out[11] = _redot(shift_cotangent, p3z)
+        out[12] = _redot(shift_cotangent, p3y)
+        out[13] = _redot(shift_cotangent, p3x)
+
+    return out
 
 
 @always_inline
@@ -179,20 +176,20 @@ def _forward_pose_grad_pixel[
     shifts_2d: Float32Ptr,
     shifts_3d: Float32Ptr,
     grad_proj: Float32Ptr,
-    grad_rot: Float32Ptr,
-    grad_shift: Float32Ptr,
-    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
     x: Int,
     p: FourierSliceParams,
-):
-    """Rotation/shift grads for the forward projection (volume = rec)."""
+) -> SIMD[DType.float32, 16]:
+    """Rotation/shift grad contribution for the forward projection (volume = rec).
+
+    Pure -- see `_pose_grad_terms`. Zero for a pixel outside the radius cutoff.
+    """
     var coord_y = _fourier_coord(y, p.proj_sidelength)
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
-        return
+        return SIMD[DType.float32, 16](0)
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
     var sz = _ewald_sz(p, sx, sy)
@@ -214,7 +211,8 @@ def _forward_pose_grad_pixel[
         _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var off = (
         (
-            ((i_bv * p.bp + i_bp) * p.proj_sidelength + y) * p.proj_sidelength_half()
+            ((i_bv * p.bp + i_bp) * p.proj_sidelength + y)
+            * p.proj_sidelength_half()
             + x
         )
     ) * 2
@@ -226,12 +224,7 @@ def _forward_pose_grad_pixel[
     # raw grad_proj against the forward value modulated by the phase.
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
-    _accumulate_pose_grads(
-        grad_rot,
-        grad_shift,
-        grad_shift_3d,
-        i_bv,
-        i_bp,
+    return _pose_grad_terms(
         coord_y,
         coord_x,
         sx,
@@ -259,23 +252,23 @@ def _backproject_pose_grad_pixel[
     shifts_2d: Float32Ptr,
     shifts_3d: Float32Ptr,
     proj: Float32Ptr,
-    grad_rot: Float32Ptr,
-    grad_shift: Float32Ptr,
-    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     y: Int,
     x: Int,
     p: FourierSliceParams,
-):
-    """Rotation/shift grads for the backprojection (volume = grad_data_rec)."""
+) -> SIMD[DType.float32, 16]:
+    """Rotation/shift grad contribution for the backprojection (volume = grad_data_rec).
+
+    Pure -- see `_pose_grad_terms`. Zero outside the radius cutoff or on the
+    redundant x=0 half the scatter skipped (so it carries no grad).
+    """
     var coord_y = _fourier_coord(y, p.proj_sidelength)
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
-        return
-    # the scatter skipped the redundant x=0 half, so these pixels carry no grad.
+        return SIMD[DType.float32, 16](0)
     if x == 0 and y >= p.proj_sidelength // 2:
-        return
+        return SIMD[DType.float32, 16](0)
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
     var sz = _ewald_sz(p, sx, sy)
@@ -296,7 +289,8 @@ def _backproject_pose_grad_pixel[
         _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var off = (
         (
-            ((i_bv * p.bp + i_bp) * p.proj_sidelength + y) * p.proj_sidelength_half()
+            ((i_bv * p.bp + i_bp) * p.proj_sidelength + y)
+            * p.proj_sidelength_half()
             + x
         )
     ) * 2
@@ -307,12 +301,7 @@ def _backproject_pose_grad_pixel[
     # backprojection applies the conjugate phase to the projection value; both the
     # rotation and shift terms pair that against the gathered grad_rec field.
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
-    _accumulate_pose_grads(
-        grad_rot,
-        grad_shift,
-        grad_shift_3d,
-        i_bv,
-        i_bp,
+    return _pose_grad_terms(
         coord_y,
         coord_x,
         sx,
@@ -368,7 +357,9 @@ def _gather_weight_grad(
     var z_eff = sidelength + z if z < 0 else z
     if y_eff >= sidelength or z_eff >= sidelength:
         return 0.0
-    var off = ((i_bv * sidelength + z_eff) * sidelength + y_eff) * sidelength_half + x
+    var off = (
+        (i_bv * sidelength + z_eff) * sidelength + y_eff
+    ) * sidelength_half + x
     var acc = gwvol[off]
     if friedel_double != 0 and x == 0:
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
@@ -385,8 +376,12 @@ def _gather_weight_grad(
 
 
 @always_inline
-def _g(gwvol: Float32Ptr, i_bv: Int, p: FourierSliceParams, z: Int, y: Int, x: Int) -> Float32:
-    return _gather_weight_grad(gwvol, i_bv, p.sidelength, z, y, x, p.friedel_double)
+def _g(
+    gwvol: Float32Ptr, i_bv: Int, p: FourierSliceParams, z: Int, y: Int, x: Int
+) -> Float32:
+    return _gather_weight_grad(
+        gwvol, i_bv, p.sidelength, z, y, x, p.friedel_double
+    )
 
 
 @always_inline
@@ -402,7 +397,8 @@ def _weight_grad_pixel[
     x: Int,
     p: FourierSliceParams,
 ):
-    """grad w.r.t. one input weight: gather grad_weight_rec with the splat weights."""
+    """grad w.r.t. one input weight: gather grad_weight_rec with the splat weights.
+    """
     var coord_y = _fourier_coord(y, p.proj_sidelength)
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
@@ -412,7 +408,9 @@ def _weight_grad_pixel[
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
     var rb = 0 if p.bv_rot == 1 else i_bv
-    var k = _rotated_coord(rot, (rb * p.bp + i_bp) * 9, sx, sy, _ewald_sz(p, sx, sy))
+    var k = _rotated_coord(
+        rot, (rb * p.bp + i_bp) * 9, sx, sy, _ewald_sz(p, sx, sy)
+    )
     var kz = k[0]
     var ky = k[1]
     var kx = k[2]
