@@ -5090,6 +5090,12 @@ dependencies = [
     { name = "torch" },
 ]
 
+[package.optional-dependencies]
+mojo = [
+    { name = "max" },
+    { name = "mojo" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "ipython" },
@@ -5109,9 +5115,12 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
+    { name = "max", marker = "extra == 'mojo'", specifier = ">=26.5.0" },
+    { name = "mojo", marker = "extra == 'mojo'", specifier = "==1.0.0" },
     { name = "numpy" },
     { name = "torch" },
 ]
+provides-extras = ["mojo"]
 
 [package.metadata.requires-dev]
 dev = [

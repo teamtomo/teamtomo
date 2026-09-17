@@ -1,19 +1,24 @@
 """Non-differentiable kernel calls: prepare buffers, pick CPU/GPU, launch.
 
-Every function here takes contiguous float32 tensors in the kernel layouts
-documented in ``_mojo/_common.mojo``::
+Every function here takes contiguous tensors that the kernels read as flat
+float32 memory, in the layouts documented in ``_mojo/_common.mojo``::
 
-    image   (c, *spatial, inner)    inner = 1 (real) or 2 (complex, view_as_real)
-    coords  (n, ndim)
-    samples (n, c, inner)
-    weights (*spatial,)
+    image   (c, *spatial) or (*spatial)   float32 or complex64
+    coords  (n, ndim)                     float32
+    samples n * c elements                image dtype (any shape)
+    weights (*spatial,)                   float32
 
-and returns tensors on the input device. Scalars cross the boundary once, as a
-:class:`KernelParams` read by field name on the Mojo side.
+A complex64 tensor is handed over as is: its memory is interleaved (re, im)
+float32 pairs, which is exactly the trailing ``inner = 2`` axis the kernels
+index -- no ``view_as_real`` views are materialised (each such view is a torch
+dispatcher call, and the host path of a small launch is dispatcher-bound).
+Scalars cross the boundary once, as a :class:`KernelParams` read by field name
+on the Mojo side.
 """
 
 from __future__ import annotations
 
+import functools
 from typing import NamedTuple
 
 import torch
@@ -63,34 +68,36 @@ def _params(
     has_grad_weights: bool = False,
     zero_grad_image: bool = False,
 ) -> KernelParams:
-    c, *spatial, inner = image.shape
-    dims = [*spatial, 1, 1, 1][:3]
+    """Launch parameters for an ``image`` shaped ``(c, *spatial)`` or ``(*spatial)``."""
+    shape = image.shape
+    c = shape[0] if len(shape) == ndim + 1 else 1
+    d0, d1, d2 = (*shape[len(shape) - ndim :], 1, 1)[:3]
     return KernelParams(
-        ndim=ndim,
-        interp=interp,
-        n=coords.shape[0],
-        c=c,
-        inner=inner,
-        d0=dims[0],
-        d1=dims[1],
-        d2=dims[2],
-        has_weights=int(has_weights),
-        need_grad_image=int(need_grad_image),
-        need_grad_coords=int(need_grad_coords),
-        need_grad_values=int(need_grad_values),
-        has_grad_weights=int(has_grad_weights),
-        zero_grad_image=int(zero_grad_image),
+        ndim,
+        interp,
+        coords.shape[0],
+        c,
+        2 if image.is_complex() else 1,
+        d0,
+        d1,
+        d2,
+        int(has_weights),
+        int(need_grad_image),
+        int(need_grad_coords),
+        int(need_grad_values),
+        int(has_grad_weights),
+        int(zero_grad_image),
     )
 
 
 def _launch(name: str, bufs: tuple[torch.Tensor, ...], params: KernelParams) -> None:
+    """Run kernel ``name`` on ``bufs``.
+
+    The callers guarantee that every buffer is contiguous, float32 or
+    complex64, and on ``bufs[0]``'s device (the kernels only ever see raw
+    addresses), so nothing is re-checked here.
+    """
     device = bufs[0].device
-    for b in bufs:
-        if not (b.is_contiguous() and b.dtype == torch.float32 and b.device == device):
-            raise RuntimeError(
-                "internal error: kernel buffers must be contiguous float32 tensors "
-                "on one device"
-            )
     if device.type == "cpu":
         getattr(cpu_kernels(), name)(bufs, params)
     else:
@@ -98,21 +105,14 @@ def _launch(name: str, bufs: tuple[torch.Tensor, ...], params: KernelParams) -> 
         getattr(gpu_kernels(), name + "_gpu")(device_session(), bufs, params, addrs)
 
 
+@functools.lru_cache(maxsize=None)
 def _dummy(device: torch.device) -> torch.Tensor:
-    """Placeholder buffer for outputs a launch does not produce."""
+    """Placeholder buffer for outputs a launch does not produce.
+
+    Cached per device: the kernels never touch it (its flag is off), and
+    allocating a fresh one would cost a zero-fill launch per backward call.
+    """
     return torch.zeros(1, dtype=torch.float32, device=device)
-
-
-def as_real(t: torch.Tensor) -> torch.Tensor:
-    """(...,) real -> (..., 1) view; complex -> (..., 2) via view_as_real."""
-    return torch.view_as_real(t) if t.is_complex() else t.unsqueeze(-1)
-
-
-def image_as_real(image: torch.Tensor, ndim: int) -> torch.Tensor:
-    """(*spatial) or (c, *spatial) image -> its (c, *spatial, inner) kernel view."""
-    if image.ndim == ndim:
-        image = image.unsqueeze(0)
-    return as_real(image)
 
 
 # ---------------------------------------------------------------------------
@@ -121,13 +121,20 @@ def image_as_real(image: torch.Tensor, ndim: int) -> torch.Tensor:
 
 
 def sample_forward(
-    image: torch.Tensor, coords: torch.Tensor, ndim: int, interp: int
+    image: torch.Tensor,
+    coords: torch.Tensor,
+    ndim: int,
+    interp: int,
+    out_shape: tuple[int, ...],
 ) -> torch.Tensor:
-    """Samples (n, c, inner) = image interpolated at coords."""
+    """Image interpolated at coords, as an ``out_shape`` tensor of the image dtype.
+
+    ``out_shape`` must hold ``n * c`` elements; the kernel fills it as a
+    contiguous ``(n, c)`` block, so pass the caller's final ``(..., c)`` /
+    ``(...)`` shape and no reshape is needed afterwards.
+    """
     params = _params(image, coords, ndim, interp)
-    out = torch.empty(
-        params.n, params.c, params.inner, dtype=torch.float32, device=image.device
-    )
+    out = torch.empty(out_shape, dtype=image.dtype, device=image.device)
     _launch("sample_forward", (image, coords, out), params)
     return out
 
@@ -186,7 +193,10 @@ def insert_forward(
     ndim: int,
     interp: int,
 ) -> None:
-    """Image += splat(values) and, if given, weights += splat(1) -- IN PLACE."""
+    """Image += splat(values) and, if given, weights += splat(1) -- IN PLACE.
+
+    ``values`` is ``(n, c)`` in the image dtype.
+    """
     params = _params(image, coords, ndim, interp, has_weights=weights is not None)
     w = weights if weights is not None else _dummy(image.device)
     _launch("insert_forward", (values, coords, image, w), params)
@@ -231,8 +241,8 @@ def insert_backward(
 def _no_channels(coords: torch.Tensor, spatial: tuple[int, ...]) -> tuple:
     """Zero-channel image / values placeholders: the kernels then only touch weights."""
     dev = coords.device
-    image = torch.empty((0, *spatial, 1), dtype=torch.float32, device=dev)
-    values = torch.empty((coords.shape[0], 0, 1), dtype=torch.float32, device=dev)
+    image = torch.empty((0, *spatial), dtype=torch.float32, device=dev)
+    values = torch.empty((coords.shape[0], 0), dtype=torch.float32, device=dev)
     return image, values
 
 

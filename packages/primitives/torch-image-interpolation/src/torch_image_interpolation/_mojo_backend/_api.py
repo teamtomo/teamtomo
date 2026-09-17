@@ -2,9 +2,11 @@
 
 The public ``sample_image_{1,2,3}d`` / ``insert_into_image_{1,2,3}d`` validate
 their inputs and, when :func:`should_use_mojo` agrees, hand off here. These
-wrappers do the shape plumbing shared by all ranks -- channel coercion,
-flattening the ``(...)`` batch of coordinates, viewing complex data as real --
-and call one kernel.
+wrappers do the shape plumbing shared by all ranks -- flattening the ``(...)``
+batch of coordinates, sizing the output -- and call one kernel. Complex tensors
+go to the kernels as they are (interleaved float pairs), and the autograd
+``Function`` layer is skipped when no input requires a gradient: the host path
+of a launch is a string of ~1us dispatcher calls and every one of them shows.
 """
 
 from __future__ import annotations
@@ -92,12 +94,18 @@ def _flatten_coordinates(
 
     Plain ``reshape`` rather than ``einops.pack``: pack concatenates and so
     always copies, which on MPS costs a full command-buffer round trip per call.
+    No-op conversions are skipped outright: the host path of a launch is a
+    string of ~1us dispatcher calls, and every one of them shows.
     """
-    batch_shape = (
-        tuple(coordinates.shape) if ndim == 1 else tuple(coordinates.shape[:-1])
-    )
-    coords = coordinates.reshape(-1, ndim)
-    return coords.to(torch.float32).contiguous(), batch_shape
+    if ndim == 1:
+        batch_shape = tuple(coordinates.shape)
+        coords = coordinates.reshape(-1, 1)
+    else:
+        batch_shape = tuple(coordinates.shape[:-1])
+        coords = coordinates if coordinates.ndim == 2 else coordinates.reshape(-1, ndim)
+    if coords.dtype is not torch.float32:
+        coords = coords.to(torch.float32)
+    return coords.contiguous(), batch_shape
 
 
 def sample_image(
@@ -110,20 +118,20 @@ def sample_image(
 
     Returns ``(...)`` for a single-channel image, ``(..., c)`` otherwise, in the
     image's dtype -- the same contract as the public ``sample_image_*d``.
+
+    The kernel writes its ``(n, c)`` block straight into a tensor of that final
+    shape, and complex images are passed as they are (the kernels read them as
+    interleaved float pairs), so no views are created on the way in or out.
     """
-    is_multichannel = image.ndim == ndim + 1
-    if not is_multichannel:
-        image = image.unsqueeze(0)
     coords, batch_shape = _flatten_coordinates(coordinates, ndim)
-    image_r = _ops.as_real(image).contiguous()  # (c, *spatial, inner)
-
-    out = SampleFunction.apply(image_r, coords, ndim, INTERP_CODES[interpolation])
-    samples = torch.view_as_complex(out) if image.is_complex() else out[..., 0]
-
-    samples = samples.reshape(*batch_shape, image.shape[0])  # (..., c)
-    if not is_multichannel:
-        samples = samples.squeeze(-1)
-    return samples
+    image = image.contiguous()
+    out_shape = (
+        (*batch_shape, image.shape[0]) if image.ndim == ndim + 1 else batch_shape
+    )
+    code = INTERP_CODES[interpolation]
+    if torch.is_grad_enabled() and (image.requires_grad or coords.requires_grad):
+        return SampleFunction.apply(image, coords, ndim, code, out_shape)
+    return _ops.sample_forward(image, coords, ndim, code, out_shape)
 
 
 def insert_into_image(
@@ -146,7 +154,7 @@ def insert_into_image(
         )
 
     c = image.shape[0] if is_multichannel else 1
-    values_r = _ops.as_real(values.reshape(-1, c).contiguous()).contiguous()
+    values_r = values.reshape(-1, c).contiguous()  # (n, c), image dtype
     coords, _ = _flatten_coordinates(coordinates, ndim)
     code = INTERP_CODES[interpolation]
 
@@ -154,9 +162,7 @@ def insert_into_image(
         t.requires_grad for t in (image, values, coordinates, weights)
     )
     if not tracked:
-        _ops.insert_forward(
-            values_r, coords, _ops.image_as_real(image, ndim), weights, ndim, code
-        )
+        _ops.insert_forward(values_r, coords, image, weights, ndim, code)
         return image, weights
     if not (image._is_view() or weights._is_view()):
         image, weights = InsertFunction.apply(
@@ -165,11 +171,6 @@ def insert_into_image(
         return image, weights
     # an in-place Function on a view may return that one tensor only: update the
     # image and the weights with separate Functions (two kernel launches)
-    image_r = InsertImageFunction.apply(
-        _ops.image_as_real(image, ndim), values_r, coords, ndim, code
-    )
+    image = InsertImageFunction.apply(image, values_r, coords, ndim, code)
     weights = InsertWeightsFunction.apply(weights, coords, ndim, code)
-    image = torch.view_as_complex(image_r) if image.is_complex() else image_r[..., 0]
-    if not is_multichannel:
-        image = image.squeeze(0)
     return image, weights

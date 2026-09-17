@@ -28,25 +28,33 @@ from . import _ops
 
 
 class SampleFunction(torch.autograd.Function):
-    """samples (n, c, inner) = image (c, *spatial, inner) interpolated at coords."""
+    """image (``(c, *spatial)`` / ``(*spatial)``) interpolated at coords (n, ndim).
+
+    Returns an ``out_shape`` tensor in the image dtype (``n * c`` elements).
+    """
 
     @staticmethod
     def forward(  # type: ignore[override]
-        ctx: Any, image: torch.Tensor, coords: torch.Tensor, ndim: int, interp: int
+        ctx: Any,
+        image: torch.Tensor,
+        coords: torch.Tensor,
+        ndim: int,
+        interp: int,
+        out_shape: tuple[int, ...],
     ) -> torch.Tensor:
         ctx.save_for_backward(image, coords)
         ctx.ndim = ndim
         ctx.interp = interp
-        return _ops.sample_forward(image, coords, ndim, interp)
+        return _ops.sample_forward(image, coords, ndim, interp, out_shape)
 
     @staticmethod
     def backward(  # type: ignore[override]
         ctx: Any, grad_samples: torch.Tensor
-    ) -> tuple[torch.Tensor | None, torch.Tensor | None, None, None]:
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None, None, None, None]:
         image, coords = ctx.saved_tensors
         need_image, need_coords = ctx.needs_input_grad[0], ctx.needs_input_grad[1]
         if not (need_image or need_coords):
-            return None, None, None, None
+            return None, None, None, None, None
         grad_image, grad_coords = _ops.sample_backward(
             image,
             coords,
@@ -56,15 +64,14 @@ class SampleFunction(torch.autograd.Function):
             need_grad_image=need_image,
             need_grad_coords=need_coords,
         )
-        return grad_image, grad_coords, None, None
+        return grad_image, grad_coords, None, None, None
 
 
 class InsertFunction(torch.autograd.Function):
     """image += splat(values), weights += splat(1) at coords -- IN PLACE, one launch.
 
     ``image`` is the caller's ``(*spatial)`` / ``(c, *spatial)`` tensor (real or
-    complex) and must not be a view; ``values`` is already in the kernel's real
-    ``(n, c, inner)`` layout.
+    complex) and must not be a view; ``values`` is ``(n, c)`` in the image dtype.
     """
 
     @staticmethod
@@ -77,9 +84,7 @@ class InsertFunction(torch.autograd.Function):
         ndim: int,
         interp: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        _ops.insert_forward(
-            values, coords, _ops.image_as_real(image, ndim), weights, ndim, interp
-        )
+        _ops.insert_forward(values, coords, image, weights, ndim, interp)
         ctx.mark_dirty(image, weights)
         ctx.save_for_backward(values, coords)
         ctx.ndim = ndim
@@ -104,7 +109,7 @@ class InsertFunction(torch.autograd.Function):
             grad_values, grad_coords = _ops.insert_backward(
                 values,
                 coords,
-                _ops.image_as_real(grad_image, ctx.ndim).contiguous(),
+                grad_image,
                 grad_weights if need_coords else None,
                 ctx.ndim,
                 ctx.interp,
@@ -116,7 +121,10 @@ class InsertFunction(torch.autograd.Function):
 
 
 class InsertImageFunction(torch.autograd.Function):
-    """image (c, *spatial, inner) += splat(values) at coords -- IN PLACE (view-safe)."""
+    """image (``(c, *spatial)`` / ``(*spatial)``) += splat(values) -- IN PLACE.
+
+    View-safe: the single modified tensor is the only output.
+    """
 
     @staticmethod
     def forward(  # type: ignore[override]

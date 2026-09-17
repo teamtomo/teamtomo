@@ -90,17 +90,47 @@ def device_address(t: torch.Tensor) -> int:
     return t.data_ptr()
 
 
+# The CUDA driver's explicit handle for the legacy default stream
+# (``CU_STREAM_LEGACY``). torch reports the default stream's ``CUstream`` as 0
+# (the NULL stream), which the Mojo entry points reserve for "no external
+# stream" (Metal), so the default stream is passed under this alias instead.
+_CU_STREAM_LEGACY = 0x1
+
+
 def stream_address(device: torch.device) -> int:
     """Address of torch's active GPU stream for the launch to enqueue on.
 
     CUDA: the current stream's ``CUstream`` -- the Mojo kernel wraps it and
-    enqueues on it, so ordering with the surrounding torch ops needs no full
-    device sync. Metal/MPS: 0 (no external-stream handoff; the kernel runs on
-    the DeviceContext's own stream and the entry point syncs it).
+    enqueues on it, so ordering with the surrounding torch ops needs no device
+    sync. torch's default stream is the NULL stream and is passed as the
+    driver's ``CU_STREAM_LEGACY`` alias (otherwise the entry point would take
+    the Metal path below and synchronise the whole context on every launch --
+    that cost a ``cuStreamSynchronize`` per call, serialising host and GPU).
+    Metal/MPS: 0 (no external-stream handoff; the kernel runs on the
+    DeviceContext's own stream and the entry point syncs it).
     """
     if device.type == "cuda":
-        return torch.cuda.current_stream(device).cuda_stream
+        return _cuda_raw_stream(device) or _CU_STREAM_LEGACY
     return 0
+
+
+if hasattr(torch._C, "_cuda_getCurrentRawStream"):
+
+    def _cuda_raw_stream(device: torch.device) -> int:
+        """Current ``CUstream`` of ``device`` via torch's C accessor (~0.1us).
+
+        ``torch.cuda.current_stream(device).cuda_stream`` builds a Python
+        ``Stream`` object on every call (~4us -- a tenth of a small launch).
+        """
+        index = device.index
+        if index is None:
+            index = torch.cuda.current_device()
+        return torch._C._cuda_getCurrentRawStream(index)
+
+else:  # pragma: no cover  (older torch)
+
+    def _cuda_raw_stream(device: torch.device) -> int:
+        return torch.cuda.current_stream(device).cuda_stream
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +203,12 @@ def prepare_launch(device: torch.device, bufs: tuple[torch.Tensor, ...]) -> tupl
     (The stream is folded in here rather than passed as its own argument to stay
     under Mojo's ``def_function`` arity cap.)
     """
+    if device.type == "cuda":
+        # data_ptr() is the device VA; ordering is the stream's job (no sync)
+        return (
+            *[t.data_ptr() if t.numel() else 0 for t in bufs],
+            stream_address(device),
+        )
     addrs = (*(device_address(t) for t in bufs), stream_address(device))
     pre_launch_sync(device, *bufs)
     return addrs
