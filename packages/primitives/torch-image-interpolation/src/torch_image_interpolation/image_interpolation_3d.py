@@ -56,14 +56,11 @@ def sample_image_3d(
         image = torch.view_as_real(image)
         image = einops.rearrange(image, 'c d h w complex -> (complex c) d h w')
 
-    # torch.nn.functional.grid_sample is set up for sampling grids, so we sample
-    # a single grid of shape (1, 1, n) containing all n coordinates.
-    #
-    # the sample points belong in the *grid's* spatial dimensions. broadcasting the
-    # image to (n, c, d, h, w) also produces correct results, but makes the backward
-    # pass materialise a dense (n, c, d, h, w) input-gradient before the broadcast
-    # sums it away - so peak memory and runtime scale with n * image_elems rather
-    # than with n. see https://github.com/teamtomo/teamtomo/issues/117
+    # torch.nn.functional.grid_sample is set up for sampling grids, so keep the
+    # image batch at 1 and put the n samples in the grid instead of broadcasting
+    # the image to (n, c, d, h, w). broadcasting also gives correct results, but
+    # backward then materialises a dense (n, c, d, h, w) gradient, so memory
+    # scales with n * image_elems rather than n. see #117
     image = einops.rearrange(image, 'c d h w -> 1 c d h w')
     coordinates = einops.rearrange(coordinates, 'b zyx -> 1 1 1 b zyx')  # b d h w zyx
 

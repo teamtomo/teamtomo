@@ -57,14 +57,11 @@ def sample_image_2d(
         image = torch.view_as_real(image)
         image = einops.rearrange(image, 'c h w complex -> (complex c) h w')
 
-    # torch.nn.functional.grid_sample is set up for sampling grids, so we sample
-    # a single grid of shape (1, n) containing all n coordinates.
-    #
-    # the sample points belong in the *grid's* spatial dimensions. broadcasting the
-    # image to (n, c, h, w) also produces correct results, but makes the backward
-    # pass materialise a dense (n, c, h, w) input-gradient before the broadcast
-    # sums it away - so peak memory and runtime scale with n * image_elems rather
-    # than with n. see https://github.com/teamtomo/teamtomo/issues/117
+    # torch.nn.functional.grid_sample is set up for sampling grids, so keep the
+    # image batch at 1 and put the n samples in the grid instead of broadcasting
+    # the image to (n, c, h, w). broadcasting also gives correct results, but
+    # backward then materialises a dense (n, c, h, w) gradient, so memory scales
+    # with n * image_elems rather than n. see #117
     image = einops.rearrange(image, 'c h w -> 1 c h w')
     coordinates = einops.rearrange(coordinates, 'b yx -> 1 1 b yx')  # b h w yx
 
