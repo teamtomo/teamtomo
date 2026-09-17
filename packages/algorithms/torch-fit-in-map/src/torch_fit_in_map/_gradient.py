@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import torch
 import torch.nn as nn
 from torch_grid_utils import coordinate_grid
@@ -22,7 +20,7 @@ from ._result import AlignmentResult
 def _axis_angle_to_rotation_matrix_xyz(v: torch.Tensor) -> torch.Tensor:
     """Rodrigues formula.  v: ``(3,)`` axis-angle vector in xyz (radians).
 
-    Numerically stable: when ``|v| → 0`` the result approaches the identity.
+    Numerically stable: when ``|v| -> 0`` the result approaches the identity.
     """
     theta = v.norm(p=2).clamp(min=1e-7)
     k = v / theta  # unit axis
@@ -39,7 +37,7 @@ def _axis_angle_to_rotation_matrix_xyz(v: torch.Tensor) -> torch.Tensor:
 
 
 def _rotation_matrix_xyz_to_axis_angle(R: torch.Tensor) -> torch.Tensor:
-    """Inverse Rodrigues.  R: ``(3, 3)`` xyz rotation → ``(3,)`` axis-angle."""
+    """Inverse Rodrigues.  R: ``(3, 3)`` xyz rotation -> ``(3,)`` axis-angle."""
     trace = R[0, 0] + R[1, 1] + R[2, 2]
     cos_theta = ((trace - 1.0) / 2.0).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
     theta = torch.acos(cos_theta)
@@ -106,8 +104,10 @@ def _transform_volume(
     rotated = torch.einsum("ij,...j->...i", R_zyx, p_minus_t_minus_c)  # (d, h, w, 3)
     input_coords = rotated + centre_zyx  # (d, h, w, 3), differentiable
 
-    transformed = sample_image_3d(volume, input_coords, interpolation="trilinear")
-    return cast("torch.Tensor", transformed)
+    transformed: torch.Tensor = sample_image_3d(
+        volume, input_coords, interpolation="trilinear"
+    )
+    return transformed
 
 
 # ---------------------------------------------------------------------------

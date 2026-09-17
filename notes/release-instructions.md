@@ -1,50 +1,91 @@
 # Release Instructions
 
-## Prerequisites
+## How releases work
 
-### Place yourself on the main branch
+A release is driven by one tag. Pushing `teamtomo@vX.Y.Z` starts the `Deploy` workflow, which:
 
-Ensure you have push access to the repository and are on an up-to-date main branch:
+1. Resolves the tag, checks it is on `main`, and waits for all three CI legs to pass.
+2. Builds and tests **every** publishable package, verifying each artifact's version and metadata.
+3. Stops at a gate. If any package failed, **nothing is published**.
+4. Publishes every component package to PyPI, then the `teamtomo` meta-package.
+5. Creates the per-package `<package>@vX.Y.Z` tags and GitHub Releases.
+
+Per-package tags are records and only created after a successful upload, so a tag existing means that version really did ship.
+
+## Coordinated release (all packages)
 
 ```bash
 git checkout main
 git pull upstream main
+
+./scripts/coordinated_release.sh v0.6.0 --dry-run   # check without tagging
+./scripts/coordinated_release.sh v0.6.0
 ```
 
-## Single Package Release
+The script refuses to tag unless the following conditions are met:
 
-Push an annotated tag matching `package-name@vX.Y.Z`. The `Deploy` workflow triggers automatically on the tag push.
+- Current working tree is clean,
+- `HEAD` matches `upstream/main` (with remote `upstream` referencing teamtomo/teamtomo),
+- All three CI legs are green,
+- No tags for the desired version already exist,
+- No package declares a direct URL dependency, and
+- Every package exists on PyPI with the target version still free.
+
+## Single package release
+
+For an independent patch release (see `package-versioning-policy.md`), push that package's tag directly:
 
 ```bash
-git tag -a package-name@v3.4.5 -m "Release package-name@v3.4.5"
-git push upstream package-name@v3.4.5
+git tag -a torch-ctf@v0.6.1 -m "Release torch-ctf@v0.6.1"
+git push upstream torch-ctf@v0.6.1
 ```
 
-**What happens next:**
+`Deploy` runs in single-package mode: it builds, tests and publishes only that package.
 
-1. The `Deploy` workflow triggers on the tag push
-2. CI verification ensures tests passed on main
-3. The package is built and published to PyPI
-4. A GitHub Release is created with the built artifacts attached
+## Before a release
 
-## Coordinated Release (All Packages)
-
-To release all packages in the workspace at the same version, run the coordinated release script:
+Run the preflight and fix anything it reports:
 
 ```bash
-cd path/to/teamtomo
-./scripts/coordinated_release.sh vX.Y.Z
+# On demand, from the Actions tab: "Release Check", with the target version.
+# Or locally:
+python3 .github/scripts/release_preflight.py 0.6.0
 ```
 
-The script validates branch state, creates the `teamtomo@vX.Y.Z` tag, and pushes it. CI handles everything from there.
+**Rehearse final releases with a release candidate first.**
+Cut `vX.Y.Zrc1`, confirm every package landed, then cut `vX.Y.Z`.
+A release candidate exercises the identical code path against real PyPI, and pre-releases are ignored by default `pip install`.
 
-**What happens next:**
+### Adding a new package
 
-1. The `Coordinate Release` workflow triggers on the `teamtomo@vX.Y.Z` tag push
-2. It waits for CI to pass on that commit
-3. It updates `CITATION.cff` with the latest contributor list and commits to main
-4. It creates and pushes individual `package-name@vX.Y.Z` tags for every workspace package, one at a time
-5. Each tag push triggers an individual `Deploy` workflow run
-6. Each `Deploy` run verifies CI, builds the package, publishes to PyPI, and creates a GitHub Release
+A package that has never been published needs a **pending publisher** registered on
+PyPI *before* its first release, otherwise its first upload fails with a 403 that
+`skip-existing` will not mask.
+At <https://pypi.org/manage/account/publishing/>:
 
-**Note:** The `CITATION.cff` update happens automatically as part of step 3 — you do not need to run `update_citation_authors.py` manually before a coordinated release.
+| Field | Value |
+| --- | --- |
+| Owner | `teamtomo` |
+| Repository | `teamtomo` |
+| Workflow | `deploy.yml` |
+| Environment | *(leave blank)* |
+
+The preflight lists every package that still needs this.
+
+### Holding a package back
+
+Set the following in that package's `pyproject.toml`.
+It will still be tested, but will not be tagged or published:
+
+```toml
+[tool.teamtomo]
+publish = false
+```
+
+If you hold back a package that the root `teamtomo` meta-package depends on, remove it
+from the root `dependencies` too, or `pip install teamtomo` will not resolve.
+
+## CITATION.cff
+
+The author list is refreshed by the `Update CITATION authors` workflow, which runs monthly and opens a pull request.
+It is deliberately **not** part of the release path: it used to run mid-release and could abort a release before any package was tagged.

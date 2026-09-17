@@ -15,6 +15,7 @@ members = [
     "torch-calculate-electrostatic-potential",
     "torch-cryoeraser",
     "torch-ctf",
+    "torch-ctf-estimation",
     "torch-cubic-spline-grids",
     "torch-find-peaks",
     "torch-fit-in-map",
@@ -797,6 +798,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d1/4d/be07d1b7f19bc61818fe9bada35b15935104c1f03a9267997510bb01a0bb/etomofiles-0.1.2.tar.gz", hash = "sha256:2e5778145378a0b748f0c6eff39e751e8e426ce88c5167b16ffcfb9b693f19c7", size = 18245, upload-time = "2026-06-30T23:52:03.824Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/74/ccef45630e9eebab4c594caeba2bf9dfafd637028fcd11896bdc0a2f0886/etomofiles-0.1.2-py3-none-any.whl", hash = "sha256:a066b0272b5946a29c4f681b9e90878bf769880a675b69dd71b824d01a19cbf8", size = 9691, upload-time = "2026-06-30T23:52:02.413Z" },
+]
+
+[[package]]
+name = "exceptiongroup"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl", hash = "sha256:a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598", size = 16740, upload-time = "2025-11-21T23:01:53.443Z" },
 ]
 
 [[package]]
@@ -1899,6 +1912,69 @@ wheels = [
 ]
 
 [[package]]
+name = "max"
+version = "26.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "exceptiongroup" },
+    { name = "max-core" },
+    { name = "msgspec" },
+    { name = "numpy" },
+    { name = "psutil" },
+    { name = "rich" },
+    { name = "taskgroup" },
+    { name = "typing-extensions" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/cb/4d76171af623f09466e844dbb6c8899fb0613bedbd416b5ad5e195b2b21f/max-26.5.0-cp312-cp312-macosx_13_0_arm64.whl", hash = "sha256:7bc9e14498f5a5ae48ecad22a6ea86fd87ddb3d379a18da9f64574501e92c5cd", size = 21650609, upload-time = "2026-08-11T14:34:01.87Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/2a/a1c98b446d8e146de1a47b1804ff646ca86e9c171cd6f5b3cdc64acd066d/max-26.5.0-cp312-cp312-manylinux_2_34_aarch64.whl", hash = "sha256:d257901cf57aa1305378bc1e06672c95f3b99e807b773caedfffd3b56ffb1d6e", size = 23680094, upload-time = "2026-08-11T14:34:16.389Z" },
+    { url = "https://files.pythonhosted.org/packages/88/0c/f6e7a117b5fe623f6668262b35541ff11f1626485cbfac28b6ee5ea81fc2/max-26.5.0-cp312-cp312-manylinux_2_34_x86_64.whl", hash = "sha256:f4a3d61fc2b6715214974a03504da9d843f4d5f4b1d4c732e79adc4df692e244", size = 24250433, upload-time = "2026-08-11T14:34:57.919Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/9a/5e088f5fe816bba8dc5ffb4f3f1d0f325baa0563cbb53c4dcf6e7346017d/max-26.5.0-cp313-cp313-macosx_13_0_arm64.whl", hash = "sha256:c595b86e0217a5d48e6d602baab8f040dea4ac3023032997f462612ac8ece504", size = 21650700, upload-time = "2026-08-11T14:33:38.876Z" },
+    { url = "https://files.pythonhosted.org/packages/af/d3/cec258789a131772bf203b82fafb1990b87005f93789244fb0f7f05ebb28/max-26.5.0-cp313-cp313-manylinux_2_34_aarch64.whl", hash = "sha256:841a116b677f2043ca19c58a2ba0a06a7e32aeb774e403ef05ed68a39c6ccf00", size = 23680290, upload-time = "2026-08-11T14:33:50.78Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/18/2dcf9c47d7f35952b7f84d0f94ffc7f1c270699d0722a9e561c66b42f871/max-26.5.0-cp313-cp313-manylinux_2_34_x86_64.whl", hash = "sha256:416bc916f9a37f65da7ed8c68d9a6b72c3fc0c2247a0762cc5a347e32322c80d", size = 24250537, upload-time = "2026-08-11T14:34:42.78Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/bf/c554ce26421461094301b2cb49b6c0cfa53015ec9cfa341fd4605557370e/max-26.5.0-cp314-cp314-macosx_13_0_arm64.whl", hash = "sha256:15090fd4128ae49a2c05d5fdbaf7f2034a514b1050a62c0794c0bb7102242e76", size = 21655013, upload-time = "2026-08-11T14:34:14.07Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/d8/02d3f64839cb4284c1f2a19d8ffc9801265f6e4ec64558d413567adf94ea/max-26.5.0-cp314-cp314-manylinux_2_34_aarch64.whl", hash = "sha256:9f025e09863262fee0925864040600743b59d2314c44c385d9a5cd2aea8f9b41", size = 23680621, upload-time = "2026-08-11T14:34:24.944Z" },
+    { url = "https://files.pythonhosted.org/packages/62/57/e8d751e096139eafdc4a4e90bbe7ee8c08f946b046a5f989f9f2b39ac1ca/max-26.5.0-cp314-cp314-manylinux_2_34_x86_64.whl", hash = "sha256:41bd1cd5acb130bde205fbaec3250a4638c7dc0295a9e55d4fdaab09e9e88bc4", size = 24250257, upload-time = "2026-08-11T14:33:41.654Z" },
+]
+
+[[package]]
+name = "max-core"
+version = "26.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "max-mojo-libs" },
+    { name = "mojo-compiler" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/dd/cc7598a6fe1c8ac924f65c4346619a06fe883a7052df69b752b414208ce2/max_core-26.5.0-py3-none-macosx_13_0_arm64.whl", hash = "sha256:bf5b9c57ac01bb8adb46b8b63b98c7577ca1a3a870b267686a1aa214230496c9", size = 55746854, upload-time = "2026-08-11T14:34:40.201Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/53/51e6ff16f19c9d7181e5ef338ed3ae76f13ae102c62fbe573d6866c7227f/max_core-26.5.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:2438a6342d0ea70406e24834eed9335eae3c0154d40fdb7e14aae6f190915e16", size = 72832972, upload-time = "2026-08-11T14:33:35.695Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/10/c6d6e504cf5a89861691f0efd4e7f281291d90fd16ac767cd4a0ae1148bf/max_core-26.5.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:cfaaff7f5dd958fac2de81bb4c44bfb0168428bdd4b40f89e40acf6a5474b448", size = 80589951, upload-time = "2026-08-11T14:34:55.032Z" },
+]
+
+[[package]]
+name = "max-mojo-libs"
+version = "26.5.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/ea/e942472029ecd8058a790663ddaaab3ec4f06c4438da52031dd59fdd18d4/max_mojo_libs-26.5.0-py3-none-any.whl", hash = "sha256:568f5c16c42876ae7dfe19120795300e9d4d561801b88d4039bd0d09a4066e74", size = 21429852, upload-time = "2026-08-11T14:34:45.343Z" },
+]
+
+[[package]]
+name = "mblack"
+version = "26.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "mypy-extensions" },
+    { name = "pathspec" },
+    { name = "platformdirs" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/36/8147d0627cde9043557f7906eabe64ff6295ec910dade5251e5703f0f6d9/mblack-26.5.0-py3-none-any.whl", hash = "sha256:072b304646c277979e6a1d19b086ef226bb7381810902e975cf1c3886d1d7883", size = 155289, upload-time = "2026-08-11T14:33:49.308Z" },
+]
+
+[[package]]
 name = "mccabe"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2096,6 +2172,52 @@ wheels = [
 ]
 
 [[package]]
+name = "mojo"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mblack" },
+    { name = "mojo-compiler" },
+    { name = "mojo-lldb-libs" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/f0/80f6d88e19c038b2ef251b137379663a61227d6918602d8d3f702121b7cf/mojo-1.0.0-py3-none-macosx_13_0_arm64.whl", hash = "sha256:69413fee96dfd43c4955ace56e4bb0f89401098daf61538a563c82571bc9d984", size = 34984043, upload-time = "2026-08-11T14:33:45.545Z" },
+    { url = "https://files.pythonhosted.org/packages/31/e3/d429fb53aa018e592dc378def8a92c67d0978078c8c30d089019195a285f/mojo-1.0.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:a6db18b2846ec4877c5cd43a2dce1556400520dc0d4450dc8b4703dab569e9a2", size = 46662292, upload-time = "2026-08-11T14:34:48.124Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/89/326637e71282288e7d3a8ef2990dbf9fbfb07c1b3d21b836ffe2ee3111a9/mojo-1.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:725d6b7f29a5a3334e3c225f35f2b709fd46151a0a31a2c22738b1937dfc83d9", size = 47843328, upload-time = "2026-08-11T14:34:11.448Z" },
+]
+
+[[package]]
+name = "mojo-compiler"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mojo-compiler-mojo-libs" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/59/c11cf3129d4bc77b1604ac3a84bee51ee1a7cd8a3a8fa25c14528f4bd51e/mojo_compiler-1.0.0-py3-none-macosx_13_0_arm64.whl", hash = "sha256:5077ee27c0dfbbdf138a11ec12838b0d3f10148a874cf95040c9ca2332ae2622", size = 70979164, upload-time = "2026-08-11T14:34:51.281Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/f9/cbfe2bf947d0926ad57599513d898f1e02ee0c60af1253b779ecaa810235/mojo_compiler-1.0.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:3ae3eb0c58a8956f542e324f736866df0ae2f9f875e8a279cbeea961ec4e9ee8", size = 76295262, upload-time = "2026-08-11T14:34:22.131Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/5f/f38fefe327d1c81e28def69c4a52ae4f75e389cb6e613a2c04ca8d68d582/mojo_compiler-1.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:e9e60f9638e69ca0f4be7292468523fc98a143f58dbf9024f60ed68b874a867e", size = 79142588, upload-time = "2026-08-11T14:34:05.301Z" },
+]
+
+[[package]]
+name = "mojo-compiler-mojo-libs"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/99/ea401ff1db56a4af8607283b95627e01b986fc67f510715b07f100118105/mojo_compiler_mojo_libs-1.0.0-py3-none-any.whl", hash = "sha256:20a92e37ecbd19e2dbb1a525612a8de4c9f266f5536def55c5e2b0786320e8b3", size = 3187048, upload-time = "2026-08-11T14:33:53.171Z" },
+]
+
+[[package]]
+name = "mojo-lldb-libs"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/2c/b862539eb138fdbb934321f11fe13d67ceb0d8bebcc8351bc88b0ca4f8c2/mojo_lldb_libs-1.0.0-py3-none-macosx_13_0_arm64.whl", hash = "sha256:b8f417c3c2c64058c1c11467086c2e64464abcd91dba938c659b49d94cc75c5b", size = 89030854, upload-time = "2026-08-11T14:34:37.154Z" },
+    { url = "https://files.pythonhosted.org/packages/38/e1/a7c6c73c875f5692587beda9ca68773bae069d60b1c79d9fffd8a2840f4d/mojo_lldb_libs-1.0.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:7eb1f204829f031fda8cc9ee4e7f461f1ca3ddf1c8fb509abf2eb6f02c9de4f5", size = 88995473, upload-time = "2026-08-11T14:34:28.231Z" },
+    { url = "https://files.pythonhosted.org/packages/12/a0/8280a1869d017102d50e0dcf1962e0bc59834f8fe07b435e1a575bb5c923/mojo_lldb_libs-1.0.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:de151c87f3fb4d184a85e735eae05bf43f9a9deb4cb8f2b07cf6b59cb769d93f", size = 91857746, upload-time = "2026-08-11T14:33:56.4Z" },
+]
+
+[[package]]
 name = "mpmath"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2114,6 +2236,46 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/56/22/8834f44c2455291e241fb2543c2d5d4f0fe58fd63ad0f42e86570f0b1161/mrcfile-1.5.4.tar.gz", hash = "sha256:8fa9eb2e237d87d99b301c61bf02854dd85a451db25eefcbe142c09b36d8d601", size = 52052606, upload-time = "2025-01-22T12:36:10.924Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6f/cb/3f4ee8233f30c7926f1ed4885ff32b79ec7ce3210370f43e1cb2b385bed6/mrcfile-1.5.4-py2.py3-none-any.whl", hash = "sha256:195370a13db5ce19600499f9bdf90fd9888979bf39de19a17c19024436c6f4c2", size = 45012, upload-time = "2025-01-22T12:02:38.502Z" },
+]
+
+[[package]]
+name = "msgspec"
+version = "0.21.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/60/f79b9b013a16fa3a58350c9295ddc6789f2e335f36ea61ed10a21b215364/msgspec-0.21.1.tar.gz", hash = "sha256:2313508e394b0d208f8f56892ca9b2799e2561329de9763b19619595a6c0f72c", size = 319193, upload-time = "2026-04-12T21:44:50.394Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/cf/317224852c00248c620a9bcf4b26e2e4ab8afd752f18d2a6ef73ebd423b6/msgspec-0.21.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:d4248cf0b6129b7d230eacd493c17cc2d4f3989f3bb7f633a928a85b7dcfa251", size = 196188, upload-time = "2026-04-12T21:44:07.181Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/81/074612945c0666078f7366f40000013de9f6ba687491d450df699bceebc9/msgspec-0.21.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:5102c7e9b3acff82178449b85006d96310e690291bb1ea0142f1b24bcb8aabcb", size = 188473, upload-time = "2026-04-12T21:44:08.736Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/37/655101799590bcc5fddb2bd3fe0e6194e816c2d1da7c361725f5eb89a910/msgspec-0.21.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:846758412e9518252b2ac9bffd6f0e54d9ff614f5f9488df7749f81ff5c80920", size = 218871, upload-time = "2026-04-12T21:44:09.917Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/d1/d4cd9fe89c7d400d7a18f86ccc94daa3f0927f53558846fcb60791dce5d6/msgspec-0.21.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:21995e74b5c598c2e004110ad66ec7f1b8c20bf2bcf3b2de8fd9a3094422d3ff", size = 225025, upload-time = "2026-04-12T21:44:11.191Z" },
+    { url = "https://files.pythonhosted.org/packages/24/bf/e20549e602b9edccadeeff98760345a416f9cce846a657e8b18e3396b212/msgspec-0.21.1-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:6129f0cca52992e898fd5344187f7c8127b63d810b2fd73e36fca73b4c6475ee", size = 222672, upload-time = "2026-04-12T21:44:12.481Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/68/04d7a8f0f786545cf9b8c280c57aa6befb5977af6e884b8b54191cbe44b3/msgspec-0.21.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:ef3ec2296248d1f8b9231acb051b6d471dfde8f21819e86c9adaaa9f42918521", size = 227303, upload-time = "2026-04-12T21:44:13.709Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/4d/619866af2840875be408047bf9e70ceafbae6ab50660de7134ed1b25eb86/msgspec-0.21.1-cp312-cp312-win_amd64.whl", hash = "sha256:d4ab834a054c6f0cbeef6df9e7e1b33d5f1bc7b86dea1d2fd7cad003873e783d", size = 190017, upload-time = "2026-04-12T21:44:14.977Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/2e/a8f9eca8fd00e097d7a9e99ba8a4685db994494448e3d4f0b7f6e9a3c0f7/msgspec-0.21.1-cp312-cp312-win_arm64.whl", hash = "sha256:628aaa35c74950a8c59da330d7e98917e1c7188f983745782027748ee4ca573e", size = 175345, upload-time = "2026-04-12T21:44:16.431Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/74/f11ede02839b19ff459f88e3145df5d711626ca84da4e23520cebf819367/msgspec-0.21.1-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:764173717a01743f007e9f74520ed281f24672c604514f7d76c1c3a10e8edb66", size = 196176, upload-time = "2026-04-12T21:44:17.613Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/40/4476c1bd341418a046c4955aff632ec769315d1e3cb94e6acf86d461f9ed/msgspec-0.21.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:344c7cd0eaed1fb81d7959f99100ef71ec9b536881a376f11b9a6c4803365697", size = 188524, upload-time = "2026-04-12T21:44:18.815Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/d9/9e9d7d7e5061b47540d03d640fab9b3965ba7ae49c1b2154861c8f007518/msgspec-0.21.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:48943e278b3854c2f89f955ddc6f9f430d3f0784b16e47d10604ee0463cd21f5", size = 218880, upload-time = "2026-04-12T21:44:20.028Z" },
+    { url = "https://files.pythonhosted.org/packages/74/66/2bb344f34abb4b57e60c7c9c761994e0417b9718ec1460bf00c296f2a7ea/msgspec-0.21.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a9aa659ebb0101b1cbc31461212b87e341d961f0ab0772aaf068a99e001ec4aa", size = 225050, upload-time = "2026-04-12T21:44:21.577Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/84/7c1e412f76092277bf760cef12b7979d03314d259ab5b5cafde5d0c1722d/msgspec-0.21.1-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:f7b27d1a8ead2b6f5b0c4f2d07b8be1ccfcc041c8a0e704781edebe3ae13c484", size = 222713, upload-time = "2026-04-12T21:44:22.83Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/27/0bba04b2b4ef05f3d068429410bc71d2cea925f1596a8f41152cccd5edb8/msgspec-0.21.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:38fe93e86b61328fe544cb7fd871fad5a27c8734bfda90f65e5dbe288ae50f61", size = 227259, upload-time = "2026-04-12T21:44:24.11Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/2d/09574b0eea02fed2c2c1383dbaae2c7f79dc16dcd6487a886000afb5d7c4/msgspec-0.21.1-cp313-cp313-win_amd64.whl", hash = "sha256:8bc666331c35fcce05a7cd2d6221adbe0f6058f8e750711413d22793c080ac6a", size = 189857, upload-time = "2026-04-12T21:44:25.359Z" },
+    { url = "https://files.pythonhosted.org/packages/46/34/105b1576ad182879914f0c821f17ee1d13abb165cb060448f96fe2aff078/msgspec-0.21.1-cp313-cp313-win_arm64.whl", hash = "sha256:42bb1241e0750c1a4346f2aa84db26c5ffd99a4eb3a954927d9f149ff2f42898", size = 175403, upload-time = "2026-04-12T21:44:26.608Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/ad/86954e987d1d6a5c579e2c2e7832b65e0fff194179fdac4f581536086024/msgspec-0.21.1-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:fab48eb45fdbfbdb2c0edfec00ffc53b6b6085beefc6b50b61e01659f9f8757f", size = 196261, upload-time = "2026-04-12T21:44:27.807Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/a1/c5e46c3e42b866199365e35d11dddfd1fbd8bba4fdb3c52f965b1607ce94/msgspec-0.21.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:3cb779ea0c35bc807ff941d415875c1f69ca0be91a2e907ab99a171811d86a9a", size = 188729, upload-time = "2026-04-12T21:44:28.99Z" },
+    { url = "https://files.pythonhosted.org/packages/85/7d/1e29a319d678d6cb962ae5bdf32a6858ebdf38f73bc654c0e9c742a0c2c8/msgspec-0.21.1-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:68604db36b3b4dd9bf160e436e12798a4738848144cea1aca1cb984011eb160f", size = 219866, upload-time = "2026-04-12T21:44:31.104Z" },
+    { url = "https://files.pythonhosted.org/packages/25/1f/cca084ca2572810fff12ea9dbdcbe39eac048f40daf4a9077b49fcbe8cee/msgspec-0.21.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3d6b9dc50948eaf65df54d2fd0ff66e6d8c32f116037209ee861810eb9b676cb", size = 224993, upload-time = "2026-04-12T21:44:32.649Z" },
+    { url = "https://files.pythonhosted.org/packages/71/94/d2120fc9d419a89a3a7c13e5b7078798c4b392a96a02a6e2b3ce43a8766c/msgspec-0.21.1-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:52c5e21930942302394429c5a582ce7e6b62c7f983b3760834c2ce107e0dd6df", size = 223535, upload-time = "2026-04-12T21:44:33.839Z" },
+    { url = "https://files.pythonhosted.org/packages/75/17/42418b66a3ad972a89bab73dd78b79cc6282bb488a25e73c853cee7443b9/msgspec-0.21.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:abbb39d65681fa24ed394e01af3d59d869068324f900c61d06062b7fb9980f2f", size = 227222, upload-time = "2026-04-12T21:44:35.093Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/33/265c894268cca88ff67b144ca2b4c522fc8b9a6f1966a3640c70516e78e1/msgspec-0.21.1-cp314-cp314-win_amd64.whl", hash = "sha256:5666b1b560b97b6ec2eb3fca8a502298ebac56e13bbca1f88523538ce83d01ea", size = 193810, upload-time = "2026-04-12T21:44:36.612Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/8f/a6d35f25bf1fc63c492fdd88fdce01ba0875ead48c2b91f90f33653b4131/msgspec-0.21.1-cp314-cp314-win_arm64.whl", hash = "sha256:d8b8578e4c83b14ceea4cef0d0b747e31d9330fe4b03b2b2ad4063866a178f93", size = 179125, upload-time = "2026-04-12T21:44:38.198Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/39/74839641e64b99d87da55af0fc472854d42b46e2183b9e2a67fe1bb2a512/msgspec-0.21.1-cp314-cp314t-macosx_10_15_x86_64.whl", hash = "sha256:15f523d51c00ebad412213bfe9f06f0a50ec2b93e0c19e824a2d267cabb48ea2", size = 200171, upload-time = "2026-04-12T21:44:39.414Z" },
+    { url = "https://files.pythonhosted.org/packages/70/9b/ce0cca6d2d87fcd4b6ff97600790494e64f26a2c55d61507cd2755c16193/msgspec-0.21.1-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:4e47390360583ba3d5c6cb44cf0a9f61b0a06a899d3c2c00627cedebb2e2884b", size = 192879, upload-time = "2026-04-12T21:44:40.882Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/08/673a7bb05e5702dc787ddd3011195b509f9867927970da59052211929987/msgspec-0.21.1-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f60800e6299b798142dc40b0644da77ceac5ea0568be58228417eae14135c847", size = 226281, upload-time = "2026-04-12T21:44:42.181Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/45/86508cf57283e9070b3c447e3ab25b792a7a0855a3ea4e0c6d111ac34c97/msgspec-0.21.1-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5f8e9dfcd98419cf7568808470c4317a3fb30bef0e3715b568730a2b272a20d7", size = 229863, upload-time = "2026-04-12T21:44:43.442Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/62/e7c9367cd08d590559faacd711edbae36840342843e669440363f33c7d36/msgspec-0.21.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:92d89dfad13bd1ea640dc3e37e724ed380da1030b272bdf5ecafb983c3ad7c75", size = 230445, upload-time = "2026-04-12T21:44:44.806Z" },
+    { url = "https://files.pythonhosted.org/packages/42/b4/c0f54632103846b658a10930025f4de41c8724b5e4805a5f3b395586cb7e/msgspec-0.21.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:0d03867786e5d7ba25d666df4b11320c27170f4aeafcb8e3a8b0a50a4fb742ca", size = 231822, upload-time = "2026-04-12T21:44:46.343Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/1d/0d85cc79d0ccf5508e9c846cc66552a6a16bf92abd1dbd8362617f7b35cd/msgspec-0.21.1-cp314-cp314t-win_amd64.whl", hash = "sha256:740fbf1c9d59992ca3537d6fbe9ebbf9eaf726a65fbf31448e0ecbc710697a63", size = 206650, upload-time = "2026-04-12T21:44:47.601Z" },
+    { url = "https://files.pythonhosted.org/packages/90/91/56c5d560f20e6c20e9e4f55bd0e458f7f162aa689ee350346c04c48eac0b/msgspec-0.21.1-cp314-cp314t-win_arm64.whl", hash = "sha256:0d2cc73df6058d811a126ac3a8ad63a4dfa210c82f9cf5a004802eaf4712de90", size = 183149, upload-time = "2026-04-12T21:44:48.833Z" },
 ]
 
 [[package]]
@@ -3768,6 +3930,19 @@ wheels = [
 ]
 
 [[package]]
+name = "taskgroup"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "exceptiongroup" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f0/8d/e218e0160cc1b692e6e0e5ba34e8865dbb171efeb5fc9a704544b3020605/taskgroup-0.2.2.tar.gz", hash = "sha256:078483ac3e78f2e3f973e2edbf6941374fbea81b9c5d0a96f51d297717f4752d", size = 11504, upload-time = "2025-01-03T09:24:13.761Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/b1/74babcc824a57904e919f3af16d86c08b524c0691504baf038ef2d7f655c/taskgroup-0.2.2-py2.py3-none-any.whl", hash = "sha256:e2c53121609f4ae97303e9ea1524304b4de6faf9eb2c9280c7f87976479a52fb", size = 14237, upload-time = "2025-01-03T09:24:11.41Z" },
+]
+
+[[package]]
 name = "teamtomo"
 source = { editable = "." }
 dependencies = [
@@ -3777,6 +3952,7 @@ dependencies = [
     { name = "torch-calculate-electrostatic-potential" },
     { name = "torch-cryoeraser" },
     { name = "torch-ctf" },
+    { name = "torch-ctf-estimation" },
     { name = "torch-cubic-spline-grids" },
     { name = "torch-find-peaks" },
     { name = "torch-fit-in-map" },
@@ -3815,6 +3991,10 @@ dev = [
     { name = "ttsim3d" },
     { name = "urllib3" },
 ]
+examples = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
+]
 test = [
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -3830,6 +4010,7 @@ requires-dist = [
     { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
     { name = "torch-cryoeraser", editable = "packages/algorithms/torch-cryoeraser" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-ctf-estimation", editable = "packages/algorithms/torch-ctf-estimation" },
     { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
     { name = "torch-find-peaks", editable = "packages/primitives/torch-find-peaks" },
     { name = "torch-fit-in-map", editable = "packages/algorithms/torch-fit-in-map" },
@@ -3867,6 +4048,10 @@ dev = [
     { name = "ruff" },
     { name = "ttsim3d", specifier = ">=0.4.2" },
     { name = "urllib3" },
+]
+examples = [
+    { name = "ipykernel" },
+    { name = "matplotlib" },
 ]
 test = [
     { name = "pytest" },
@@ -4136,10 +4321,12 @@ name = "torch-calculate-electrostatic-potential"
 source = { editable = "packages/primitives/torch-calculate-electrostatic-potential" }
 dependencies = [
     { name = "einops" },
+    { name = "gemmi" },
     { name = "numpy" },
     { name = "setuptools" },
     { name = "torch" },
     { name = "torch-structure-manipulation" },
+    { name = "tqdm" },
 ]
 
 [package.dev-dependencies]
@@ -4152,6 +4339,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "types-tqdm" },
 ]
 test = [
     { name = "pytest" },
@@ -4161,10 +4349,12 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops", specifier = ">=0.6.0" },
+    { name = "gemmi" },
     { name = "numpy", specifier = ">=1.21.0" },
     { name = "setuptools" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
+    { name = "tqdm", specifier = ">=4.60.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -4177,6 +4367,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "types-tqdm" },
 ]
 test = [
     { name = "pytest" },
@@ -4282,6 +4473,81 @@ requires-dist = [
     { name = "torch" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[[package]]
+name = "torch-ctf-estimation"
+source = { editable = "packages/algorithms/torch-ctf-estimation" }
+dependencies = [
+    { name = "einops" },
+    { name = "numpy" },
+    { name = "pydantic" },
+    { name = "scipy" },
+    { name = "teamtomo-basemodel" },
+    { name = "torch" },
+    { name = "torch-ctf" },
+    { name = "torch-cubic-spline-grids" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-fourier-rescale" },
+    { name = "torch-grid-utils" },
+    { name = "torch-image-interpolation" },
+    { name = "torchvision" },
+]
+
+[package.optional-dependencies]
+plot = [
+    { name = "matplotlib" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "mypy" },
+    { name = "pdbpp" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "matplotlib", marker = "extra == 'plot'" },
+    { name = "numpy" },
+    { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "scipy" },
+    { name = "teamtomo-basemodel", editable = "packages/utils/teamtomo-basemodel" },
+    { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
+    { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+    { name = "torchvision" },
+]
+provides-extras = ["plot"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4439,6 +4705,7 @@ dependencies = [
 dev = [
     { name = "ipython" },
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
@@ -4450,6 +4717,7 @@ dev = [
 ]
 test = [
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "scipy" },
@@ -4477,6 +4745,7 @@ requires-dist = [
 dev = [
     { name = "ipython" },
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
@@ -4488,6 +4757,7 @@ dev = [
 ]
 test = [
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "scipy" },
@@ -4694,6 +4964,12 @@ dependencies = [
     { name = "torch-image-interpolation" },
 ]
 
+[package.optional-dependencies]
+mojo = [
+    { name = "max" },
+    { name = "mojo" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "ipython" },
@@ -4723,11 +4999,14 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
+    { name = "max", marker = "extra == 'mojo'", specifier = ">=26.5.0" },
+    { name = "mojo", marker = "extra == 'mojo'", specifier = "==1.0.0" },
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
 ]
+provides-extras = ["mojo"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4970,14 +5249,13 @@ name = "torch-reconstruct-tomogram"
 source = { editable = "packages/algorithms/torch-reconstruct-tomogram" }
 dependencies = [
     { name = "einops" },
-    { name = "mrcfile" },
     { name = "torch" },
     { name = "torch-ctf" },
     { name = "torch-fourier-rescale" },
     { name = "torch-fourier-slice" },
     { name = "torch-grid-utils" },
     { name = "torch-subpixel-crop" },
-    { name = "torch-tilt-series" },
+    { name = "torch-tilt-series", extra = ["io"] },
 ]
 
 [package.dev-dependencies]
@@ -4999,14 +5277,13 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "einops" },
-    { name = "mrcfile" },
     { name = "torch" },
     { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
-    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tilt-series", extras = ["io"], editable = "packages/primitives/torch-tilt-series" },
 ]
 
 [package.metadata.requires-dev]
@@ -5029,12 +5306,8 @@ test = [
 name = "torch-refine-tilt-axis-angle"
 source = { editable = "packages/algorithms/torch-refine-tilt-axis-angle" }
 dependencies = [
-    { name = "einops" },
     { name = "torch" },
-    { name = "torch-affine-utils" },
-    { name = "torch-cubic-spline-grids" },
-    { name = "torch-fourier-slice" },
-    { name = "torch-grid-utils" },
+    { name = "torch-tilt-series" },
 ]
 
 [package.dev-dependencies]
@@ -5055,12 +5328,8 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "einops" },
     { name = "torch" },
-    { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
-    { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
-    { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
-    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
 ]
 
 [package.metadata.requires-dev]
@@ -5225,6 +5494,7 @@ dev = [
     { name = "ipython" },
     { name = "matplotlib" },
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
@@ -5233,17 +5503,32 @@ dev = [
     { name = "rich" },
     { name = "ruff" },
     { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-fourier-shell-correlation" },
+    { name = "torch-fourier-shift" },
+    { name = "torch-motion-correction" },
+    { name = "torch-reconstruct-tomogram" },
+    { name = "torch-refine-tilt-axis-angle" },
     { name = "torch-scattering" },
     { name = "torch-structure-manipulation" },
+    { name = "torch-tilt-series" },
+    { name = "torch-tiltxcorr" },
     { name = "torch-transform-image" },
 ]
 examples = [
     { name = "ipykernel" },
     { name = "matplotlib" },
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "torch-calculate-electrostatic-potential" },
+    { name = "torch-fourier-shell-correlation" },
+    { name = "torch-fourier-shift" },
+    { name = "torch-motion-correction" },
+    { name = "torch-reconstruct-tomogram" },
+    { name = "torch-refine-tilt-axis-angle" },
     { name = "torch-scattering" },
     { name = "torch-structure-manipulation" },
+    { name = "torch-tilt-series" },
+    { name = "torch-tiltxcorr" },
     { name = "torch-transform-image" },
 ]
 test = [
@@ -5269,6 +5554,7 @@ dev = [
     { name = "ipython" },
     { name = "matplotlib" },
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "mypy" },
     { name = "pdbpp" },
     { name = "pre-commit" },
@@ -5277,17 +5563,32 @@ dev = [
     { name = "rich" },
     { name = "ruff" },
     { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
+    { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
+    { name = "torch-motion-correction", editable = "packages/algorithms/torch-motion-correction" },
+    { name = "torch-reconstruct-tomogram", editable = "packages/algorithms/torch-reconstruct-tomogram" },
+    { name = "torch-refine-tilt-axis-angle", editable = "packages/algorithms/torch-refine-tilt-axis-angle" },
     { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
     { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 examples = [
     { name = "ipykernel" },
     { name = "matplotlib" },
     { name = "mmdf" },
+    { name = "mrcfile" },
     { name = "torch-calculate-electrostatic-potential", editable = "packages/primitives/torch-calculate-electrostatic-potential" },
+    { name = "torch-fourier-shell-correlation", editable = "packages/primitives/torch-fourier-shell-correlation" },
+    { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
+    { name = "torch-motion-correction", editable = "packages/algorithms/torch-motion-correction" },
+    { name = "torch-reconstruct-tomogram", editable = "packages/algorithms/torch-reconstruct-tomogram" },
+    { name = "torch-refine-tilt-axis-angle", editable = "packages/algorithms/torch-refine-tilt-axis-angle" },
     { name = "torch-scattering", editable = "packages/primitives/torch-scattering" },
     { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 test = [
@@ -5455,12 +5756,15 @@ dependencies = [
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils" },
+    { name = "torch-fourier-filter" },
+    { name = "torch-grid-utils" },
 ]
 
 [package.optional-dependencies]
 io = [
     { name = "alnfile" },
     { name = "etomofiles" },
+    { name = "mrcfile" },
 ]
 
 [package.dev-dependencies]
@@ -5490,9 +5794,12 @@ requires-dist = [
     { name = "alnfile", marker = "extra == 'io'" },
     { name = "einops" },
     { name = "etomofiles", marker = "extra == 'io'" },
+    { name = "mrcfile", marker = "extra == 'io'" },
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
 provides-extras = ["io"]
 
@@ -5527,8 +5834,9 @@ dependencies = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torch-affine-utils" },
-    { name = "torch-fourier-filter" },
     { name = "torch-fourier-rescale" },
+    { name = "torch-grid-utils" },
+    { name = "torch-tilt-series" },
     { name = "torch-transform-image" },
 ]
 
@@ -5556,8 +5864,9 @@ requires-dist = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
-    { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
@@ -5768,6 +6077,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7e/69/3c51b36d04da19b92f9e815be12753125bd8bc247ba0470a982e6979e71c/types_pyyaml-6.0.12.20250915.tar.gz", hash = "sha256:0f8b54a528c303f0e6f7165687dd33fafa81c807fcac23f632b63aa624ced1d3", size = 17522, upload-time = "2025-09-15T03:01:00.728Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl", hash = "sha256:e7d4d9e064e89a3b3cae120b4990cd370874d2bf12fa5f46c97018dd5d3c9ab6", size = 20338, upload-time = "2025-09-15T03:00:59.218Z" },
+]
+
+[[package]]
+name = "types-tqdm"
+version = "4.70.0.20260827"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/66/f4a8d5483513ed883e8f01c607b5d47815ca0eb796d376349fdfe85a125c/types_tqdm-4.70.0.20260827.tar.gz", hash = "sha256:d3efd69243ac9093c552f1c0d081b77286d61ace96b6899a142542555bdad2dc", size = 19251, upload-time = "2026-08-27T12:06:55.911Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/f0/b0e2a33c0367e79806054f556159f0b43e6a98d7e728aea1b07028a56ee4/types_tqdm-4.70.0.20260827-py3-none-any.whl", hash = "sha256:d6e02da8ec2bc11124e02d4bc84bd8b67a444f4c5decf544846897c8272c7023", size = 25163, upload-time = "2026-08-27T12:06:54.898Z" },
 ]
 
 [[package]]

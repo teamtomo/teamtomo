@@ -22,18 +22,6 @@ def simulation_box_center_zyx(
     return torch.tensor([center, center, center], device=device, dtype=dtype)
 
 
-def center_positions_in_simulation_box(
-    positions_zyx: torch.Tensor,
-    box_size: int,
-    pixel_size: float,
-) -> torch.Tensor:
-    """Centre atom positions at the simulation-box centre (ZYX, Angstroms)."""
-    box_center_zyx = positions_zyx.new_full(
-        (3,), simulation_box_center_angstroms(box_size, pixel_size)
-    )
-    return positions_zyx - positions_zyx.mean(dim=-2, keepdim=True) + box_center_zyx
-
-
 def crop_start_zyx(sim_box_size: int, box_shape: tuple[int, int, int]) -> torch.Tensor:
     """Crop offsets when a cubic simulation volume is cropped to ``box_shape``."""
     d, h, w = box_shape

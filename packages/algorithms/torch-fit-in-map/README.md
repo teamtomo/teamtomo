@@ -19,7 +19,7 @@ PDB/mmCIF files and the command-line tools live in the companion package
 Two alignment modes are supported:
 
 - **Map-to-map** — align one map onto another (`fit_map_in_map`).
-- **Atoms ↔ map** — simulate an electrostatic potential from a table of
+- **Atoms <-> map** — simulate an electrostatic potential from a table of
   atoms and align it against a map (`fit_structure_in_map` /
   `fit_map_in_structure`).
 
@@ -39,7 +39,7 @@ Two alignment modes are supported:
 pip install torch-fit-in-map
 ```
 
-The atoms↔map modes use the electrostatic-potential simulator
+The atoms <-> map modes use the electrostatic-potential simulator
 `torch-calculate-electrostatic-potential` (installed automatically as a
 dependency).
 
@@ -67,9 +67,9 @@ aligned = apply_alignment(mobile, result)
 If the two maps have different voxel sizes, resample first with
 `normalise_voxel_sizes(reference, mobile, ref_px, mob_px)`.
 
-### Atoms ↔ map alignment
+### Atoms <-> map alignment
 
-Atoms are passed as a DataFrame with columns `x`, `y`, `z` (Å) and `element` —
+Atoms are passed as a DataFrame with columns `x`, `y`, `z` (Angstroms) and `element` —
 exactly what [`mmdf`](https://github.com/teamtomo/mmdf) produces:
 
 ```python
@@ -157,7 +157,7 @@ All alignment functions return an `AlignmentResult`:
 | `rotation_matrix` | `(3, 3)` tensor | Rotation in zyx convention |
 | `translation_pixels` | `(3,)` tensor | Translation in zyx pixels |
 | `score` | `float` | Peak NCC score (higher is better, max 1.0) |
-| `translation_angstroms` | `(3,)` tensor or `None` | Translation in Å (when pixel size is provided) |
+| `translation_angstroms` | `(3,)` tensor or `None` | Translation in Angstroms (when pixel size is provided) |
 | `simulated_potential` | `(d, h, w)` tensor or `None` | Simulated potential when `save_simulated=True` |
 
 Use `apply_alignment(mobile, result)` to produce the aligned volume.

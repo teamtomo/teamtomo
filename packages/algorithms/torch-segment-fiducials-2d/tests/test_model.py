@@ -3,7 +3,7 @@ import warnings
 import torch
 
 warnings.filterwarnings(action="ignore", category=UserWarning, module="tiler")
-from torch_segment_fiducials_2d.model import ResidualUNet18
+from torch_segment_fiducials_2d.model import ResidualUNet18  # noqa: E402
 
 
 def test_model_instantiation():

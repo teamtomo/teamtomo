@@ -17,8 +17,8 @@ from .fsc import (
 )
 
 __all__ = [
+    "fourier_correlation",
     "fourier_ring_correlation",
     "fourier_shell_correlation",
-    "fourier_correlation",
     "fsc",
 ]

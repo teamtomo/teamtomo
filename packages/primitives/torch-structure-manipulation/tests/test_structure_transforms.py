@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import roma
 import torch
 
 from torch_structure_manipulation.structure_transforms import (
@@ -14,7 +15,6 @@ from torch_structure_manipulation.structure_transforms import (
     calculate_center_from_tensors,
     center_structure,
     center_structure_from_coords,
-    create_rotation_matrix_from_euler,
     df_to_atomzyx,
     find_atoms_in_ball,
     get_nucleic_acid_residues,
@@ -151,7 +151,7 @@ class TestRotation:
     def test_create_rotation_matrix_90_deg_z(self):
         """Test 90-degree rotation around z-axis."""
         angles = torch.tensor([0.0, 0.0, 90.0])  # ZYZ order
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         # 90 deg rotation around z: [[0, -1, 0], [1, 0, 0], [0, 0, 1]]
         expected = torch.tensor([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
         assert torch.allclose(R, expected, atol=1e-6)
@@ -160,7 +160,7 @@ class TestRotation:
         """Test rotation application to zyx coordinates."""
         # Create 90-degree rotation around z-axis
         angles = torch.tensor([0.0, 0.0, 90.0])
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         # Point at [0, 1, 0] in zyx (z=0, y=1, x=0)
         # In xyz: [0, 1, 0], after 90 deg z rotation: [-1, 0, 0]
         # Back to zyx: [0, 0, -1]
@@ -173,7 +173,7 @@ class TestRotation:
         """Test rotation application to xyz coordinates."""
         # Create 90-degree rotation around z-axis
         angles = torch.tensor([0.0, 0.0, 90.0])
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         # Point at [0, 1, 0] in xyz, after 90 deg z rotation: [-1, 0, 0]
         coords = torch.tensor([[0.0, 1.0, 0.0]])
         rotated = apply_rotation_to_coords(coords, R, zyx=False)
@@ -183,7 +183,7 @@ class TestRotation:
     def test_apply_rotation_with_center_zyx(self):
         """Test rotation around a center point with zyx coordinates."""
         angles = torch.tensor([0.0, 0.0, 90.0])
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         coords = torch.tensor([[1.0, 1.0, 0.0]])
         center_point = (1.0, 1.0, 0.0)  # Rotate around itself (z, y, x)
         rotated = apply_rotation_to_coords(
@@ -195,7 +195,7 @@ class TestRotation:
     def test_apply_rotation_with_center_xyz(self):
         """Test rotation around a center point with xyz coordinates."""
         angles = torch.tensor([0.0, 0.0, 90.0])
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         coords = torch.tensor([[1.0, 1.0, 0.0]])
         center_point = (1.0, 1.0, 0.0)  # Rotate around itself (x, y, z)
         rotated = apply_rotation_to_coords(
@@ -214,7 +214,7 @@ class TestRotation:
             }
         )
         angles = torch.tensor([0.0, 0.0, 90.0])
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         result = apply_rotation(df, R, zyx=True)
         # Check that coordinates changed
         original_coords = df[["z", "y", "x"]].values
@@ -231,7 +231,7 @@ class TestRotation:
             }
         )
         angles = torch.tensor([0.0, 0.0, 90.0])
-        R = create_rotation_matrix_from_euler(angles, order="ZYZ", degrees=True)
+        R = roma.euler_to_rotmat("ZYZ", angles, degrees=True)
         result = apply_rotation(df, R, zyx=False)
         # Check that coordinates changed
         original_coords = df[["x", "y", "z"]].values

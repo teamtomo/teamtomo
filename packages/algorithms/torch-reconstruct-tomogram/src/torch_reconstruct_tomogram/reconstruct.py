@@ -1,21 +1,29 @@
 """(sub-)tomogram reconstruction in pytorch."""
 
+from typing import Any
+
 import einops
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch_fourier_rescale import fourier_rescale_rfft_2d
 from torch_fourier_slice import insert_central_slices_rfft_3d_multichannel
 from torch_grid_utils import fftfreq_grid
-from torch_tilt_series import TiltSeries
-
-from torch_reconstruct_tomogram.io import (
-    _writable,
+from torch_tilt_series import (
+    TiltSeries,
     load_tilt_series_images,
-    normalize_on_central_crop,
+    preprocess_tilt_series_images,
 )
+
 from torch_reconstruct_tomogram.projection import _extract_particle_tilt_series
 
 _PAD_FACTOR = 2.0
+
+
+def _writable(data):
+    if isinstance(data, np.ndarray) and not data.flags.writeable:
+        data = data.copy()
+    return data
 
 
 def _reconstruct_subvolume(
@@ -108,12 +116,47 @@ def _reconstruct_subvolume(
     return patches
 
 
+def _resolve_images(
+    tilt_series: TiltSeries,
+    images: torch.Tensor | None,
+    preprocess: bool,
+    **preprocessing_kwargs: Any,
+) -> torch.Tensor:
+    """Load the tilt images for a reconstruction, or accept caller-held ones.
+
+    When `images` is None the images matching `tilt_series`' geometry are read
+    from `tilt_series.image_path`. A caller already holding pixel data passes
+    it directly instead - e.g. the even/odd halves of a dose-fractionated
+    movie, which need never touch disk.
+
+    `preprocess` applies either way: this replaces the loading step only, so
+    several image stacks passed through here are preprocessed identically.
+    """
+    if images is None:
+        resolved = load_tilt_series_images(tilt_series)
+    else:
+        n_tilts = len(tilt_series.tilt_angles)
+        if len(images) != n_tilts:
+            raise ValueError(
+                f"images has {len(images)} tilts but tilt_series geometry "
+                f"describes {n_tilts}. Supplied images must already be selected "
+                "and ordered to match tilt_series.tilt_angles; "
+                "tilt_series.image_indices is not applied to them."
+            )
+        resolved = torch.as_tensor(_writable(images)).float()
+    if preprocess:
+        resolved = preprocess_tilt_series_images(resolved, **preprocessing_kwargs)
+    return resolved
+
+
 def reconstruct_subvolume(
     tilt_series: TiltSeries,
     points_zyx: torch.Tensor,
     sidelength: int,
     output_pixel_spacing: float | None = None,
-    normalize: bool = True,
+    images: torch.Tensor | None = None,
+    preprocess: bool = True,
+    **preprocessing_kwargs: Any,
 ) -> torch.Tensor:
     """Reconstruct 3D patch(es) at location(s) in the sample.
 
@@ -127,12 +170,24 @@ def reconstruct_subvolume(
       Fourier-rescaled to this pixel size before 3D reconstruction, so local
       (subvolume) and global (tomogram) reconstructions can each target an
       arbitrary output pixel size independent of the raw data's
-    - normalize, if True (default), applies `normalize_on_central_crop` to the
-      loaded images before reconstruction
+    - images, if given, are used instead of reading `tilt_series.image_path`.
+      They must already be selected and ordered to match the geometry, i.e.
+      `(n_tilts, h, w)` lining up 1:1 with `tilt_series.tilt_angles`;
+      `tilt_series.image_indices` is not applied to them. `preprocess` still
+      applies, so several stacks passed this way are preprocessed identically.
+      The compute device is taken from `images.device`, so caller-supplied
+      data is left wherever the caller put it
+    - preprocess, if True (default), applies
+      `torch_tilt_series.preprocess_tilt_series_images` to the loaded images
+      before reconstruction - by default plane subtraction, a DC-excluding
+      bandpass with no low-pass, i.e. up to Nyquist, and central-crop
+      normalization
+    - `**preprocessing_kwargs` are forwarded to `preprocess_tilt_series_images`,
+      overriding any of its defaults (`low`, `high`, `falloff`,
+      `bandpass_padding`, `subtract_background`, `normalize`) - see that
+      function's docstring for details
     """
-    images = load_tilt_series_images(tilt_series)
-    if normalize:
-        images = normalize_on_central_crop(images)
+    images = _resolve_images(tilt_series, images, preprocess, **preprocessing_kwargs)
     return _reconstruct_subvolume(
         tilt_series,
         images,
@@ -162,13 +217,48 @@ def reconstruct_tomogram(
     sidelength: int,
     batch_size: int | None = None,
     output_pixel_spacing: float | None = None,
-    normalize: bool = True,
     blend_margin: int | None = None,
+    images: torch.Tensor | None = None,
+    preprocess: bool = True,
+    **preprocessing_kwargs: Any,
 ) -> torch.Tensor:
-    """Reconstruct the full tomogram by tiling reconstructed patches in 3D."""
-    images = load_tilt_series_images(tilt_series)
-    if normalize:
-        images = normalize_on_central_crop(images)
+    """Reconstruct the full tomogram by tiling reconstructed patches in 3D.
+
+    - tilt_series supplies the projection geometry, plus `image_path`/
+      `image_indices` used to load the raw images
+    - volume_shape is the (d, h, w) shape of the output tomogram, in voxels
+    - sidelength is the spacing between patch centers, in voxels; patches
+      are reconstructed on a grid tiling `volume_shape`
+    - batch_size, if set, reconstructs at most this many patches per chunk
+      (to bound memory usage); defaults to reconstructing all patches at once
+    - output_pixel_spacing is the voxel size of the output in Angstroms
+      (defaults to `tilt_series.pixel_spacing`)
+    - blend_margin is the extra margin, in voxels, added around each patch
+      (total reconstructed patch size is `sidelength + 2 * blend_margin`);
+      overlapping patches are cosine-tapered and blended together over this
+      margin to avoid seams at patch boundaries. Defaults to
+      `sidelength // 4`
+    - images, if given, are used instead of reading `tilt_series.image_path`.
+      They must already be selected and ordered to match the geometry, i.e.
+      `(n_tilts, h, w)` lining up 1:1 with `tilt_series.tilt_angles`;
+      `tilt_series.image_indices` is not applied to them. `preprocess` still
+      applies, so several stacks passed this way are preprocessed identically.
+      This is what makes half-tomogram reconstruction possible without
+      round-tripping the split stacks through disk: pass the same
+      `tilt_series` with each half's images to get two volumes sharing one
+      alignment. The compute device is taken from `images.device`, so
+      caller-supplied data is left wherever the caller put it
+    - preprocess, if True (default), applies
+      `torch_tilt_series.preprocess_tilt_series_images` to the loaded images
+      before reconstruction - by default plane subtraction, a DC-excluding
+      bandpass with no low-pass, i.e. up to Nyquist, and central-crop
+      normalization
+    - `**preprocessing_kwargs` are forwarded to `preprocess_tilt_series_images`,
+      overriding any of its defaults (`low`, `high`, `falloff`,
+      `bandpass_padding`, `subtract_background`, `normalize`) - see that
+      function's docstring for details
+    """
+    images = _resolve_images(tilt_series, images, preprocess, **preprocessing_kwargs)
 
     pixel_spacing = tilt_series.pixel_spacing  # raises if unset
     if output_pixel_spacing is None:

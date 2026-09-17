@@ -3,7 +3,7 @@ import warnings
 import torch
 
 warnings.filterwarnings(action="ignore", category=UserWarning, module="tiler")
-from torch_segment_fiducials_2d.utils import probabilities_to_mask
+from torch_segment_fiducials_2d.utils import probabilities_to_mask  # noqa: E402
 
 
 def test_probabilities_to_mask():

@@ -1,0 +1,144 @@
+# --- Pre-release preflight ---
+#
+# Run this before tagging a release. It answers, for every publishable package:
+#
+#   * is the project on PyPI, and is the target version still free?
+#   * does it declare a direct URL dependency? (PyPI rejects those)
+#   * does it build at the target version, with valid metadata?
+#   * does the resulting wheel install?
+#
+# A project that 404s on PyPI has never been published, and its first upload fails
+# with a 403 unless a pending publisher was registered on PyPI beforehand.
+# `skip-existing: true` does not mask a 403. That is the failure this exists to catch.
+#
+# Dispatch-only by design: it builds every package, so it is too heavy for every PR.
+
+name: Release Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Target version, without a leading v (e.g. 0.6.0rc1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Metadata and PyPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Same checks scripts/coordinated_release.sh runs locally, minus the ones that
+      # only make sense on a maintainer's clone.
+      - run: python3 .github/scripts/release_preflight.py "${{ inputs.version }}" --no-git
+
+  discover:
+    name: Discover packages
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.matrix.outputs.packages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: matrix
+        run: |
+          PACKAGES=$(python3 .github/scripts/get_all_packages.py --publishable \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "packages=$PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "$PACKAGES"
+
+  oidc:
+    name: Trusted publishing reachable
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Probe PyPI OIDC exchange
+        # Best-effort. Confirms this repo and workflow can exchange a GitHub OIDC
+        # token with PyPI at all. It cannot enumerate which projects the publisher
+        # covers, so the preflight job's per-package PyPI check remains the
+        # authoritative signal for whether a pending publisher is still needed.
+        continue-on-error: true
+        run: |
+          OIDC=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=pypi" | jq -r '.value // empty')
+          if [[ -z "$OIDC" ]]; then
+            echo "::warning::Could not obtain a GitHub OIDC token"
+            exit 1
+          fi
+          echo "::add-mask::$OIDC"
+
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -X POST https://pypi.org/_/oidc/mint-token \
+            -H 'Content-Type: application/json' \
+            -d "{\"token\": \"${OIDC}\"}")
+
+          if [[ "$STATUS" == "200" ]]; then
+            echo "- OIDC exchange with PyPI: **OK**" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::PyPI OIDC exchange returned HTTP $STATUS"
+            echo "- OIDC exchange with PyPI: **HTTP $STATUS** — check the trusted publisher config" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build:
+    name: Build ${{ matrix.package }}
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.packages) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Install dependencies
+        run: uv sync --package "${{ matrix.package }}" --group test --locked
+
+      - name: Build at target version
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ inputs.version }}
+        run: |
+          rm -rf dist
+          uv build --package "${{ matrix.package }}" --out-dir dist
+
+      - name: Check metadata
+        run: uvx twine check --strict dist/*
+
+      - name: Verify artifacts
+        run: python3 .github/scripts/check_artifacts.py --dist-dir dist --expect-version "${{ inputs.version }}"
+
+      - name: Install smoke test
+        # --no-deps keeps this about the artifact itself, not the dependency graph.
+        # Reading the version back through importlib.metadata uses the distribution
+        # name, so there is no need to guess the importable module name.
+        run: |
+          uv venv /tmp/smoke
+          VIRTUAL_ENV=/tmp/smoke uv pip install --no-deps dist/*.whl
+          /tmp/smoke/bin/python -c "
+          import importlib.metadata as metadata
+          installed = metadata.version('${{ matrix.package }}')
+          assert installed == '${{ inputs.version }}', f'installed {installed}'
+          print('${{ matrix.package }}', installed)
+          "
+
+  summary:
+    name: Preflight summary
+    needs: [preflight, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [[ "${{ needs.preflight.result }}" != "success" || "${{ needs.build.result }}" != "success" ]]; then
+            echo "::error::Preflight failed. Do not tag a release until every check passes."
+            exit 1
+          fi
+          echo "Preflight passed for every publishable package."

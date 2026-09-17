@@ -36,11 +36,12 @@ def rescale_2d_bicubic(
         image = einops.rearrange(image, "h w -> 1 1 h w")
         image_had_ndim_2 = True
 
+    resize_arg: Optional[Tuple[int, int] | int] = size
     if factor is not None:
         h, w = image.shape[-2:]
-        size = int(factor * min(h, w))
+        resize_arg = int(factor * min(h, w))
     rescaled_image = TF.resize(
-        image, size=size, interpolation=TF.InterpolationMode.BICUBIC
+        image, size=resize_arg, interpolation=TF.InterpolationMode.BICUBIC
     )
 
     if image_had_ndim_2:
@@ -67,11 +68,12 @@ def rescale_2d_nearest(
     rescaled_image: torch.Tensor
         `(b, c, h, w)` array of rescaled image(s).
     """
+    resize_arg: Optional[Tuple[int, int] | int] = size
     if factor is not None:
         h, w = image.shape[-2:]
-        size = int(factor * min(h, w))
+        resize_arg = int(factor * min(h, w))
     rescaled_image = TF.resize(
-        image, size=size, interpolation=TF.InterpolationMode.NEAREST
+        image, size=resize_arg, interpolation=TF.InterpolationMode.NEAREST
     )
     return rescaled_image
 
@@ -112,7 +114,8 @@ def estimate_background_std(image: torch.Tensor, mask: torch.Tensor):
     Parameters
     ----------
     image: torch.Tensor
-        `(h, w)` array containing dataset for which background standard deviation will be estimated.
+        `(h, w)` array containing dataset for which background standard deviation
+        will be estimated.
     mask: torch.Tensor of 0 or 1
         Binary mask separating foreground and background.
     Returns

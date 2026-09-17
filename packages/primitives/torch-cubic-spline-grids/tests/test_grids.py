@@ -13,9 +13,7 @@ from torch_cubic_spline_grids import (
 )
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d])
 def test_1d_grid_direct_instantiation(grid_cls):
     """Test grid instantiation with different types for resolution argument."""
     grid = grid_cls()
@@ -31,9 +29,7 @@ def test_1d_grid_direct_instantiation(grid_cls):
     assert grid.data.shape == (3, 5)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d])
 def test_1d_grid_instantiation_from_existing_data(grid_cls):
     """Test grid instantiation from existing data."""
     grid = grid_cls.from_grid_data(data=torch.zeros(3, 5))
@@ -43,21 +39,17 @@ def test_1d_grid_instantiation_from_existing_data(grid_cls):
     assert isinstance(grid._data, torch.nn.Parameter)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d])
 def test_calling_1d_grid(grid_cls):
     """Test calling 1d grid."""
     grid = grid_cls()
-    expected = torch.tensor([0.])
+    expected = torch.tensor([0.0])
     for arg in (0.5, [0.5], torch.tensor([0.5])):
         result = grid(arg)
         assert torch.allclose(result, expected)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d])
 def test_1d_grid_with_singleton_dimension(grid_cls):
     """Test that a 2D grid with a singleton dimension can be used."""
     # singleton in width dim
@@ -66,9 +58,7 @@ def test_1d_grid_with_singleton_dimension(grid_cls):
     assert torch.allclose(result, torch.tensor([0.0]))
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid1d, CubicCatmullRomGrid1d])
 def test_calling_1d_grid_with_stacked_coords(grid_cls):
     """Test calling a 1d grid with a multidimensional array of coordinates."""
     grid = grid_cls(resolution=1)
@@ -101,9 +91,7 @@ def test_grid_device():
     assert grid.data.device == torch.device('meta')
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
 def test_2d_grid_direct_instantiation(grid_cls):
     grid = grid_cls()
     assert isinstance(grid, grid_cls)
@@ -114,9 +102,7 @@ def test_2d_grid_direct_instantiation(grid_cls):
     assert grid.data.shape == (3, 5, 4)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
 def test_2d_grid_instantiation_from_existing_data(grid_cls):
     """Test grid instantiation from existing data."""
     grid = grid_cls.from_grid_data(data=torch.zeros(3, 5, 4))
@@ -126,21 +112,17 @@ def test_2d_grid_instantiation_from_existing_data(grid_cls):
     assert isinstance(grid._data, torch.nn.Parameter)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
 def test_calling_2d_grid(grid_cls):
     """Test calling 2d grid."""
     grid = grid_cls()
-    expected = torch.tensor([0., 0.])
+    expected = torch.tensor([0.0, 0.0])
     for arg in ([0.5, 0.5], torch.tensor([0.5, 0.5])):
         result = grid(arg)
         assert torch.allclose(result, expected)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
 def test_2d_grid_with_singleton_dimension(grid_cls):
     """Test that a 2D grid with a singleton dimension can be used."""
     # singleton in width dim
@@ -154,9 +136,7 @@ def test_2d_grid_with_singleton_dimension(grid_cls):
     assert torch.allclose(result, torch.tensor([0.0, 0.0]))
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
 def test_calling_2d_grid_with_stacked_coordinates(grid_cls):
     """Test calling a 2D grid with stacked coordinates."""
     grid = grid_cls(resolution=(2, 2), n_channels=1)
@@ -168,9 +148,7 @@ def test_calling_2d_grid_with_stacked_coordinates(grid_cls):
     assert result.shape == (5, 5, 2)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d])
 def test_3d_grid_direct_instantiation(grid_cls):
     grid = grid_cls()
     assert isinstance(grid, grid_cls)
@@ -181,9 +159,7 @@ def test_3d_grid_direct_instantiation(grid_cls):
     assert grid.data.shape == (2, 5, 4, 3)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d])
 def test_3d_grid_instantiation_from_existing_data(grid_cls):
     """Test grid instantiation from existing data."""
     grid = grid_cls.from_grid_data(data=torch.zeros(2, 5, 4, 3))
@@ -193,21 +169,17 @@ def test_3d_grid_instantiation_from_existing_data(grid_cls):
     assert isinstance(grid._data, torch.nn.Parameter)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d])
 def test_calling_3d_grid(grid_cls):
     """Test calling 3d grid."""
     grid = grid_cls()
-    expected = torch.tensor([0., 0., 0.])
+    expected = torch.tensor([0.0, 0.0, 0.0])
     for arg in ([0.5, 0.5, 0.5], torch.tensor([0.5, 0.5, 0.5])):
         result = grid(arg)
         assert torch.allclose(result, expected)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d])
 def test_calling_3d_grid_with_stacked_coordinates(grid_cls):
     """Test calling 3d grid with stacked coordinates."""
     grid = grid_cls()
@@ -216,9 +188,7 @@ def test_calling_3d_grid_with_stacked_coordinates(grid_cls):
     assert result.shape == (d, h, w, 1)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid3d, CubicCatmullRomGrid3d])
 def test_3d_grid_with_singleton_dimension(grid_cls):
     """Test that a 3D grid with a singleton dimension can be used."""
     # singleton in width dim
@@ -237,9 +207,7 @@ def test_3d_grid_with_singleton_dimension(grid_cls):
     assert torch.allclose(result, torch.tensor([0.0, 0.0, 0.0]))
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d])
 def test_4d_grid_direct_instantiation(grid_cls):
     grid = grid_cls()
     assert isinstance(grid, grid_cls)
@@ -250,9 +218,7 @@ def test_4d_grid_direct_instantiation(grid_cls):
     assert grid.data.shape == (2, 6, 5, 4, 3)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d])
 def test_4d_grid_instantiation_from_existing_data(grid_cls):
     """Test grid instantiation from existing data."""
     grid = grid_cls.from_grid_data(data=torch.zeros(2, 6, 5, 4, 3))
@@ -262,21 +228,17 @@ def test_4d_grid_instantiation_from_existing_data(grid_cls):
     assert isinstance(grid._data, torch.nn.Parameter)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d])
 def test_calling_4d_grid(grid_cls):
     """Test calling 4d grid."""
     grid = grid_cls()
-    expected = torch.tensor([0., 0., 0., 0.])
+    expected = torch.tensor([0.0, 0.0, 0.0, 0.0])
     for arg in ([0.5, 0.5, 0.5, 0.5], torch.tensor([0.5, 0.5, 0.5, 0.5])):
         result = grid(arg)
         assert torch.allclose(result, expected)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d])
 def test_calling_4d_grid_with_stacked_coordinates(grid_cls):
     """Test calling 3d grid with stacked coordinates."""
     grid = grid_cls()
@@ -285,9 +247,7 @@ def test_calling_4d_grid_with_stacked_coordinates(grid_cls):
     assert result.shape == (t, d, h, w, 1)
 
 
-@pytest.mark.parametrize(
-    'grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d]
-)
+@pytest.mark.parametrize('grid_cls', [CubicBSplineGrid4d, CubicCatmullRomGrid4d])
 def test_4d_grid_with_singleton_dimension(grid_cls):
     """Test that a 4D grid with a singleton dimension can be used."""
     # singleton in width dim

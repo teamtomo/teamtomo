@@ -60,6 +60,30 @@ uv sync --all-extras --all-packages
 
 Note that the `--all-extras` and `--all-packages` flags install the development and testing requirements for all sub-packages. More granular install options are possible, if your system requires it.
 
+#### Before opening a pull request
+
+CI checks two things beyond the test suite, and a PR won't pass until both are satisfied:
+
+- **Formatting, linting, and type checks.** These are defined in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) (ruff, ruff-format, mypy, `validate-pyproject`, `typos`). Run them locally with:
+
+  ```bash
+  uv run --group dev pre-commit run --all-files
+  ```
+
+  Or install them as a git hook so they run automatically on every commit:
+
+  ```bash
+  uv run --group dev pre-commit install
+  ```
+
+- **A lockfile in sync with `pyproject.toml`.** If you added, removed, or changed a dependency in any package's `pyproject.toml`, regenerate the lockfile before committing:
+
+  ```bash
+  uv lock
+  ```
+
+  CI runs `uv sync --locked`, which fails outright if `uv.lock` doesn't match what the `pyproject.toml` files declare.
+
 ### Editable install for downstream development
 
 For developing programs atop TeamTomo infrastructure, it's useful to have your program _and_ TeamTomo both installed in editable mode in the same environment. Assuming you've cloned the `teamtomo/teamtomo` repo and your program uses `uv` for packaging, add the following to your packages `pyproject.toml` file:

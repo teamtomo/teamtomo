@@ -316,9 +316,7 @@ class TestEstimateMotionCrossCorrelationPatches:
             frame_fft = torch.fft.rfftn(frame_patches * mask, dim=(-2, -1))
             frame_fft = frame_fft * combined_filter
 
-            cross_corr = torch.fft.irfftn(
-                torch.conj(ref_fft) * frame_fft, s=(ph, pw)
-            )
+            cross_corr = torch.fft.irfftn(torch.conj(ref_fft) * frame_fft, s=(ph, pw))
             cross_corr_flat = cross_corr.view(gh * gw, ph * pw)
             peak_indices = torch.argmax(cross_corr_flat, dim=1)
             peak_y, peak_x = _apply_sub_pixel_refinement(

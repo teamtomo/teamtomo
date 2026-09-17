@@ -14,7 +14,9 @@ def _rfft_volume(n: int = 16, n_channels: int | None = None) -> torch.Tensor:
     """A volume in the fftshifted rfft layout the extraction functions expect."""
     shape = (n, n, n) if n_channels is None else (n_channels, n, n, n)
     volume = torch.rand(shape)
-    dft = torch.fft.rfftn(torch.fft.ifftshift(volume, dim=(-3, -2, -1)), dim=(-3, -2, -1))
+    dft = torch.fft.rfftn(
+        torch.fft.ifftshift(volume, dim=(-3, -2, -1)), dim=(-3, -2, -1)
+    )
     return torch.fft.fftshift(dft, dim=(-3, -2))
 
 
@@ -38,8 +40,10 @@ def test_extraction_does_not_modify_rotation_matrices(extract_fn, n_channels):
     rotation_matrices[0, 0, 1] = 1e-12
     expected = rotation_matrices.clone()
 
-    extract_fn(volume_rfft=_rfft_volume(n_channels=n_channels),
-               rotation_matrices=rotation_matrices)
+    extract_fn(
+        volume_rfft=_rfft_volume(n_channels=n_channels),
+        rotation_matrices=rotation_matrices,
+    )
 
     assert torch.equal(rotation_matrices, expected)
 
@@ -60,8 +64,10 @@ def test_extraction_accepts_rotation_matrices_requiring_grad(extract_fn, n_chann
     rotation_matrices = torch.eye(3).expand(4, 3, 3).contiguous().clone()
     rotation_matrices.requires_grad_(True)
 
-    slices = extract_fn(volume_rfft=_rfft_volume(n_channels=n_channels),
-                        rotation_matrices=rotation_matrices)
+    slices = extract_fn(
+        volume_rfft=_rfft_volume(n_channels=n_channels),
+        rotation_matrices=rotation_matrices,
+    )
     slices.abs().sum().backward()
 
     assert rotation_matrices.grad is not None

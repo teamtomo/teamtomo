@@ -130,8 +130,20 @@ def power_spectral_density(
         power_spectrum = power_spectrum**2
 
     # Construct FFT frequency grid
+    if len(real_space_shape) == 2:
+        grid_shape: tuple[int, int] | tuple[int, int, int] = (
+            real_space_shape[0],
+            real_space_shape[1],
+        )
+    elif len(real_space_shape) == 3:
+        grid_shape = (real_space_shape[0], real_space_shape[1], real_space_shape[2])
+    else:
+        raise ValueError(
+            f"power_spectral_density only supports 2 or 3 dimensions, got "
+            f"dim={dim} (resolves to {len(real_space_shape)} dimensions)"
+        )
     freq_grid = fftfreq_grid(
-        image_shape=real_space_shape,
+        image_shape=grid_shape,
         rfft=rfft,
         fftshift=fftshift,
         norm=True,
@@ -265,12 +277,20 @@ def whitening_filter(
     if output_fftshift is None:
         output_fftshift = fftshift
 
-    # real_space_shape = real_space_shape_from_dft_shape(
-    #     dft_shape=output_shape, rfft=output_rfft
-    # )
-
+    if len(output_shape) == 2:
+        output_grid_shape: tuple[int, int] | tuple[int, int, int] = (
+            output_shape[0],
+            output_shape[1],
+        )
+    elif len(output_shape) == 3:
+        output_grid_shape = (output_shape[0], output_shape[1], output_shape[2])
+    else:
+        raise ValueError(
+            f"whitening_filter only supports 2 or 3 dimensional output_shape, got "
+            f"{output_shape}"
+        )
     freq_grid = fftfreq_grid(
-        image_shape=output_shape,
+        image_shape=output_grid_shape,
         rfft=output_rfft,
         fftshift=output_fftshift,
         norm=True,

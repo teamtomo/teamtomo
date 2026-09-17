@@ -32,7 +32,7 @@ class ResidualUNet18(L.LightningModule):
         self.save_hyperparameters()
 
         self.validation_dice_score = 0
-        self.validation_step_outputs = []
+        self.validation_step_outputs: list[torch.Tensor] = []
 
         self.base_layer = nn.Sequential(
             nn.Conv2d(

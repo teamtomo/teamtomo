@@ -17,7 +17,8 @@ class PotentialSimulatorConfig(BaseModelTeamTomo):
         Peng parameter model passed to ``potential_from_structure_3d``.
     annotate_bonding : bool
         When ``True`` (or when ``scattering_factors`` is ``peng_bonded``), build
-        the structure with :meth:`~torch_structure_manipulation.AtomicStructure.from_annotated_dataframe`
+        the structure with
+        :meth:`~torch_structure_manipulation.AtomicStructure.from_annotated_dataframe`
         so bonded environments are available. Requires ``chain``, ``residue_id``,
         ``residue``, and ``atom`` columns in addition to coordinates.
     include_hydrogens : bool

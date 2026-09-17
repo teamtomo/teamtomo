@@ -36,6 +36,7 @@ dependencies = [
     "torch-fit-in-map",
     "torch-simulate-image",
     "torch-reconstruct-tomogram",
+    "torch-ctf-estimation",
     "teamtomo-basemodel",
     "torch-calculate-electrostatic-potential",
     "torch-structure-manipulation",
@@ -72,6 +73,7 @@ torch-local-resolution = { workspace = true }
 torch-fit-in-map = { workspace = true }
 torch-simulate-image = { workspace = true }
 torch-reconstruct-tomogram = { workspace = true }
+torch-ctf-estimation = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 torch-calculate-electrostatic-potential = { workspace = true }
 torch-structure-manipulation = { workspace = true }
@@ -120,6 +122,10 @@ dev = [
     "pre-commit",
     "rich",
     "ruff",
+]
+examples = [
+    "ipykernel",
+    "matplotlib",
 ]
 
 [tool.pytest.ini_options]

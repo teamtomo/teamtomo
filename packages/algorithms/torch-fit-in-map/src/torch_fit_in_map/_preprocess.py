@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import torch
+import torch.nn.functional as F
 from torch_fourier_rescale import fourier_rescale_3d
 from torch_grid_utils import fftfreq_grid
 
@@ -69,8 +70,6 @@ def crop_or_pad_to_shape(
     torch.Tensor
         Tensor with last three dimensions equal to *target_shape*.
     """
-    import torch.nn.functional as F
-
     # --- crop ---
     slices: list[slice] = [slice(None)] * (volume.ndim - 3)
     for current, target in zip(volume.shape[-3:], target_shape, strict=True):

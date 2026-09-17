@@ -4,7 +4,7 @@ from einops import rearrange
 import warnings
 
 warnings.filterwarnings(action="ignore", category=UserWarning, module="tiler")
-from torch_segment_fiducials_2d.model.dice import dice_coefficient
+from torch_segment_fiducials_2d.model.dice import dice_coefficient  # noqa: E402
 
 
 def test_dice_coefficient():

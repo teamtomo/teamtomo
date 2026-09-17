@@ -16,10 +16,13 @@ from .base_s2_grid import (
     healpix_sectored_base_grid,
     uniform_base_grid,
 )
+from .hierarchical_s2_grid import GridLevel, HierarchicalS2Grid
 from .local_so3_sampling import get_local_high_resolution_angles, get_roll_angles
 from .uniform_so3_sampling import get_sectored_euler_angles, get_uniform_euler_angles
 
 __all__ = [
+    "GridLevel",
+    "HierarchicalS2Grid",
     "SymmetryRanges",
     "cartesian_base_grid",
     "get_local_high_resolution_angles",

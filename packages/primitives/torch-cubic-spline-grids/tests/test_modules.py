@@ -11,7 +11,7 @@ def test_grid_class_instantiation():
         CubicBSplineGrid1d,
         CubicBSplineGrid2d,
         CubicBSplineGrid3d,
-        CubicBSplineGrid4d
+        CubicBSplineGrid4d,
     ]
     for grid_class in grid_classes:
         instance = grid_class()

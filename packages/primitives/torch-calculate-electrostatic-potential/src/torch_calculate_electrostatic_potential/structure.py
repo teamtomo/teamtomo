@@ -29,6 +29,7 @@ def potential_from_structure_3d(
     bonded_fallback: BondedFallback = "elemental",
     per_voxel_averaging: bool = True,
     batch_size: int = 4096,
+    verbose: bool = False,
 ) -> Tensor:
     """Calculate a 3D potential in volts from an ``AtomicStructure``.
 
@@ -51,6 +52,8 @@ def potential_from_structure_3d(
         Average over each voxel instead of sampling its center.
     batch_size : int
         Number of atoms evaluated per chunk.
+    verbose : bool
+        Show atom-chunk progress.
 
     Returns
     -------
@@ -69,6 +72,7 @@ def potential_from_structure_3d(
         atom_occupancies=structure.occupancies,
         per_voxel_averaging=per_voxel_averaging,
         batch_size=batch_size,
+        verbose=verbose,
     )
 
 
@@ -80,6 +84,7 @@ def potential_from_structure_2d(
     bonded_fallback: BondedFallback = "elemental",
     per_voxel_averaging: bool = True,
     batch_size: int = 4096,
+    verbose: bool = False,
 ) -> Tensor:
     """Calculate a projected 2D potential in volt-Angstroms.
 
@@ -102,6 +107,8 @@ def potential_from_structure_2d(
         Average over each pixel instead of sampling its center.
     batch_size : int
         Number of atoms evaluated per chunk.
+    verbose : bool
+        Show atom-chunk progress.
 
     Returns
     -------
@@ -120,6 +127,7 @@ def potential_from_structure_2d(
         atom_occupancies=structure.occupancies,
         per_voxel_averaging=per_voxel_averaging,
         batch_size=batch_size,
+        verbose=verbose,
     )
 
 

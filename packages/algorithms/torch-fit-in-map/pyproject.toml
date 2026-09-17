@@ -63,7 +63,7 @@ repository = "https://github.com/teamtomo/teamtomo"
 
 # https://peps.python.org/pep-0735/
 [dependency-groups]
-test = ["pytest", "pytest-cov", "scipy", "mmdf"]
+test = ["pytest", "pytest-cov", "scipy", "mmdf", "mrcfile"]
 dev = [
     { include-group = "test" },
     "ipython",
@@ -116,6 +116,8 @@ disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
 
+# These workspace packages ship without a py.typed marker and pandas-stubs is
+# not installed, so mypy cannot read their types.
 [[tool.mypy.overrides]]
 module = [
     "pandas",
@@ -154,3 +156,6 @@ exclude_lines = [
 
 [tool.coverage.run]
 source = ["torch_fit_in_map"]
+
+[tool.typos.default.extend-words]
+iy = "iy"

@@ -72,7 +72,7 @@ def critical_exposure_bfactor(fft_freq: torch.Tensor, bfactor: float) -> torch.T
 
 
 def _critical_exposure_grid(
-    image_shape: tuple[int, int],
+    image_shape: tuple[int, int] | tuple[int, int, int],
     pixel_size: float,
     crit_exposure_bfactor: int | float = -1,
     rfft: bool = True,

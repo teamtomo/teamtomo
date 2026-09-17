@@ -148,7 +148,12 @@ def prepare_halfmaps_for_fft(
     map2: torch.Tensor,
     pad: int = 0,
     device: str | torch.device = "cpu",
-) -> tuple[torch.Tensor, torch.Tensor, tuple, tuple]:
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    tuple[int, int] | tuple[int, int, int],
+    tuple[slice, ...],
+]:
     """Pad to FFT-friendly size and compute ``rfftn`` on both half-maps.
 
     Parameters
@@ -190,10 +195,17 @@ def prepare_halfmaps_for_fft(
     # torch_grid_utils.next_fft_size for efficient rFFTn. fft_crop maps irFFT back
     # to the radius-padded region only.
     padded_shape = tuple(s + 2 * pad for s in map1.shape)
-    padded_image_shape = tuple(next_fft_size(s) for s in padded_shape)
+    fft_sizes = tuple(next_fft_size(s) for s in padded_shape)
+    # map1.ndim was validated to be 2 or 3 above, so padded_shape/fft_sizes always
+    # have that many elements.
+    padded_image_shape: tuple[int, int] | tuple[int, int, int]
+    if len(fft_sizes) == 2:
+        padded_image_shape = (fft_sizes[0], fft_sizes[1])
+    else:
+        padded_image_shape = (fft_sizes[0], fft_sizes[1], fft_sizes[2])
     fft_crop = tuple(
         slice((fft_s - user_s) // 2, (fft_s - user_s) // 2 + user_s)
-        for fft_s, user_s in zip(padded_image_shape, padded_shape, strict=False)
+        for fft_s, user_s in zip(padded_image_shape, padded_shape, strict=True)
     )
 
     # Pad to padded_shape, then zero-pad to padded_image_shape
@@ -241,7 +253,7 @@ def calculate_shells(
 def apply_bandpass_and_invert(
     fft_map: torch.Tensor,
     bandpass: torch.Tensor,
-    padded_image_shape: tuple,
+    padded_image_shape: tuple[int, int] | tuple[int, int, int],
     fft_crop: tuple,
 ) -> torch.Tensor:
     """Apply a bandpass filter to an rfftn-transformed map and inverse-transform.

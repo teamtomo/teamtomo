@@ -126,8 +126,19 @@ def fourier_correlation(
         raise ValueError("fft_mask must have same shape as fft output.")
 
     # Compute frequency grid and prepare FFT data
+    if len(image_shape) == 2:
+        grid_shape: tuple[int, int] | tuple[int, int, int] = (
+            image_shape[0],
+            image_shape[1],
+        )
+    elif len(image_shape) == 3:
+        grid_shape = (image_shape[0], image_shape[1], image_shape[2])
+    else:
+        raise ValueError(
+            f"fourier_correlation only supports 2D or 3D image_shape, got {image_shape}"
+        )
     frequency_grid = fftfreq_grid(
-        image_shape=image_shape,
+        image_shape=grid_shape,
         rfft=rfft,
         fftshift=False,
         norm=True,

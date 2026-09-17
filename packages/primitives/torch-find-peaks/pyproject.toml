@@ -162,3 +162,6 @@ source = ["torch_peaks"]
 # (files that are in the repo but shouldn't go in the package)
 [tool.check-manifest]
 ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]
+
+[tool.typos.default.extend-words]
+gaus = "gaus"

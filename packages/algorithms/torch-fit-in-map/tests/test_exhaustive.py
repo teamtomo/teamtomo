@@ -2,11 +2,18 @@
 
 import pytest
 import torch
+from torch_so3 import get_symmetry_ranges, get_uniform_euler_angles
 
-from torch_fit_in_map import ExhaustiveSearchConfig, exhaustive_search
+from torch_fit_in_map import (
+    ExhaustiveSearchConfig,
+    GradientRefinementConfig,
+    exhaustive_search,
+    fit_map_in_map,
+)
 from torch_fit_in_map._exhaustive import (
     _argmax_to_shift,
     _euler_zyz_to_4x4_zyx,
+    _exhaustive_topk,
     _parse_symmetry,
 )
 
@@ -49,7 +56,7 @@ def test_argmax_to_shift_positive():
 def test_argmax_to_shift_wrapped():
     """Index above half-size should give a negative (wrapped) shift."""
     shape = (16, 16, 16)
-    # Index 14 in a size-16 dim → 14 - 16 = -2
+    # Index 14 in a size-16 dim -> 14 - 16 = -2
     flat = 14 * 16 * 16
     t = _argmax_to_shift(torch.tensor(flat), shape)
     assert t[0] == pytest.approx(-2.0)
@@ -89,8 +96,6 @@ def test_parse_symmetry_invalid():
 
 def test_symmetry_reduces_search_space():
     """C4 symmetry should sample fewer orientations than C1."""
-    from torch_so3 import get_symmetry_ranges, get_uniform_euler_angles
-
     step = 15.0
     r_c1 = get_symmetry_ranges("C", 1)
     r_c4 = get_symmetry_ranges("C", 4)
@@ -113,8 +118,6 @@ def test_exhaustive_search_with_symmetry():
 
 def test_exhaustive_topk_returns_k_results():
     """_exhaustive_topk with n_start=3 should return 3 results sorted best-first."""
-    from torch_fit_in_map._exhaustive import _exhaustive_topk
-
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)
     results = _exhaustive_topk(ref, ref, config=cfg, mask=None, verbose=False)
@@ -125,8 +128,6 @@ def test_exhaustive_topk_returns_k_results():
 
 def test_fit_map_in_map_multistart():
     """Multiple starts should return the best NCC-scored refined result."""
-    from torch_fit_in_map import GradientRefinementConfig, fit_map_in_map
-
     ref = torch.rand(20, 20, 20)
     cfg = ExhaustiveSearchConfig(angular_step_degrees=30.0, n_start=3)
     result = fit_map_in_map(

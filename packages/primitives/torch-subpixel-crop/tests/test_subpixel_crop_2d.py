@@ -1,6 +1,6 @@
-import torch
 import einops
 import pytest
+import torch
 
 from torch_subpixel_crop import subpixel_crop_2d
 
@@ -10,9 +10,7 @@ def test_subpixel_crop_single_2d():
     image[4:6, 4:6] = 1
 
     cropped_image = subpixel_crop_2d(
-        image=image,
-        positions=torch.tensor([5, 5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5, 5]).float(), sidelength=4
     )
     assert cropped_image.shape == (4, 4)
 
@@ -26,9 +24,7 @@ def test_subpixel_crop_single_2d_return_rfft():
     image[4:6, 4:6] = 1
 
     cropped_image_real = subpixel_crop_2d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5.5, 5.5]).float(), sidelength=4
     )
 
     cropped_image_rfft = subpixel_crop_2d(
@@ -47,9 +43,7 @@ def test_subpixel_crop_single_2d_return_rfft_decenter():
     image[4:6, 4:6] = 1
 
     cropped_image_real = subpixel_crop_2d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5.5, 5.5]).float(), sidelength=4
     )
 
     cropped_image_decenter = subpixel_crop_2d(
@@ -59,12 +53,8 @@ def test_subpixel_crop_single_2d_return_rfft_decenter():
         return_rfft=True,
         decenter=True,
     )
-    cropped_image_decenter = torch.fft.irfftn(
-        cropped_image_decenter, s=(4, 4)
-    )
-    cropped_image_decenter = (
-        torch.fft.fftshift(cropped_image_decenter, dim=(-2, -1))
-    )
+    cropped_image_decenter = torch.fft.irfftn(cropped_image_decenter, s=(4, 4))
+    cropped_image_decenter = torch.fft.fftshift(cropped_image_decenter, dim=(-2, -1))
     assert torch.allclose(cropped_image_decenter, cropped_image_real)
 
 
@@ -73,9 +63,7 @@ def test_subpixel_crop_single_2d_return_rfft_decenter_odd_sidelength():
     image[4:6, 4:6] = 1
 
     cropped_image_real = subpixel_crop_2d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5]).float(),
-        sidelength=5
+        image=image, positions=torch.tensor([5.5, 5.5]).float(), sidelength=5
     )
 
     cropped_image_decenter = subpixel_crop_2d(
@@ -85,14 +73,10 @@ def test_subpixel_crop_single_2d_return_rfft_decenter_odd_sidelength():
         return_rfft=True,
         decenter=True,
     )
-    cropped_image_decenter = torch.fft.irfftn(
-        cropped_image_decenter, s=(5, 5)
-    )
+    cropped_image_decenter = torch.fft.irfftn(cropped_image_decenter, s=(5, 5))
     # for odd sidelengths, fftshift and ifftshift differ by one sample;
     # decenter shifts by +(sidelength // 2), so ifftshift is the correct undo
-    cropped_image_decenter = (
-        torch.fft.ifftshift(cropped_image_decenter, dim=(-2, -1))
-    )
+    cropped_image_decenter = torch.fft.ifftshift(cropped_image_decenter, dim=(-2, -1))
     assert torch.allclose(cropped_image_decenter, cropped_image_real, atol=1e-5)
 
 
@@ -101,9 +85,7 @@ def test_subpixel_crop_2d_with_fourier_shift():
     image[4:6, 4:6] = 1
 
     cropped_image = subpixel_crop_2d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5.5, 5.5]).float(), sidelength=4
     )
     assert cropped_image.shape == (4, 4)
     # extracting an image at [5, 5] (see test above), results in:
@@ -136,9 +118,7 @@ def test_subpixel_crop_multi_2d():
     image[4:6, 4:6] = 1
 
     cropped_image = subpixel_crop_2d(
-        image=image,
-        positions=torch.tensor([[4, 4], [5, 5]]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([[4, 4], [5, 5]]).float(), sidelength=4
     )
     assert cropped_image.shape == (2, 4, 4)
 
@@ -154,28 +134,19 @@ def test_subpixel_crop_multi_2d():
 def test_subpixel_crop_multi_batch_2d():
     batch = 3
     positions = einops.repeat(
-        torch.tensor([[4, 4], [5, 5]]).float(),
-        'n yx -> n b yx', b=batch
+        torch.tensor([[4, 4], [5, 5]]).float(), "n yx -> n b yx", b=batch
     ).contiguous()  # clone so that we don't get a view
     positions[0, 0, 0] = 1  # change one of them to test if it works
 
     image = torch.zeros((2, 10, 10))
     with pytest.raises(ValueError):
         # mismatch in image and position batch should raise error
-        cropped_image = subpixel_crop_2d(
-            image=image,
-            positions=positions,
-            sidelength=4
-        )
+        cropped_image = subpixel_crop_2d(image=image, positions=positions, sidelength=4)
 
     image = torch.zeros((batch, 10, 10))
     image[..., 4:6, 4:6] = 1
 
-    cropped_image = subpixel_crop_2d(
-        image=image,
-        positions=positions,
-        sidelength=4
-    )
+    cropped_image = subpixel_crop_2d(image=image, positions=positions, sidelength=4)
     assert cropped_image.shape == (2, 3, 4, 4)
 
     expected_0 = torch.zeros((3, 4, 4))

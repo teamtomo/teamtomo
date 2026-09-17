@@ -1,0 +1,53 @@
+# --- CITATION.cff author refresh ---
+
+name: Update CITATION authors
+
+on:
+  schedule:
+    - cron: "0 3 1 * *" # 03:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: Refresh author list
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      - name: Update CITATION.cff
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # click and pyyaml are named explicitly: neither is declared in any
+        # dependency group, so previously this only worked because they happened to
+        # resolve transitively into the root environment.
+        run: uv run --with click --with pyyaml python scripts/update_citation_authors.py
+
+      - name: Open pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          add-paths: CITATION.cff
+          branch: chore/update-citation-authors
+          delete-branch: true
+          title: "chore: refresh CITATION.cff author list"
+          commit-message: "chore: refresh CITATION.cff author list"
+          body: |
+            Automated refresh of the `CITATION.cff` author list from the GitHub
+            contributors API.
+
+            Please check for duplicated people before merging — the script's own
+            header documents the cases it cannot resolve (a contributor changing
+            their display name, adding an ORCID later, or moving from a bare
+            username to real name fields all create a second entry).
+
+            Note the `version:` field is carried forward unchanged by the script and
+            has drifted from the released version; update it here if appropriate.

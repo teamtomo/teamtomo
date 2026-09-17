@@ -1,7 +1,10 @@
 import pytest
 import torch
 
-from torch_calculate_electrostatic_potential import GridConfig, default_sublattice_radius
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    default_sublattice_radius,
+)
 
 
 class TestGridConfigConstruction:

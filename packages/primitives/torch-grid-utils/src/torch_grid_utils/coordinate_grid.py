@@ -1,3 +1,5 @@
+"""Coordinate grids for images and volumes."""
+
 from typing import Sequence
 
 import einops
@@ -36,23 +38,21 @@ def coordinate_grid(
         else `(*image_shape, )`.
     """
     grid = torch.tensor(
-        np.indices(image_shape),
-        device=device,
-        dtype=torch.float32
+        np.indices(image_shape), device=device, dtype=torch.float32
     )  # (coordinates, *image_shape)
-    grid = einops.rearrange(grid, 'coords ... -> ... coords')
+    grid = einops.rearrange(grid, "coords ... -> ... coords")
     ndim = len(image_shape)
     if center is not None:
         center = torch.as_tensor(center, dtype=grid.dtype, device=grid.device)
         center = torch.atleast_1d(center)
-        center, ps = einops.pack([center], pattern='* coords')
-        ones = ' '.join('1' * ndim)
-        axis_ids = ' '.join(_unique_characters(ndim))
+        center, ps = einops.pack([center], pattern="* coords")
+        ones = " ".join("1" * ndim)
+        axis_ids = " ".join(_unique_characters(ndim))
         center = einops.rearrange(center, f"b coords -> b {ones} coords")
         grid = grid - center
-        [grid] = einops.unpack(grid, packed_shapes=ps, pattern=f'* {axis_ids} coords')
+        [grid] = einops.unpack(grid, packed_shapes=ps, pattern=f"* {axis_ids} coords")
     if norm is True:
-        grid = einops.reduce(grid ** 2, '... coords -> ...', reduction='sum') ** 0.5
+        grid = einops.reduce(grid**2, "... coords -> ...", reduction="sum") ** 0.5
     return grid
 
 
@@ -65,11 +65,10 @@ def image_center(
     image_shape: tuple[int, ...],
     device: torch.device | None = None,
 ) -> torch.LongTensor:
+    """Get the coordinates of the center pixel/voxel of an image."""
     from torch_grid_utils.fftfreq_grid import dft_center
+
     center = dft_center(
-        image_shape=image_shape,
-        rfft=False,
-        fftshift=True,
-        device=device
+        image_shape=image_shape, rfft=False, fftshift=True, device=device
     )
     return center

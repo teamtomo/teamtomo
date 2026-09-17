@@ -2,7 +2,24 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    default_sublattice_radius,
+    potential_from_structure_3d,
+)
+from torch_structure_manipulation import AtomicStructure, center_structure_from_coords
+
+from torch_fit_in_map import (
+    AlignmentResult,
+    ExhaustiveSearchConfig,
+    PotentialSimulatorConfig,
+    apply_alignment_to_structure,
+    fit_map_in_structure,
+    fit_structure_in_map,
+)
+from torch_fit_in_map._simulate import DEFAULT_POTENTIAL_SIMULATOR
 
 
 class _GaussianSimulator:
@@ -42,8 +59,6 @@ def _make_atoms() -> pd.DataFrame:
 
 def test_fit_structure_in_map_accepts_dataframe():
     """fit_structure_in_map accepts a DataFrame and honors a custom simulator."""
-    from torch_fit_in_map import ExhaustiveSearchConfig, fit_structure_in_map
-
     atoms = _make_atoms()
     sim = _GaussianSimulator()
     box = 24
@@ -62,14 +77,12 @@ def test_fit_structure_in_map_accepts_dataframe():
         gradient_config=None,
         verbose=False,
     )
-    # Identical simulated mobile/reference → near-identity recovery.
+    # Identical simulated mobile/reference -> near-identity recovery.
     assert torch.allclose(result.rotation_matrix.cpu(), torch.eye(3), atol=0.2)
 
 
 def test_fit_map_in_structure_accepts_dataframe():
     """fit_map_in_structure accepts a reference-atoms DataFrame."""
-    from torch_fit_in_map import ExhaustiveSearchConfig, fit_map_in_structure
-
     atoms = _make_atoms()
     sim = _GaussianSimulator()
     box = 24
@@ -93,8 +106,6 @@ def test_fit_map_in_structure_accepts_dataframe():
 
 def test_apply_alignment_to_structure_preserves_dataframe_and_distances():
     """The structure transform preserves metadata and pairwise distances."""
-    from torch_fit_in_map import AlignmentResult, apply_alignment_to_structure
-
     atoms = _make_atoms()
     atoms["label"] = [f"atom-{i}" for i in range(len(atoms))]
     box = 32
@@ -122,8 +133,6 @@ def test_apply_alignment_to_structure_preserves_dataframe_and_distances():
 
 def test_apply_alignment_to_structure_identity_centres_in_box():
     """With identity rotation and zero shift, atoms are centred at the box centre."""
-    from torch_fit_in_map import AlignmentResult, apply_alignment_to_structure
-
     atoms = _make_atoms()
     box = 40
     px = 2.0
@@ -140,21 +149,6 @@ def test_apply_alignment_to_structure_identity_centres_in_box():
 
 def test_default_workspace_simulator_produces_zyx_volume_and_fits():
     """The production simulator generates finite ZYX data usable by fitting."""
-    import torch_calculate_electrostatic_potential
-    from torch_calculate_electrostatic_potential import (
-        GridConfig,
-        potential_from_structure_3d,
-    )
-    from torch_structure_manipulation import AtomicStructure
-
-    from torch_fit_in_map import ExhaustiveSearchConfig, fit_structure_in_map
-    from torch_fit_in_map._simulate import DEFAULT_POTENTIAL_SIMULATOR
-    from torch_calculate_electrostatic_potential import default_sublattice_radius
-
-    assert "torch_calculate_electrostatic_potential" in (
-        torch_calculate_electrostatic_potential.__file__ or ""
-    )
-
     atoms = pd.DataFrame(
         {
             "x": [-2.0, 1.0, 3.0],
@@ -172,9 +166,12 @@ def test_default_workspace_simulator_produces_zyx_volume_and_fits():
     assert volume.abs().sum() > 0
 
     structure = AtomicStructure.from_dataframe(atoms, device=volume.device)
-    center_zyx = torch.full((3,), (box - 1) / 2 * pixel_size, device=volume.device)
+    center = (box - 1) / 2 * pixel_size
+    center_zyx = torch.full((3,), center, device=volume.device)
     structure = structure.with_positions(
-        structure.positions_zyx - structure.positions_zyx.mean(0) + center_zyx
+        center_structure_from_coords(
+            structure.positions_zyx, center_point=(center, center, center)
+        )
     )
     grid = GridConfig.from_grid_shape_and_voxel_size(
         (box, box, box),
@@ -203,9 +200,6 @@ def test_default_workspace_simulator_produces_zyx_volume_and_fits():
 
 def test_default_simulator_supports_bonded_scattering_factors():
     """Bonded Peng factors can be selected via PotentialSimulatorConfig."""
-    from torch_fit_in_map import PotentialSimulatorConfig
-    from torch_fit_in_map._simulate import DEFAULT_POTENTIAL_SIMULATOR
-
     atoms = pd.DataFrame(
         {
             "x": [0.0, 1.2],
@@ -226,3 +220,63 @@ def test_default_simulator_supports_bonded_scattering_factors():
     assert volume.shape == (12, 12, 12)
     assert torch.isfinite(volume).all()
     assert volume.abs().sum() > 0
+
+
+class _SimulatorWithoutConfig(_GaussianSimulator):
+    """Custom simulator whose ``simulate`` does not accept ``config``."""
+
+    def simulate(self, atoms, pixel_size, box_size, device=None):
+        return super().simulate(atoms, pixel_size, box_size, device)
+
+
+def test_custom_simulator_without_config_parameter():
+    """Custom simulators need not accept ``config``."""
+    atoms = _make_atoms()
+    sim = _SimulatorWithoutConfig()
+    box = 24
+    px = 2.0
+    volume = sim.simulate(atoms, px, box)
+    exhaustive_config = ExhaustiveSearchConfig(
+        angular_step_degrees=90.0, pixel_size_angstroms=px
+    )
+
+    structure_in_map = fit_structure_in_map(
+        atoms,
+        volume,
+        px,
+        box,
+        simulator=sim,
+        exhaustive_config=exhaustive_config,
+        gradient_config=None,
+        verbose=False,
+    )
+    map_in_structure = fit_map_in_structure(
+        volume,
+        atoms,
+        px,
+        box,
+        simulator=sim,
+        exhaustive_config=exhaustive_config,
+        gradient_config=None,
+        verbose=False,
+    )
+    assert np.isfinite(structure_in_map.score)
+    assert np.isfinite(map_in_structure.score)
+
+
+@pytest.mark.parametrize("fit", [fit_structure_in_map, fit_map_in_structure])
+def test_simulator_and_simulator_config_are_mutually_exclusive(fit):
+    """A custom simulator cannot be combined with a default-simulator config."""
+    atoms = _make_atoms()
+    volume = torch.zeros(8, 8, 8)
+    args = (atoms, volume) if fit is fit_structure_in_map else (volume, atoms)
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        fit(
+            *args,
+            2.0,
+            8,
+            simulator=_GaussianSimulator(),
+            simulator_config=PotentialSimulatorConfig(),
+            verbose=False,
+        )

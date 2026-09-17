@@ -1,10 +1,30 @@
-import einops
 import torch
 from torch_affine_utils.transforms_2d import R, S, T
 from torch_affine_utils import homogenise_coordinates
+from torch_grid_utils.shapes_2d import rectangle
 from torch_transform_image import affine_transform_image_2d
-from torch_grid_utils import rectangle
 from torch_fourier_rescale import fourier_rescale_2d
+
+
+def taper_image_edges(images: torch.Tensor, fraction: float = 0.1) -> torch.Tensor:
+    """Apply a soft rectangular taper to each image's outer edge border.
+
+    `fraction` (IMOD's recommended default: 0.1) sets the taper width as a
+    fraction of the shorter spatial dimension, used to suppress edge
+    artifacts before zero-padding an image for FFT-based cross-correlation.
+    The mask is flat (1.0) over the central `1 - fraction` of each spatial
+    dimension and cosine-tapers to 0 over the outer `fraction`.
+    """
+    h, w = images.shape[-2:]
+    taper_width = min(h, w) * fraction
+    taper_mask_shape = (int(h - taper_width), int(w - taper_width))
+    mask = rectangle(
+        dimensions=taper_mask_shape,
+        image_shape=(h, w),
+        smoothing_radius=taper_width / 2,
+        device=images.device,
+    )
+    return images * mask
 
 
 def apply_stretch_perpendicular_to_tilt_axis(
@@ -36,24 +56,6 @@ def apply_stretch_perpendicular_to_tilt_axis(
     image = affine_transform_image_2d(
         image, matrices=M, interpolation="bicubic", yx_matrices=True
     )
-    return image
-
-
-def taper_image_edges(image: torch.Tensor) -> torch.Tensor:
-    # calculate the size of the edge taper
-    h, w = image.shape[-2:]
-    # 0.1 is the fraction of padding, IMOD advises 10%
-    taper_width = min(h, w) * 0.1
-    taper_mask_shape = (int(h - taper_width), int(w - taper_width))
-
-    # create edge taper mask
-    edge_taper_mask = rectangle(
-        dimensions=taper_mask_shape,
-        image_shape=(h, w),
-        smoothing_radius=taper_width / 2,
-        device=image.device,
-    )
-    image = image * edge_taper_mask
     return image
 
 
@@ -156,43 +158,23 @@ def get_shift_from_correlation_image(
 
 
 def transform_shifts_from_stretched_images(
-    shift: torch.Tensor,  # (b, 2) or (2,)
+    shift: torch.Tensor,  # (2,)
     tilt_axis_angle: float,
-    scale_factor: torch.Tensor | float,  # (b,) or scalar
+    scale_factor: float,
 ) -> torch.Tensor:
     device = shift.device
 
-    # to homogenous coordinate vectors: (b, 2) -> (b, 3, 1)
-    shift_yxw = homogenise_coordinates(shift)  # (b, 3)
-    shift_yxw = einops.rearrange(shift_yxw, "b yxw -> b yxw 1")  # (b, 3, 1)
+    # to homogenous coordinate vector: (2,) -> (3,)
+    shift_yxw = homogenise_coordinates(shift)  # (3,)
 
-    # Compose transforms - rotation matrices are the same for all in batch
+    # Compose transforms
     R0 = R(-1 * tilt_axis_angle, yx=True, device=device)  # (3, 3)
     R1 = R(tilt_axis_angle, yx=True, device=device)  # (3, 3)
-
-    # Create scale matrices
     # S expects (y_scale, x_scale), and we scale x by 1/scale_factor
-    scale_pairs = einops.rearrange(
-        [
-            torch.ones_like(scale_factor, device=device),  # y scale
-            1.0 / scale_factor,  # x scale
-        ],
-        "yx ... -> ... yx",
-    )  # (..., 2)
-    S0 = S(scale_pairs)
+    S0 = S((1.0, 1.0 / scale_factor), device=device)  # (3, 3)
 
     # Compose: M = R1 @ S0 @ R0
-    M = R1 @ S0 @ R0  # (b, 3, 3)
+    M = R1 @ S0 @ R0  # (3, 3)
 
-    # Apply batched matrix multiplication
-    transformed_shift = M @ shift_yxw  # (b, 3, 3) @ (b, 3, 1) = (b, 3, 1)
-    transformed_shift = transformed_shift[:, :2, 0]  # (b, 2)
-    return transformed_shift
-
-
-def normalise_in_mask_area(image, mask):
-    n = torch.sum(mask)
-    mean = torch.sum(image * mask) / n
-    std = (torch.sum(image**2 * mask) / n - mean**2) ** 0.5
-    image = (image - mean) / std
-    return image
+    transformed_shift = M @ shift_yxw  # (3, 3) @ (3,) = (3,)
+    return transformed_shift[:2]

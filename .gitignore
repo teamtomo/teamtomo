@@ -102,6 +102,13 @@ ENV/
 .idea/
 .vscode/
 
+# Mojo extension compile cache (experimental torch-fourier-slice kernels)
+__mojocache__/
+*.mojopkg
+# experimental demo outputs
+packages/primitives/torch-fourier-slice/examples/*.npz
+packages/primitives/torch-fourier-slice/examples/*.png
+packages/primitives/torch-fourier-slice/examples/*.gif
 # Personal local notes (not for commit)
 notes/*.local.md
 

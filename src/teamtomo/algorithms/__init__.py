@@ -17,6 +17,11 @@ except ImportError:
     torch_cryoeraser = None  # type: ignore[assignment]
 
 try:
+    import torch_ctf_estimation
+except ImportError:
+    torch_ctf_estimation = None  # type: ignore[assignment]
+
+try:
     import torch_refine_tilt_axis_angle
 except ImportError:
     torch_refine_tilt_axis_angle = None  # type: ignore[assignment]
@@ -45,6 +50,7 @@ __all__ = [
     "torch_2dtm",
     "torch_motion_correction",
     "torch_cryoeraser",
+    "torch_ctf_estimation",
     "torch_refine_tilt_axis_angle",
     "torch_segment_fiducials_2d",
     "torch_tiltxcorr",

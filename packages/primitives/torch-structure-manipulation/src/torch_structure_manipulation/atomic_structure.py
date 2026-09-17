@@ -24,7 +24,8 @@ class AtomicStructure:
     one tuple is shared by every batch member. That matches ensemble-of-poses use
     cases (same chemistry, different coordinates) but not batched structures with
     different chemistry. See :meth:`from_annotated_dataframe` and the bonded-factor
-    notes on :func:`torch_calculate_electrostatic_potential.potential_from_structure_3d`.
+    notes on
+    :func:`torch_calculate_electrostatic_potential.potential_from_structure_3d`.
     """
 
     positions_zyx: torch.Tensor
@@ -174,7 +175,9 @@ class AtomicStructure:
         """
         from .bonding import annotate_bonding_environments
 
-        annotated = annotate_bonding_environments(df, include_hydrogens=include_hydrogens)
+        annotated = annotate_bonding_environments(
+            df, include_hydrogens=include_hydrogens
+        )
         return cls.from_dataframe(annotated, device=device, dtype=dtype)
 
     @property

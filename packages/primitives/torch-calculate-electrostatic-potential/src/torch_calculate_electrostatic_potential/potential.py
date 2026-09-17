@@ -11,7 +11,7 @@ factors, not X-ray form factors:
     f_e(s) = sum_i a_i * exp(-b_i * s^2),  s = sin(theta) / wavelength
 
 Consequently, they must not undergo the X-ray-to-electron Mott-Bethe conversion
-``f_e(s) = 0.023934 * (Z - f_X(s)) / s²`` again. To produce electrostatic
+``f_e(s) = 0.023934 * (Z - f_X(s)) / s^2`` again. To produce electrostatic
 potential in volts, however, the electron scattering factor must still be
 converted to a voltage-normalized Fourier potential. For Fourier spatial
 frequency ``g = 2s``:
@@ -33,13 +33,14 @@ from typing import TYPE_CHECKING
 
 import einops
 import torch
+from tqdm import tqdm
 
 if TYPE_CHECKING:
     from .grid import GridConfig
 
-# Electron-scattering-factor (Å) to Fourier-potential (V Å³) normalization.
+# Electron-scattering-factor (Angstrom) to Fourier-potential (V Angstrom^3) norm.
 # Computed from CODATA 2022 electron mass and exact SI values for h and e.
-PENG_SCATTERING_TO_POTENTIAL = 47.877647240509745  # V Å²
+PENG_SCATTERING_TO_POTENTIAL = 47.877647240509745  # V Angstrom^2
 
 
 def evaluate_gaussian_sum(
@@ -116,6 +117,7 @@ def _calculate_scattering_potential(
     atom_occupancies: torch.Tensor | None,  # (..., N) or None
     per_voxel_averaging: bool,
     batch_size: int,
+    verbose: bool,
 ) -> torch.Tensor:  # (..., *grid_config.grid_shape)
     """Shared dense implementation behind the 2D/3D public entry points."""
     if atom_pos.shape[-1] != grid_config.ndim:
@@ -177,7 +179,8 @@ def _calculate_scattering_potential(
         torch.arange(batch_total, device=device, dtype=torch.int64) * grid_flat_size
     )
 
-    for start in range(0, num_atoms, batch_size):
+    chunk_starts = range(0, num_atoms, batch_size)
+    for start in tqdm(chunk_starts, disable=not verbose, desc="atoms"):
         end = min(start + batch_size, num_atoms)
         pos_chunk = pos_flat[:, start:end, :]  # (batch_total, n, D)
 
@@ -217,6 +220,7 @@ def calculate_scattering_potential_3d(
     atom_occupancies: torch.Tensor | None = None,
     per_voxel_averaging: bool = True,
     batch_size: int = 4096,
+    verbose: bool = False,
 ) -> torch.Tensor:  # (..., *grid_config.grid_shape)
     """Compute a differentiable 3D electrostatic-potential volume in volts.
 
@@ -238,6 +242,8 @@ def calculate_scattering_potential_3d(
         the voxel center.
     batch_size : int
         Number of atoms processed per chunk (performance/memory tuning only).
+    verbose : bool
+        If True, show a tqdm progress bar over atom chunks.
 
     Returns
     -------
@@ -258,6 +264,7 @@ def calculate_scattering_potential_3d(
         atom_occupancies,
         per_voxel_averaging,
         batch_size,
+        verbose,
     )
 
 
@@ -271,6 +278,7 @@ def calculate_scattering_potential_2d(
     atom_occupancies: torch.Tensor | None = None,
     per_voxel_averaging: bool = True,
     batch_size: int = 4096,
+    verbose: bool = False,
 ) -> torch.Tensor:  # (..., *grid_config.grid_shape)
     """Compute a differentiable 2D projected electrostatic potential.
 
@@ -292,6 +300,8 @@ def calculate_scattering_potential_2d(
         the pixel center.
     batch_size : int
         Number of atoms processed per chunk (performance/memory tuning only).
+    verbose : bool
+        If True, show a tqdm progress bar over atom chunks.
 
     Returns
     -------
@@ -312,4 +322,5 @@ def calculate_scattering_potential_2d(
         atom_occupancies,
         per_voxel_averaging,
         batch_size,
+        verbose,
     )

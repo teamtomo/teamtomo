@@ -1,7 +1,5 @@
 """Check that all modules are importable under the teamtomo namespace."""
 
-import pytest
-
 
 def test_primitives_import():
     """Ensure teamtomo.primitives can be imported."""

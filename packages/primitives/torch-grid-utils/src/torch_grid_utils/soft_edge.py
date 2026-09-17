@@ -1,3 +1,5 @@
+"""Add a soft (cosine-tapered) edge to binary masks."""
+
 import einops
 import torch
 from scipy import ndimage as ndi
@@ -25,6 +27,7 @@ def _add_soft_edge_single_binary_image(
 def add_soft_edge_2d(
     image: torch.Tensor, smoothing_radius: torch.Tensor | float
 ) -> torch.Tensor:
+    """Add a soft (cosine-tapered) edge to a 2D binary image."""
     image_packed, ps = einops.pack([image], "* h w")
     b = image_packed.shape[0]
 
@@ -46,6 +49,7 @@ def add_soft_edge_2d(
 def add_soft_edge_3d(
     image: torch.Tensor, smoothing_radius: torch.Tensor | float
 ) -> torch.Tensor:
+    """Add a soft (cosine-tapered) edge to a 3D binary image."""
     image_packed, ps = einops.pack([image], "* d h w")
     b = image_packed.shape[0]
     if isinstance(smoothing_radius, float | int):

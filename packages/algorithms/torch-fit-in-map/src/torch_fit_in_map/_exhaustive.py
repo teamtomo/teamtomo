@@ -5,7 +5,6 @@ from __future__ import annotations
 import heapq
 import math
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
 
 import torch
 from torch_affine_utils import homogenise_coordinates
@@ -96,8 +95,8 @@ def _batch_rotate_volume(
     coords = torch.einsum("bij,jk->bik", centred_matrices, coord_grid_flat.T)
     coords = coords[:, :3, :].permute(0, 2, 1)  # (B, d*h*w, 3) zyx
     coords = coords.view(centred_matrices.shape[0], d, h, w, 3)  # (B, d, h, w, 3)
-    rotated = sample_image_3d(volume, coords, interpolation="trilinear")
-    return cast("torch.Tensor", rotated)  # (B, d, h, w)
+    rotated: torch.Tensor = sample_image_3d(volume, coords, interpolation="trilinear")
+    return rotated  # (B, d, h, w)
 
 
 def _argmax_to_shift(

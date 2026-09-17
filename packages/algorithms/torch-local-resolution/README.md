@@ -33,7 +33,7 @@ windows_radii = [10.5, 9.1, 7.2, 4.5]  # in voxels, one per shell
 
 # Compute local resolution p-value map
 pvalue_map = estimate_local_resolution(
-    apix=apix,                    # voxel size in Å/pixel
+    apix=apix,                    # voxel size in Angstroms/pixel
     windows_radii=windows_radii,
     resolutions=resolutions,
     batch_half_map1=half_map1,

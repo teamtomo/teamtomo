@@ -5,9 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import torch
+from torch_calculate_electrostatic_potential import (
+    GridConfig,
+    default_sublattice_radius,
+    potential_from_structure_3d,
+)
+from torch_structure_manipulation import AtomicStructure, center_structure_from_coords
 
 from ._config import PotentialSimulatorConfig
-from ._geometry import center_positions_in_simulation_box, simulation_box_center_zyx
+from ._geometry import simulation_box_center_angstroms, simulation_box_center_zyx
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -37,12 +43,15 @@ class PotentialSimulator(Protocol):
 
 
         class MySimulator:
-            def simulate(self, atoms, pixel_size, box_size, device=None, config=None):
-                ...
+            def simulate(
+                self, atoms, pixel_size, box_size, device=None, config=None
+            ): ...
 
 
         atoms = mmdf.read("model.pdb")
-        result = fit_structure_in_map(atoms, potential_map, 1.5, 128, simulator=MySimulator())
+        result = fit_structure_in_map(
+            atoms, potential_map, 1.5, 128, simulator=MySimulator()
+        )
     """
 
     def simulate(
@@ -68,6 +77,9 @@ class PotentialSimulator(Protocol):
             Target device for the output tensor.
         config : PotentialSimulatorConfig or None
             Simulator options. ``None`` uses the default configuration.
+            :func:`fit_map_in_structure` and :func:`fit_structure_in_map` only
+            pass this to the default simulator, so custom simulators may omit
+            this parameter.
 
         Returns
         -------
@@ -92,12 +104,6 @@ class _ESPSimulator:
         device: torch.device | None = None,
         config: PotentialSimulatorConfig | None = None,
     ) -> torch.Tensor:
-        from torch_calculate_electrostatic_potential import (
-            GridConfig,
-            default_sublattice_radius,
-            potential_from_structure_3d,
-        )
-        from torch_structure_manipulation import AtomicStructure
 
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -131,8 +137,9 @@ class _ESPSimulator:
         else:
             structure = AtomicStructure.from_dataframe(atoms, device=device)
 
-        centered_positions = center_positions_in_simulation_box(
-            structure.positions_zyx, box_size, pixel_size
+        box_center = simulation_box_center_angstroms(box_size, pixel_size)
+        centered_positions = center_structure_from_coords(
+            structure.positions_zyx, center_point=(box_center, box_center, box_center)
         )
         structure = structure.with_positions(centered_positions)
 
@@ -156,6 +163,7 @@ class _ESPSimulator:
             bonded_fallback=config.bonded_fallback,
             per_voxel_averaging=config.per_voxel_averaging,
             batch_size=config.batch_size,
+            verbose=False,
         )
         return potential_zyx.float().contiguous()
 

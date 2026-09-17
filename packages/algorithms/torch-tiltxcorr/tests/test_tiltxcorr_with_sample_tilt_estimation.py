@@ -165,3 +165,29 @@ def test_tiltxcorr_with_sample_tilt_estimation(
         f"  Got: {optimal_sample_tilt:.3f}°\n"
         f"  Error: {error:.3f}° (max allowed: {max_error}°)"
     )
+
+
+def test_tiltxcorr_with_sample_tilt_estimation_preprocess_is_optional():
+    """preprocess=False must run without error and change the result."""
+    tilt_series, tilt_angles, tilt_axis_angle = _generate_tilted_plane_tilt_series(
+        sample_tilt_y=5.0,
+        d=64,
+        n_points_on_plane=100,
+        tilt_angles_deg=torch.linspace(-60, 60, steps=7),
+        tilt_axis_angle=85.0,
+        seed=42,
+    )
+    kwargs = dict(
+        tilt_series=tilt_series,
+        tilt_angles=tilt_angles,
+        tilt_axis_angle=tilt_axis_angle,
+        sample_tilt_range=(-30.0, 30.0),
+        max_iter=10,
+    )
+    default_shifts, default_tilt = tiltxcorr_with_sample_tilt_estimation(**kwargs)
+    no_preprocess_shifts, _ = tiltxcorr_with_sample_tilt_estimation(
+        **kwargs, preprocess=False
+    )
+
+    assert default_shifts.shape == (len(tilt_angles), 2)
+    assert not torch.allclose(default_shifts, no_preprocess_shifts)
