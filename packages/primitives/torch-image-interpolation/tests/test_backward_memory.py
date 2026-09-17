@@ -26,7 +26,7 @@ def grid_sample_batch_sizes(monkeypatch):
     seen = []
     real = F.grid_sample
 
-    def spy(input, grid, **kwargs):  # noqa: A002
+    def spy(input, grid, **kwargs):
         seen.append(input.shape[0])
         return real(input, grid, **kwargs)
 
