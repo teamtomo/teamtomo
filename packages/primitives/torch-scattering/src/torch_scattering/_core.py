@@ -1,9 +1,67 @@
 """Pure-math primitives for scattering algorithms."""
 
+import math
+from numbers import Real
+
 import torch
 from scipy import constants as C
 from torch_ctf import calculate_relativistic_electron_wavelength
 from torch_grid_utils import fftfreq_grid
+
+_SUPPORTED_POTENTIAL_DTYPES = {
+    torch.float32,
+    torch.float64,
+    torch.complex64,
+    torch.complex128,
+}
+
+
+def _complex_dtype(dtype: torch.dtype) -> torch.dtype:
+    """Return the complex dtype corresponding to a supported potential dtype."""
+    if dtype in {torch.float32, torch.complex64}:
+        return torch.complex64
+    return torch.complex128
+
+
+def _validate_scalar(
+    value: float | torch.Tensor,
+    name: str,
+) -> None:
+    """Validate a positive, finite scalar without replacing differentiable tensors."""
+    if isinstance(value, torch.Tensor):
+        if value.ndim != 0:
+            raise ValueError(f"{name} must be a scalar")
+        if value.is_complex():
+            raise ValueError(f"{name} must be real")
+        if not bool(torch.isfinite(value).item()) or not bool((value > 0).item()):
+            raise ValueError(f"{name} must be positive and finite")
+    elif (
+        not isinstance(value, Real)
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+        or value <= 0
+    ):
+        raise ValueError(f"{name} must be a positive, finite scalar")
+
+
+def _validate_propagation_inputs(
+    potential: torch.Tensor,
+    pixel_size: float | torch.Tensor,
+    voltage: float | torch.Tensor,
+) -> None:
+    """Validate inputs shared by all high-level propagation modes."""
+    if not isinstance(potential, torch.Tensor):
+        raise TypeError("potential must be a torch.Tensor")
+    if potential.ndim < 3:
+        raise ValueError("potential must have shape (..., Z, H, W)")
+    if any(size == 0 for size in potential.shape[-3:]):
+        raise ValueError("potential spatial dimensions Z, H, and W must be nonempty")
+    if potential.dtype not in _SUPPORTED_POTENTIAL_DTYPES:
+        raise TypeError(
+            "potential dtype must be float32, float64, complex64, or complex128"
+        )
+    _validate_scalar(pixel_size, "pixel_size")
+    _validate_scalar(voltage, "voltage")
 
 
 def fresnel_propagator(
@@ -49,14 +107,14 @@ def transmission_function(
     dz: float | torch.Tensor,
 ) -> torch.Tensor:
     """
-    Compute the transmission function for one slice of scattering potential.
+    Compute the transmission function for one electrostatic-potential slice.
 
     Parameters
     ----------
     potential_slice : torch.Tensor
-        Scattering potential for a single slice. Real-valued for a
-        non-absorbing (weak phase object) specimen, or complex-valued with
-        a positive imaginary part to model absorption.
+        Electrostatic potential in volts for a single slice. Real-valued for
+        a non-absorbing specimen, or complex-valued with a positive imaginary
+        part to model absorption.
     sigma : float | torch.Tensor
         Electron-specimen interaction parameter, e.g. from
         `interaction_parameter`, in rad/(V*Angstrom).
@@ -89,14 +147,14 @@ def multislice_step(
     dz: float | torch.Tensor,
 ) -> torch.Tensor:
     """
-    Advance the electron wave through one slice of scattering potential.
+    Advance the electron wave through one electrostatic-potential slice.
 
     Parameters
     ----------
     wave : torch.Tensor
         Complex-valued incident wave for this slice, shape (..., H, W).
     potential_slice : torch.Tensor
-        Scattering potential for this slice, shape (..., H, W).
+        Electrostatic potential in volts for this slice, shape (..., H, W).
     propagator : torch.Tensor
         Fresnel propagator for this slice thickness, e.g. from
         `fresnel_propagator`, shape (H, W).
@@ -215,9 +273,11 @@ def _prepare_propagation_parameters(
     Parameters
     ----------
     potential : torch.Tensor
-        Complex-valued 3D scattering potential, shape (..., Z, H, W).
+        Real or complex 3D electrostatic potential in volts, shape
+        (..., Z, H, W).
     pixel_size : float | torch.Tensor
-        Pixel size in Angstroms.
+        Isotropic voxel spacing in Angstroms, used as both the in-plane pixel
+        spacing and slice thickness.
     voltage : float | torch.Tensor
         Electron beam acceleration voltage in kilovolts.
 
@@ -228,16 +288,22 @@ def _prepare_propagation_parameters(
         rad/(V*Angstrom), and `frequency_grid`, the real-valued grid of
         spatial frequency magnitudes (1/Angstrom), shape (H, W).
     """
+    _validate_propagation_inputs(potential, pixel_size, voltage)
     wavelength_m = calculate_relativistic_electron_wavelength(voltage * 1.0e3)
     wavelength = wavelength_m * 1.0e10  # meters -> Angstroms
     sigma = interaction_parameter(voltage=voltage)
 
     height, width = potential.shape[-2:]
+    spacing = (
+        float(pixel_size.detach().cpu())
+        if isinstance(pixel_size, torch.Tensor)
+        else float(pixel_size)
+    )
     frequency_grid = fftfreq_grid(
         image_shape=(height, width),
         rfft=False,
-        spacing=float(pixel_size),
+        spacing=spacing,
         norm=True,
         device=potential.device,
-    )
+    ).to(dtype=potential.real.dtype)
     return wavelength, sigma, frequency_grid

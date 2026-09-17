@@ -18,7 +18,7 @@ def test_axis_angle_identity():
 
 
 def test_axis_angle_roundtrip():
-    """Axis-angle → matrix → axis-angle should approximately recover the original."""
+    """Axis-angle -> matrix -> axis-angle should approximately recover the original."""
     v_orig = torch.tensor([0.3, -0.2, 0.5])
     R = _axis_angle_to_rotation_matrix_xyz(v_orig)
     v_rec = _rotation_matrix_xyz_to_axis_angle(R)

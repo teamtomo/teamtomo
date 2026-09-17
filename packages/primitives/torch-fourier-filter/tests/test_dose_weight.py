@@ -4,7 +4,9 @@ from torch_fourier_filter.dose_weight import (
     critical_exposure,
     critical_exposure_bfactor,
     cumulative_dose_filter_3d,
+    dose_weight_frame_chunk,
     dose_weight_movie,
+    dose_weight_normalization_grid,
 )
 
 
@@ -12,9 +14,9 @@ def test_critical_exposure():
     fft_freq = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5])
     expected_output = torch.tensor([14.1383, 6.3823, 4.6287, 3.9365, 3.5869])
     output = critical_exposure(fft_freq)
-    assert torch.allclose(
-        output, expected_output, atol=1e-3
-    ), "critical_exposure output mismatch"
+    assert torch.allclose(output, expected_output, atol=1e-3), (
+        "critical_exposure output mismatch"
+    )
 
 
 def test_critical_exposure_bfactor():
@@ -22,9 +24,9 @@ def test_critical_exposure_bfactor():
     bfac = 1.0
     expected_output = torch.tensor([400.0, 100.0, 44.444, 25.0, 16.0])
     output = critical_exposure_bfactor(fft_freq, bfac)
-    assert torch.allclose(
-        output, expected_output, atol=1e-3
-    ), "critical_exposure_bfactor output mismatch"
+    assert torch.allclose(output, expected_output, atol=1e-3), (
+        "critical_exposure_bfactor output mismatch"
+    )
 
 
 def test_dose_weight_movie():
@@ -73,9 +75,9 @@ def test_dose_weight_movie():
     )
 
     # Results should be different due to voltage correction
-    assert not torch.allclose(
-        weighted_movie, weighted_movie_200kv
-    ), "200kV correction not applied"
+    assert not torch.allclose(weighted_movie, weighted_movie_200kv), (
+        "200kV correction not applied"
+    )
 
     # Test with 100kV voltage
     weighted_movie_100kv = dose_weight_movie(
@@ -90,9 +92,9 @@ def test_dose_weight_movie():
     )
 
     # Results should be different due to voltage correction
-    assert not torch.allclose(
-        weighted_movie, weighted_movie_100kv
-    ), "100kV correction not applied"
+    assert not torch.allclose(weighted_movie, weighted_movie_100kv), (
+        "100kV correction not applied"
+    )
 
     # Test with custom B-factor
     weighted_movie_bfactor = dose_weight_movie(
@@ -107,9 +109,9 @@ def test_dose_weight_movie():
     )
 
     # Results should be different with custom B-factor
-    assert not torch.allclose(
-        weighted_movie, weighted_movie_bfactor
-    ), "Custom B-factor not applied"
+    assert not torch.allclose(weighted_movie, weighted_movie_bfactor), (
+        "Custom B-factor not applied"
+    )
 
     # Test with full FFT (not rfft)
     movie_dft_full = torch.fft.fft2(real_frames)
@@ -123,9 +125,9 @@ def test_dose_weight_movie():
         device=device,
     )
 
-    assert (
-        weighted_movie_full.shape == movie_dft_full.shape
-    ), "Full FFT output shape mismatch"
+    assert weighted_movie_full.shape == movie_dft_full.shape, (
+        "Full FFT output shape mismatch"
+    )
 
     # Test device handling - movie on different device than specified
     if torch.cuda.is_available():
@@ -167,9 +169,102 @@ def test_dose_weight_movie():
         )
         raise AssertionError("Should have raised ValueError for invalid B-factor")
     except ValueError as e:
-        assert "B-factor must be positive" in str(
-            e
-        ), "Wrong error message for B-factor check"
+        assert "B-factor must be positive" in str(e), (
+            "Wrong error message for B-factor check"
+        )
+
+
+def test_dose_weight_frame_chunk_matches_dose_weight_movie():
+    """Streaming per-chunk dose weighting must match the whole-movie reference.
+
+    `dose_weight_normalization_grid` + `dose_weight_frame_chunk` never see
+    more than `chunk_size` frames of movie data at once, unlike
+    `dose_weight_movie`, which requires the full `movie_dft` up front. They
+    should nonetheless be numerically identical.
+    """
+    n_frames = 11
+    image_shape = (16, 16)
+    pixel_size = 1.5
+    pre_exposure = 0.3
+    dose_per_frame = 1.5
+    voltage = 200.0
+    chunk_size = 4
+
+    torch.manual_seed(0)
+    real_frames = torch.rand((n_frames, *image_shape))
+    movie_dft = torch.fft.rfft2(real_frames)
+
+    expected = dose_weight_movie(
+        movie_dft=movie_dft.clone(),
+        image_shape=image_shape,
+        pixel_size=pixel_size,
+        pre_exposure=pre_exposure,
+        dose_per_frame=dose_per_frame,
+        voltage=voltage,
+        crit_exposure_bfactor=-1,
+        rfft=True,
+        fftshift=False,
+        memory_efficient=True,
+        chunk_size=chunk_size,
+    )
+
+    Ne, normalization = dose_weight_normalization_grid(
+        image_shape=image_shape,
+        pixel_size=pixel_size,
+        n_frames=n_frames,
+        pre_exposure=pre_exposure,
+        dose_per_frame=dose_per_frame,
+        voltage=voltage,
+        crit_exposure_bfactor=-1,
+        rfft=True,
+        fftshift=False,
+    )
+
+    actual = torch.zeros_like(movie_dft)
+    for start_idx in range(0, n_frames, chunk_size):
+        end_idx = min(start_idx + chunk_size, n_frames)
+        actual[start_idx:end_idx] = dose_weight_frame_chunk(
+            chunk_dft=movie_dft[start_idx:end_idx],
+            frame_start_idx=start_idx,
+            Ne=Ne,
+            normalization=normalization,
+            pre_exposure=pre_exposure,
+            dose_per_frame=dose_per_frame,
+            voltage=voltage,
+        )
+
+    assert torch.allclose(actual, expected, atol=1e-5)
+
+
+def test_dose_weight_frame_chunk_in_place():
+    n_frames = 5
+    image_shape = (8, 8)
+    pixel_size = 1.0
+
+    torch.manual_seed(1)
+    movie_dft = torch.fft.rfft2(torch.rand((n_frames, *image_shape)))
+    Ne, normalization = dose_weight_normalization_grid(
+        image_shape=image_shape,
+        pixel_size=pixel_size,
+        n_frames=n_frames,
+    )
+
+    out_of_place = dose_weight_frame_chunk(
+        chunk_dft=movie_dft.clone(),
+        frame_start_idx=0,
+        Ne=Ne,
+        normalization=normalization,
+    )
+    chunk = movie_dft.clone()
+    result = dose_weight_frame_chunk(
+        chunk_dft=chunk,
+        frame_start_idx=0,
+        Ne=Ne,
+        normalization=normalization,
+        in_place=True,
+    )
+    assert result is chunk
+    assert torch.allclose(result, out_of_place)
 
 
 def test_cumulative_dose_filter_3d():
@@ -195,9 +290,9 @@ def test_cumulative_dose_filter_3d():
 
     # Check if the values are within a reasonable range
     # TODO: Test these against known, static values rather than just range
-    assert torch.all(dose_filter >= 0) and torch.all(
-        dose_filter <= 1
-    ), "Dose filter values out of range"
+    assert torch.all(dose_filter >= 0) and torch.all(dose_filter <= 1), (
+        "Dose filter values out of range"
+    )
 
     # Test with different bfac values
     # TODO: Test these against known, static values rather than just range
@@ -212,9 +307,9 @@ def test_cumulative_dose_filter_3d():
             rfft=rfft,
             fftshift=fftshift,
         )
-        assert torch.all(dose_filter >= 0) and torch.all(
-            dose_filter <= 1
-        ), f"Dose filter values out of range for bfac={bfac}"
+        assert torch.all(dose_filter >= 0) and torch.all(dose_filter <= 1), (
+            f"Dose filter values out of range for bfac={bfac}"
+        )
 
 
 def test_memory_efficient_consistency():
@@ -257,9 +352,9 @@ def test_memory_efficient_consistency():
     )
 
     # Results should be identical
-    assert torch.allclose(
-        result_original, result_memory_efficient, atol=1e-6
-    ), "Memory-efficient method produces different results than original method"
+    assert torch.allclose(result_original, result_memory_efficient, atol=1e-6), (
+        "Memory-efficient method produces different results than original method"
+    )
 
     # Test with different voltage settings
     for voltage in [100.0, 200.0, 300.0]:
@@ -288,9 +383,9 @@ def test_memory_efficient_consistency():
             device=device,
         )
 
-        assert torch.allclose(
-            result_orig_voltage, result_mem_voltage, atol=1e-6
-        ), f"Memory-efficient method differs from original for voltage={voltage}"
+        assert torch.allclose(result_orig_voltage, result_mem_voltage, atol=1e-6), (
+            f"Memory-efficient method differs from original for voltage={voltage}"
+        )
 
     # Test with different chunk sizes to ensure chunking works correctly
     for chunk_size in [1, 2, 5, 8]:
@@ -306,6 +401,6 @@ def test_memory_efficient_consistency():
             device=device,
         )
 
-        assert torch.allclose(
-            result_original, result_chunked, atol=1e-6
-        ), f"Memory-efficient method differs with chunk_size={chunk_size}"
+        assert torch.allclose(result_original, result_chunked, atol=1e-6), (
+            f"Memory-efficient method differs with chunk_size={chunk_size}"
+        )

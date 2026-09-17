@@ -69,7 +69,8 @@ def predict_fiducial_probabilities(
     Returns
     -------
     probabilities: torch.Tensor
-        `(..., h, w)` array containing the probability of each pixel belonging to a fiducial.
+        `(..., h, w)` array containing the probability of each pixel belonging
+        to a fiducial.
     """
     # cast to tensor
     image = torch.as_tensor(image, dtype=torch.float32)

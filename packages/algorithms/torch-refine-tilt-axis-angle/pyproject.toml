@@ -45,11 +45,7 @@ classifiers = [
 # add your package dependencies here
 dependencies = [
     "torch",
-    "einops",
-    "torch-fourier-slice",
-    "torch-cubic-spline-grids",
-    "torch-affine-utils",
-    "torch-grid-utils",
+    "torch-tilt-series",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies

@@ -43,7 +43,9 @@ If you're looking to add a new package to TeamTomo, again the first place to sta
 
 ### Pull requests and review processes
 
-🚧 Under construction 🚧
+Before opening a pull request, make sure it passes CI locally: run `pre-commit` (formatting, linting, type checks) and, if you changed a package's dependencies, regenerate `uv.lock`. See [_Before opening a pull request_](README.md#before-opening-a-pull-request) in the README for the exact commands.
+
+🚧 More to come 🚧
 
 ### Feature requests and additions
 

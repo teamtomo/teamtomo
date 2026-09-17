@@ -2,7 +2,7 @@ import pytest
 import warnings
 
 warnings.filterwarnings(action="ignore", category=UserWarning, module="tiler")
-from torch_segment_fiducials_2d.model import ResidualUNet18, get_latest_checkpoint
+from torch_segment_fiducials_2d.model import ResidualUNet18, get_latest_checkpoint  # noqa: E402
 
 
 @pytest.mark.slow

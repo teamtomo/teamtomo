@@ -28,10 +28,11 @@ class TiltSeries:
 
     Holds alignment parameters, all in Angstroms, plus metadata describing
     where matching raw tilt images live (`image_path`, `image_indices`,
-    `pixel_spacing`). It never reads or holds image pixel data itself.
-    `project_points` maps 3D points (Angstroms) to 2D detector positions
-    (Angstroms); loading/normalizing image data and converting to/from pixel
-    coordinates happen in `torch_reconstruct_tomogram`.
+    `pixel_spacing`). It never reads or holds image pixel data itself -
+    see `torch_tilt_series.io.load_tilt_series_images` and
+    `torch_tilt_series.preprocessing` for that. `project_points` maps 3D
+    points (Angstroms) to 2D detector positions (Angstroms); converting
+    to/from pixel coordinates happens in `torch_reconstruct_tomogram`.
 
     Coordinate spaces:
     - sample space: canonical 3D space representing the sample before stage

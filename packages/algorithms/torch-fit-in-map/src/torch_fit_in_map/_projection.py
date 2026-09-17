@@ -59,7 +59,7 @@ def projection_align(
     Returns
     -------
     AlignmentResult
-        Best rotation matrix (3×3, zyx), translation ``[0, dy, dx]`` in
+        Best rotation matrix (3 x 3, zyx), translation ``[0, dy, dx]`` in
         pixels, and peak 2-D NCC score.
     """
     if config is None:
@@ -79,14 +79,14 @@ def projection_align(
         theta_step=config.angular_step_degrees,
     ).to(device)
     # Build xyz (3, 3) rotation matrices for project_3d_to_2d (xyz convention)
-    # _euler_zyz_to_4x4_zyx → (N, 4, 4) zyx; extract upper-left, flip to xyz
+    # _euler_zyz_to_4x4_zyx -> (N, 4, 4) zyx; extract upper-left, flip to xyz
     R_4x4_zyx = _euler_zyz_to_4x4_zyx(euler_angles)  # (N, 4, 4)
     R3_zyx = R_4x4_zyx[:, :3, :3]  # (N, 3, 3)
     R3_xyz = torch.flip(R3_zyx, dims=(-2, -1))  # (N, 3, 3) xyz
 
     n = R3_xyz.shape[0]
 
-    # project_3d_to_2d: zyx_matrices=False → xyz convention input
+    # project_3d_to_2d: zyx_matrices=False -> xyz convention input
     # Batch-project reference and mobile (N, d, d) each
     ref_projs = project_3d_to_2d(
         ref_float, R3_xyz, fftfreq_max=config.fftfreq_max
@@ -98,9 +98,7 @@ def projection_align(
     # 2-D NCC map for each orientation
     ref_rfft = torch.fft.rfft2(ref_projs, dim=(-2, -1))  # (N, d, d//2+1)
     mob_rfft = torch.fft.rfft2(mob_projs, dim=(-2, -1))
-    cc_2d = torch.fft.irfft2(
-        ref_rfft * torch.conj(mob_rfft), dim=(-2, -1)
-    )  # (N, d, d)
+    cc_2d = torch.fft.irfft2(ref_rfft * torch.conj(mob_rfft), dim=(-2, -1))  # (N, d, d)
 
     # Best orientation: argmax of per-orientation peak score
     peak_per_orient = cc_2d.view(n, -1).max(dim=-1).values  # (N,)

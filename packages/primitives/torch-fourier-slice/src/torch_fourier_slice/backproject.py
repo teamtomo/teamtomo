@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
-from torch_grid_utils import fftfreq_grid
 
 from .slice_insertion import (
     insert_central_slices_rfft_3d,
     insert_central_slices_rfft_3d_multichannel,
 )
+from .volume_utils import separable_sinc2_correction
 
 
 def backproject_2d_to_3d(
@@ -100,14 +100,9 @@ def backproject_2d_to_3d(
     dft = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=volume_shape)
     dft = torch.fft.fftshift(dft, dim=(-3, -2, -1))  # center in real space
 
-    # correct for convolution with linear interpolation kernel. The kernel is
-    # separable per-axis, so the correction is a product of 1D sincs, not
-    # the sinc of the radial frequency. See issue #65 for more info.
-    grid = fftfreq_grid(
-        image_shape=dft.shape, rfft=False, fftshift=True, norm=False, device=dft.device
-    )
-    sinc = torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1]) * torch.sinc(grid[..., 2])
-    dft = dft / sinc**2
+    # correct for convolution with linear interpolation kernel. See issue #65 for info.
+    sinc2 = separable_sinc2_correction(dft.shape, device=dft.device)
+    dft = dft / sinc2
 
     # unpad
     if pad_factor > 1.0:
@@ -208,18 +203,9 @@ def backproject_2d_to_3d_multichannel(
     dft = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=volume_shape)
     dft = torch.fft.fftshift(dft, dim=(-3, -2, -1))  # center in real space
 
-    # correct for convolution with linear interpolation kernel. The kernel is
-    # separable per-axis, so the correction is a product of 1D sincs, not
-    # the sinc of the radial frequency. See issue #65 for more info.
-    grid = fftfreq_grid(
-        image_shape=dft.shape[-3:],
-        rfft=False,
-        fftshift=True,
-        norm=False,
-        device=dft.device,
-    )
-    sinc = torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1]) * torch.sinc(grid[..., 2])
-    dft = dft / sinc**2
+    # correct for convolution with linear interpolation kernel. See issue #65 for info.
+    sinc2 = separable_sinc2_correction(dft.shape, device=dft.device)
+    dft = dft / sinc2
 
     # unpad
     if pad_factor > 1.0:

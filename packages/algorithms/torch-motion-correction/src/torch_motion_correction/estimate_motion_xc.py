@@ -2,6 +2,7 @@
 
 import einops
 import torch
+import torch.nn.functional as F
 from scipy.signal import savgol_filter
 from torch_grid_utils.patch_grid import patch_grid_lazy
 
@@ -12,7 +13,7 @@ from torch_motion_correction.types import (
     PatchSamplingConfig,
     XCRefinementConfig,
 )
-from torch_motion_correction.utils import normalize_image, prepare_patch_filters
+from torch_motion_correction.utils import prepare_patch_filters
 
 
 def estimate_global_motion(
@@ -22,13 +23,15 @@ def estimate_global_motion(
     fourier_filter: FourierFilterConfig | None = None,
     device: torch.device | None = None,
     verbose: bool = False,
+    downsample_factor: int = 1,
 ) -> DeformationField:
     """Estimate motion using cross-correlation for the whole image.
 
     Parameters
     ----------
     image: torch.Tensor
-        (t, h, w) array of images to motion correct
+        (t, h, w) array of images to motion correct. May live on a different
+        device than ``device`` (e.g. CPU); frames are transferred lazily.
     pixel_spacing: float
         Pixel spacing in angstroms
     reference_frame: int, optional
@@ -40,6 +43,11 @@ def estimate_global_motion(
         Device for computation
     verbose: bool
         Whether to print progress information. Default is False.
+    downsample_factor: int
+        Integer factor to downsample (average pool) each frame before cross-correlation.
+        The sub-pixel precision lost to downsampling may be acceptable in exchange for
+        large reductions in per-frame compute and memory on very large movies. Default
+        is 1 (no downsampling).
 
     Returns
     -------
@@ -49,13 +57,8 @@ def estimate_global_motion(
     if fourier_filter is None:
         fourier_filter = FourierFilterConfig()
 
-    # b_factor = fourier_filter.b_factor
-    # frequency_range = fourier_filter.frequency_range
-
     if device is None:
         device = image.device
-    else:
-        image = image.to(device)
 
     t, h, w = image.shape
 
@@ -68,22 +71,38 @@ def estimate_global_motion(
             f"Cross-correlation whole image: using frame {reference_frame} as reference"
         )
 
-    # Normalize image
-    image = normalize_image(image)
+    if downsample_factor > 1:
+        h_ds, w_ds = h // downsample_factor, w // downsample_factor
+        working_pixel_spacing = pixel_spacing * downsample_factor
+    else:
+        h_ds, w_ds = h, w
+        working_pixel_spacing = pixel_spacing
 
     mask, b_factor_envelope, bandpass = prepare_patch_filters(
-        shape=(h, w),
-        pixel_spacing=pixel_spacing,
+        shape=(h_ds, w_ds),
+        pixel_spacing=working_pixel_spacing,
         fourier_filter=fourier_filter,
         device=device,
     )
+    combined_filter = bandpass * b_factor_envelope
 
-    # Apply mask, FFT, and filters to all frames at once
-    fft_images = torch.fft.rfftn(image * mask, dim=(-2, -1))
-    filtered_fft = fft_images * bandpass * b_factor_envelope
+    hl, hu = int(0.25 * h_ds), int(0.75 * h_ds)
+    wl, wu = int(0.25 * w_ds), int(0.75 * w_ds)
 
-    # Reference frame
-    reference_fft = filtered_fft[reference_frame]
+    def _prepare_frame_fft(frame_idx: int) -> torch.Tensor:
+        """Downsample, normalize, mask, FFT and filter a single frame."""
+        frame = image[frame_idx].to(device)  # transfer only this one frame
+        if downsample_factor > 1:
+            frame = F.avg_pool2d(frame[None, None], kernel_size=downsample_factor)
+            frame = frame[0, 0]
+
+        frame_std, frame_mean = torch.std_mean(frame[hl:hu, wl:wu])
+        frame = (frame - frame_mean) / frame_std
+
+        frame_fft = torch.fft.rfftn(frame * mask, dim=(-2, -1))
+        return frame_fft * combined_filter
+
+    reference_fft = _prepare_frame_fft(reference_frame)
 
     # Calculate shifts for each frame
     shifts = torch.zeros((t, 2), device=device)  # (y, x) shifts
@@ -93,17 +112,17 @@ def estimate_global_motion(
             continue  # Reference frame has zero shift
 
         # Cross-correlation in frequency domain
-        frame_fft = filtered_fft[frame_idx]
+        frame_fft = _prepare_frame_fft(frame_idx)
         cross_corr_fft = torch.conj(reference_fft) * frame_fft
-        cross_corr = torch.fft.irfftn(cross_corr_fft, s=(h, w))
+        cross_corr = torch.fft.irfftn(cross_corr_fft, s=(h_ds, w_ds))
 
         # Find peak position
         peak_idx = torch.argmax(cross_corr.flatten())
-        peak_y, peak_x = divmod(peak_idx.item(), w)
+        peak_y, peak_x = divmod(peak_idx.item(), w_ds)
 
         # Convert to shifts (handle wraparound)
-        shift_y = peak_y if peak_y <= h // 2 else peak_y - h
-        shift_x = peak_x if peak_x <= w // 2 else peak_x - w
+        shift_y = peak_y if peak_y <= h_ds // 2 else peak_y - h_ds
+        shift_x = peak_x if peak_x <= w_ds // 2 else peak_x - w_ds
 
         shifts[frame_idx] = torch.tensor([shift_y, shift_x], device=device)
 
@@ -115,7 +134,7 @@ def estimate_global_motion(
         )
 
     return DeformationField.from_frame_shifts(
-        shifts=shifts, pixel_spacing=pixel_spacing, device=device
+        shifts=shifts, pixel_spacing=working_pixel_spacing, device=device
     )
 
 
@@ -136,7 +155,8 @@ def estimate_motion_cross_correlation_patches(
     Parameters
     ----------
     image: torch.Tensor
-        (t, h, w) array of images to motion correct
+        (t, h, w) array of images to motion correct. May live on a different device than
+        parameter ``device`` (e.g. CPU). Patches are transferred lazily.
     pixel_spacing: float
         Pixel spacing in angstroms
     patch_sampling: PatchSamplingConfig
@@ -190,16 +210,18 @@ def estimate_motion_cross_correlation_patches(
 
     if device is None:
         device = image.device
-    else:
-        image = image.to(device)
 
-    t, _h, _w = image.shape
+    t, h, w = image.shape
 
     # Use middle frame as reference if not specified
     if reference_frame is None:
         reference_frame = t // 2
 
-    image = normalize_image(image)
+    hl, hu = int(0.25 * h), int(0.75 * h)
+    wl, wu = int(0.25 * w), int(0.75 * w)
+    norm_std, norm_mean = torch.std_mean(image[:, hl:hu, wl:wu])
+    norm_std = norm_std.to(device)
+    norm_mean = norm_mean.to(device)
 
     if verbose:
         if reference_strategy == "middle_frame":
@@ -256,6 +278,7 @@ def estimate_motion_cross_correlation_patches(
         fourier_filter=fourier_filter,
         device=device,
     )
+    combined_filter = bandpass * b_factor_envelope
 
     # Initialize or update raw deformation field tensor
     if initial_deformation_field is None:
@@ -271,6 +294,30 @@ def estimate_motion_cross_correlation_patches(
     # Use local variable for the raw tensor during frame processing
     deformation_field_tensor = raw_field
 
+    def _get_frame_patches(frame_idx: int) -> torch.Tensor:
+        """Extract, transfer to device, and normalize one frame's patches."""
+        patches = lazy_patch_grid[frame_idx]  # (1, gh, gw, 1, ph, pw), lazy device
+        patches = einops.rearrange(patches, "1 gh gw 1 ph pw -> gh gw ph pw")
+        patches = patches.to(device)
+        return (patches - norm_mean) / norm_std
+
+    # For "mean_except_current", precompute the sum of every frame's patches once.
+    total_patches_sum = None
+    if reference_strategy == "mean_except_current":
+        for other_frame_idx in range(t):
+            other_patches = _get_frame_patches(other_frame_idx)
+            if total_patches_sum is None:
+                total_patches_sum = other_patches.clone()
+            else:
+                total_patches_sum += other_patches
+    elif reference_strategy == "middle_frame":
+        ref_patches_middle = _get_frame_patches(reference_frame) * mask
+        ref_patches_fft_middle = (
+            torch.fft.rfftn(ref_patches_middle, dim=(-2, -1)) * combined_filter
+        )
+    else:
+        raise ValueError(f"Unknown reference_strategy: {reference_strategy}")
+
     # Process each frame individually to manage memory
     for frame_idx in range(t):
         if reference_strategy == "middle_frame" and frame_idx == reference_frame:
@@ -279,50 +326,22 @@ def estimate_motion_cross_correlation_patches(
         if verbose:
             print(f"Processing frame {frame_idx}/{t - 1}")
 
-        # Determine reference patches based on strategy
+        frame_patches = _get_frame_patches(frame_idx)
+
         if reference_strategy == "middle_frame":
-            # Use middle frame as reference
-            ref_patches = lazy_patch_grid[reference_frame]  # (1, gh, gw, 1, ph, pw)
-            ref_patches = einops.rearrange(
-                ref_patches, "1 gh gw 1 ph pw -> gh gw ph pw"
+            ref_patches_fft = ref_patches_fft_middle
+        else:  # "mean_except_current"
+            assert total_patches_sum is not None
+            ref_patches = (total_patches_sum - frame_patches) / (t - 1)
+            ref_patches = ref_patches * mask
+            ref_patches_fft = (
+                torch.fft.rfftn(ref_patches, dim=(-2, -1)) * combined_filter
             )
-        elif reference_strategy == "mean_except_current":
-            # Use mean of all frames except current frame (computed
-            # incrementally to save memory)
-            ref_patches = None
-            count = 0
-            for other_frame_idx in range(t):
-                if other_frame_idx != frame_idx:
-                    other_patches = lazy_patch_grid[
-                        other_frame_idx
-                    ]  # (1, gh, gw, 1, ph, pw)
-                    other_patches = einops.rearrange(
-                        other_patches, "1 gh gw 1 ph pw -> gh gw ph pw"
-                    )
-                    if ref_patches is None:
-                        ref_patches = other_patches.clone()
-                    else:
-                        ref_patches += other_patches
-                    count += 1
-            ref_patches = ref_patches / count
-        else:
-            raise ValueError(f"Unknown reference_strategy: {reference_strategy}")
-
-        # Get patches for current frame only
-        frame_patches = lazy_patch_grid[frame_idx]  # (1, gh, gw, 1, ph, pw)
-        frame_patches = einops.rearrange(
-            frame_patches, "1 gh gw 1 ph pw -> gh gw ph pw"
-        )
-
-        # Apply mask and filters to reference patches
-        ref_patches *= mask
-        ref_patches_fft = torch.fft.rfftn(ref_patches, dim=(-2, -1))
-        ref_patches_fft = ref_patches_fft * bandpass * b_factor_envelope
 
         # Apply mask and filters to frame patches
-        frame_patches *= mask
+        frame_patches = frame_patches * mask
         frame_patches_fft = torch.fft.rfftn(frame_patches, dim=(-2, -1))
-        frame_patches_fft = frame_patches_fft * bandpass * b_factor_envelope
+        frame_patches_fft = frame_patches_fft * combined_filter
 
         # Vectorized cross-correlation for all patches at once
         cross_corr_fft = torch.conj(ref_patches_fft) * frame_patches_fft

@@ -117,16 +117,26 @@ class TestCorrectMotion:
     def test_different_devices(
         self, sample_image, sample_deformation_field, pixel_spacing
     ):
-        """Test that device parameter works."""
+        """Test that `device` controls compute location, not output location."""
         if torch.cuda.is_available():
-            corrected = correct_motion(
+            corrected_gpu = correct_motion(
                 image=sample_image,
                 deformation_field=DeformationField(data=sample_deformation_field),
                 pixel_spacing=pixel_spacing,
                 device=torch.device("cuda"),
             )
-            assert corrected.device.type == "cuda"
-            assert corrected.shape == sample_image.shape
+            assert corrected_gpu.device.type == sample_image.device.type == "cpu"
+            assert corrected_gpu.shape == sample_image.shape
+
+            corrected_cpu = correct_motion(
+                image=sample_image,
+                deformation_field=DeformationField(data=sample_deformation_field),
+                pixel_spacing=pixel_spacing,
+                device=torch.device("cpu"),
+            )
+            # Streaming through the GPU must give the same result as computing
+            # entirely on CPU.
+            assert torch.allclose(corrected_gpu, corrected_cpu, atol=1e-4)
         else:
             pytest.skip("CUDA not available")
 
@@ -175,19 +185,48 @@ class TestCorrectMotionFast:
     def test_different_devices(
         self, sample_image, sample_single_patch_deformation_field
     ):
-        """Test that device parameter works."""
+        """Test that `device` controls compute location, not output location."""
         if torch.cuda.is_available():
-            corrected = correct_motion_fast(
+            corrected_gpu = correct_motion_fast(
                 image=sample_image,
                 deformation_field=DeformationField(
                     data=sample_single_patch_deformation_field
                 ),
                 device=torch.device("cuda"),
             )
-            assert corrected.device.type == "cuda"
-            assert corrected.shape == sample_image.shape
+            assert corrected_gpu.device.type == sample_image.device.type == "cpu"
+            assert corrected_gpu.shape == sample_image.shape
+
+            corrected_cpu = correct_motion_fast(
+                image=sample_image,
+                deformation_field=DeformationField(
+                    data=sample_single_patch_deformation_field
+                ),
+                device=torch.device("cpu"),
+            )
+            # Streaming through the GPU must give the same result as computing
+            # entirely on CPU.
+            assert torch.allclose(corrected_gpu, corrected_cpu, atol=1e-4)
         else:
             pytest.skip("CUDA not available")
+
+    def test_does_not_mutate_input_deformation_field(
+        self, sample_image, sample_single_patch_deformation_field
+    ):
+        """Applying shifts must not flip the sign of the caller's field in place.
+
+        `deformation_field.to(device)` is a no-op (shares storage) when the
+        field is already on `device`, so an in-place negation of the derived
+        shifts would silently corrupt the caller's `DeformationField.data`.
+        """
+        field = DeformationField(data=sample_single_patch_deformation_field.clone())
+        original_data = field.data.clone()
+        correct_motion_fast(
+            image=sample_image,
+            deformation_field=field,
+            device=torch.device("cpu"),
+        )
+        assert torch.equal(field.data, original_data)
 
     def test_zero_deformation_field(self, sample_image):
         """Test with zero deformation field."""
@@ -539,4 +578,74 @@ class TestCorrectMotionTwoGrids:
         # computation graph works correctly
         # Base grid should NOT have gradients (it's detached in the function)
         # The base grid's shifts are detached, so gradients won't flow to it
+
+
+class TestPixelGridHoisting:
+    """Regression tests for hoisting ``coordinate_grid`` out of the per-frame loop."""
+
+    def test_correct_motion_matches_per_frame_grid(
+        self, sample_image, sample_deformation_field, pixel_spacing
+    ):
+        from torch_grid_utils import coordinate_grid
+
+        from torch_motion_correction.correct_motion import _correct_frame
+
+        field = DeformationField(data=sample_deformation_field)
+        t, h, w = sample_image.shape
+        _, _, gh, gw = field.data.shape
+        normalized_t = torch.linspace(0, 1, steps=t)
+
+        # Reference: recompute the pixel grid independently for every frame.
+        expected = torch.stack(
+            [
+                _correct_frame(
+                    frame=frame,
+                    frame_deformation_grid=field.evaluate_at_t(
+                        t=frame_t, grid_shape=(10 * gh, 10 * gw)
+                    ),
+                    pixel_spacing=pixel_spacing,
+                    pixel_grid=coordinate_grid(image_shape=(h, w), device=frame.device),
+                )
+                for frame, frame_t in zip(sample_image, normalized_t)
+            ],
+            dim=0,
+        )
+
+        actual = correct_motion(
+            image=sample_image,
+            deformation_field=field,
+            pixel_spacing=pixel_spacing,
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(actual, expected)
+
+    def test_correct_motion_slow_matches_per_frame_grid(
+        self, sample_image, sample_deformation_field
+    ):
+        from torch_grid_utils import coordinate_grid
+
+        from torch_motion_correction.correct_motion import _correct_frame_slow
+
+        t, h, w = sample_image.shape
+        normalized_t = torch.linspace(0, 1, steps=t)
+
+        expected = torch.stack(
+            [
+                _correct_frame_slow(
+                    frame=frame,
+                    deformation_grid=sample_deformation_field,
+                    t=frame_t,
+                    pixel_grid=coordinate_grid(image_shape=(h, w), device=frame.device),
+                )
+                for frame, frame_t in zip(sample_image, normalized_t)
+            ],
+            dim=0,
+        )
+
+        actual = correct_motion_slow(
+            image=sample_image,
+            deformation_field=DeformationField(data=sample_deformation_field),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(actual, expected)
         # even if requires_grad was set to True

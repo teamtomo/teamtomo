@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import torch
+import torch.nn.functional as F
 from torch_fourier_rescale import fourier_rescale_3d
 from torch_grid_utils import fftfreq_grid
 
@@ -69,11 +70,9 @@ def crop_or_pad_to_shape(
     torch.Tensor
         Tensor with last three dimensions equal to *target_shape*.
     """
-    import torch.nn.functional as F
-
     # --- crop ---
     slices: list[slice] = [slice(None)] * (volume.ndim - 3)
-    for current, target in zip(volume.shape[-3:], target_shape):
+    for current, target in zip(volume.shape[-3:], target_shape, strict=True):
         if current > target:
             start = (current - target) // 2
             slices.append(slice(start, start + target))
@@ -134,7 +133,9 @@ def make_spherical_mask(
     mask = torch.zeros_like(r)
     mask[r <= inner] = 1.0
     in_edge = (r > inner) & (r <= outer)
-    mask[in_edge] = 0.5 * (1 + torch.cos(torch.pi * (r[in_edge] - inner) / edge_width_fraction))
+    mask[in_edge] = 0.5 * (
+        1 + torch.cos(torch.pi * (r[in_edge] - inner) / edge_width_fraction)
+    )
     return mask
 
 

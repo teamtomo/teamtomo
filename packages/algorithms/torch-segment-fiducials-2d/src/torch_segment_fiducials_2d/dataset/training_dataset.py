@@ -43,7 +43,8 @@ class FiducialSegmentationDataset(Dataset):
                 or len(self.image_files) == 0
             ):
                 raise FileNotFoundError(
-                    "masks and images directories must contain the same number of images"
+                    "masks and images directories must contain the same number "
+                    "of images"
                 )
         self.train() if train is True else self.eval()
         self._validation_crop_parameters = None

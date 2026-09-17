@@ -1,6 +1,6 @@
 import torch
-
 from pytest_utils import device_test
+
 from torch_grid_utils.soft_edge import (
     _add_soft_edge_single_binary_image,
     add_soft_edge_2d,

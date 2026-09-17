@@ -1,6 +1,36 @@
 import torch
 
 
+def separable_sinc2_correction(
+    shape: tuple[int, ...], device: torch.device | None = None
+) -> torch.Tensor:
+    """sinc^2 correction for linear interpolation, applied per-axis.
+
+    Parameters
+    ----------
+    shape: tuple[int, ...]
+        Shape of the real-space array to correct.
+    device: torch.device | None
+        PyTorch device on which the returned correction will be stored.
+
+    Returns
+    -------
+    correction: torch.Tensor
+        `shape` array of sinc^2 correction factors, broadcastable against
+        an array of `shape` for elementwise division.
+    """
+    ndim = len(shape)
+    correction = torch.ones((), device=device)
+
+    for axis, size in enumerate(shape):
+        freq = torch.fft.fftshift(torch.fft.fftfreq(size, device=device))
+        view_shape = [1] * ndim
+        view_shape[axis] = size
+        correction = correction * torch.sinc(freq).view(view_shape)  # memory efficient
+
+    return correction**2
+
+
 def boundary_shell_average(
     volume: torch.Tensor, n: int, n_spatial_dims: int
 ) -> torch.Tensor:

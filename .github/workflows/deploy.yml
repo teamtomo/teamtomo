@@ -1,13 +1,13 @@
-# --- Deployment workflow for a single package in TeamTomo ---
+# Builds and publishes TeamTomo packages. Driven entirely by the tag that starts it:
 #
-# Triggers on any tag matching "*@v*" — both the root "teamtomo@v*" meta-package tag pushed
-# by the developer and the per-package tags created by coordinated_release.yml.
-# The workflow performs the following steps:
-# 1. Verifies that the tag is on the main branch to ensure only stable code is deployed.
-# 2. Checks that the CI tests have passed for the commit associated with the tag.
-# 3. Extracts the package name from the tag and runs tests for that specific package to ensure it is functioning correctly.
-# 4. Builds the package and publishes it to PyPI.
-# 5. Creates a GitHub Release with the built package attached.
+#   teamtomo@vX.Y.Z  -> coordinated release of every publishable package
+#   <package>@vX.Y.Z -> that one package only
+#
+# Nothing is published unless every package builds, tests and verifies first.
+#
+# Do not rename this file, make it a reusable workflow, or add `environment:` to the
+# publishing jobs -- see notes/release-instructions.md for why each of those breaks
+# publishing for every already-released package.
 
 name: Deploy
 
@@ -18,122 +18,192 @@ on:
   workflow_dispatch:
     inputs:
       release_name:
-        description: 'Release name to deploy (e.g., torch-2dtm@v0.6.2rc7)'
-        required: false
+        description: 'Tag to deploy (e.g. torch-so3@v0.6.0)'
+        required: true
         type: string
+      dry_run:
+        description: 'Rehearsal: build and gate, but do not publish'
+        required: false
+        default: false
+        type: boolean
 
+# Keyed on the tag rather than a branch. Dispatch runs used to share one group and
+# silently cancel each other, because GitHub keeps only one pending run per group.
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.release_name || github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  deploy:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    env:
+      TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || github.ref_name }}
+    outputs:
+      tag_name: ${{ steps.plan.outputs.tag_name }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      coordinated: ${{ steps.plan.outputs.coordinated }}
+      build_packages: ${{ steps.plan.outputs.build_packages }}
+      publish_packages: ${{ steps.plan.outputs.publish_packages }}
+
+    steps:
+      # Check out the tag, not a branch. On dispatch this used to check out main, so
+      # manual re-deploys built main's current source under the tag's version.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG_NAME }}
+          fetch-depth: 0
+
+      - name: Decide what this tag releases
+        id: plan
+        run: python3 .github/scripts/release_plan.py "$TAG_NAME"
+
+      - name: Check the commit is on main and green in CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/verify_release_commit.py "${{ steps.plan.outputs.sha }}"
+
+  build:
+    name: Build ${{ matrix.package }}
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      # A single red package must not hide the state of the others.
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.plan.outputs.build_packages) }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+
+      # --locked matches ci.yml, so the published artifact's dependencies are the
+      # ones CI actually tested.
+      - name: Install dependencies
+        run: uv sync --package "${{ matrix.package }}" --group test --locked
+
+      - name: Locate the package
+        id: package
+        run: echo "dir=$(python3 .github/scripts/get_all_packages.py '${{ matrix.package }}')" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: uv run pytest "${{ steps.package.outputs.dir }}"
+
+      # The version comes from the tag. Pinning it keeps the build independent of the
+      # working tree: otherwise hatch-vcs emits a dev version that PyPI rejects.
+      # The unscoped variable is safe because each job builds exactly one package.
+      - name: Build
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.plan.outputs.version }}
+        run: uv build --package "${{ matrix.package }}" --out-dir dist
+
+      - name: Check metadata
+        run: uvx twine check --strict dist/*
+
+      # Confirms the artifact carries the version the tag asked for, and declares no
+      # direct URL dependency. This is what makes skip-existing safe on publish.
+      - name: Verify artifacts
+        run: python3 .github/scripts/check_artifacts.py --dist-dir dist --expect-version "${{ needs.plan.outputs.version }}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ matrix.package }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # The point of the whole pipeline: publishing cannot begin unless every package
+  # above succeeded, so a release is all-or-nothing.
+  gate:
+    name: Gate
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every package to have built
+        if: needs.build.result != 'success'
+        run: |
+          echo "::error::Some packages failed to build or test. Nothing has been published."
+          exit 1
+
+  publish:
+    name: Publish ${{ matrix.package }}
+    needs: [plan, gate]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI trusted publishing
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.plan.outputs.publish_packages) }}
+
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ matrix.package }}
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          # Re-running a failed leg becomes a no-op instead of a 400.
+          skip-existing: true
+
+  # Published last, so `pip install teamtomo==X.Y.Z` can always resolve its
+  # components. It used to deploy in parallel with them.
+  publish_meta:
+    name: Publish teamtomo
+    needs: [plan, publish]
+    if: ${{ needs.plan.outputs.coordinated == 'true' && !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-teamtomo
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          skip-existing: true
+
+  record:
+    name: Record
+    needs: [plan, publish, publish_meta]
+    if: ${{ always() && !inputs.dry_run && needs.publish.result == 'success' && needs.publish_meta.result != 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.plan.outputs.sha }}
           fetch-depth: 0
-      - uses: actions/setup-python@v7
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v7
+          pattern: dist-*
+          path: artifacts
 
-      - name: Verify tag on main branch
-        run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor ${{ github.sha }} origin/main; then
-            echo "ERROR: Tag is not on main branch. Cannot deploy."
-            exit 1
-          fi
-
-      - name: Verify CI passed for this commit
+      - name: Tag what shipped and create releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          COMMIT_SHA=$(git rev-list -n 1 ${{ github.ref }})
-          echo "Checking CI status for commit: $COMMIT_SHA"
-
-          # Query check runs (GitHub Actions reports as check runs, not commit statuses)
-          CI_CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/$COMMIT_SHA/check-runs" \
-            --paginate \
-            --jq '.check_runs[] | select(.name | startswith("Test All Packages")) | .conclusion' \
-            | sort -u)
-
-          echo "CI conclusions: $CI_CONCLUSION"
-
-          if echo "$CI_CONCLUSION" | grep -q "failure"; then
-            echo "❌ CI failed. Cannot deploy."
-            exit 1
-          fi
-
-          if ! echo "$CI_CONCLUSION" | grep -q "success"; then
-            echo "❌ CI has not completed successfully. Cannot deploy."
-            exit 1
-          fi
-
-          echo "✅ CI passed. Proceeding with deploy."
-
-      - name: Extract package name from tag
-        id: info
-        run: |
-          # On tag push github.ref_name is the tag; on workflow_dispatch fall back to input
-          TAG_NAME="${{ github.ref_name }}"
-          if [[ -z "$TAG_NAME" || "$TAG_NAME" == "${{ github.event.repository.default_branch }}" ]]; then
-            TAG_NAME="${{ inputs.release_name }}"
-          fi
-          if [[ -z "$TAG_NAME" ]]; then
-            echo "ERROR: No tag name found"
-            exit 1
-          fi
-          PKG_NAME=${TAG_NAME%@*}
-          # Strip the "<pkg>@v" prefix to get the PEP 440 version (e.g. 0.5.2, 0.5.2rc1)
-          VERSION=${TAG_NAME#*@}
-          VERSION=${VERSION#v}
-          echo "pkg_name=$PKG_NAME" >> "$GITHUB_OUTPUT"
-          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Deploying package: $PKG_NAME (version $VERSION)"
-
-      - name: Install package dependencies
-        run: |
-          uv sync --package ${{ steps.info.outputs.pkg_name }} --group test
-
-      - name: Find package directory
-        id: pkg-dir
-        run: |
-          PKG_DIR=$(uv run python .github/scripts/get_all_packages.py ${{ steps.info.outputs.pkg_name }})
-          echo "pkg_dir=$PKG_DIR" >> "$GITHUB_OUTPUT"
-          echo "Package directory: $PKG_DIR"
-
-      - name: Test package before deployment
-        run: |
-          uv run pytest ${{ steps.pkg-dir.outputs.pkg_dir }} \
-            --cov=${{ steps.pkg-dir.outputs.pkg_dir }} --cov-report=xml
-
-      - name: Build package
-        # The deploy is triggered by the package's release tag, so the version is
-        # already known unambiguously. Pin it explicitly so the build is immune to
-        # git working-tree state: a dirty tree would otherwise make hatch-vcs
-        # (setuptools-scm) emit a "guess-next-dev" version like 0.5.3.dev0+g<sha>.d<date>,
-        # which PyPI rejects for its local-version segment.
-        env:
-          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.info.outputs.version }}
-        run: uv build --package ${{ steps.info.outputs.pkg_name }}
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          # Make re-runs idempotent: if a package version was already uploaded in a
-          # previous (partial) fan-out, skip it instead of failing with a 400.
-          skip-existing: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.info.outputs.tag_name }}
-          generate_release_notes: true
-          files: './dist/*'
+          python3 .github/scripts/record_release.py \
+            --version "${{ needs.plan.outputs.version }}" \
+            --commit "${{ needs.plan.outputs.sha }}" \
+            --packages '${{ needs.plan.outputs.build_packages }}' \
+            --artifacts-dir artifacts

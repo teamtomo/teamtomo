@@ -9,14 +9,26 @@ except PackageNotFoundError:
 __author__ = "Marten Chaillet, Davide Torre"
 __email__ = "martenchaillet@gmail.com, davidetorre99@gmail.com"
 
-from torch_tilt_series.io import from_aretomo_output, from_etomo_directory
+from torch_tilt_series.io import (
+    from_aretomo_output,
+    from_etomo_directory,
+    load_tilt_series_images,
+)
+from torch_tilt_series.preprocessing import preprocess_tilt_series_images
 from torch_tilt_series.tilt_series import TiltSeries
+from torch_tilt_series.utils import normalize_on_central_crop, subtract_plane
 
-TiltSeries.from_aretomo_output = classmethod(
+TiltSeries.from_aretomo_output = classmethod(  # type: ignore[attr-defined]
     lambda cls, *args, **kwargs: from_aretomo_output(*args, **kwargs)
 )
-TiltSeries.from_etomo_directory = classmethod(
+TiltSeries.from_etomo_directory = classmethod(  # type: ignore[attr-defined]
     lambda cls, *args, **kwargs: from_etomo_directory(*args, **kwargs)
 )
 
-__all__ = ["TiltSeries"]
+__all__ = [
+    "TiltSeries",
+    "load_tilt_series_images",
+    "normalize_on_central_crop",
+    "preprocess_tilt_series_images",
+    "subtract_plane",
+]

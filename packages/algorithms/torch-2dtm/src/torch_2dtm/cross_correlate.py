@@ -37,12 +37,14 @@ def match_template_dft_2d(
         `(h_im, w_im // 2 + 1)` fourier transform (rfft) of the real space image.
         Any filters etc are assumed to have already been applied to this image.
     template_dft : torch.Tensor
-       `(d, h, w // 2 + 1)` fftshifted fourier transform (rfft) of the real valued template volume to take Fourier
-        slices from.
+        `(d, h, w // 2 + 1)` fftshifted fourier transform (rfft) of the real valued
+        template volume to take Fourier slices from.
     rotation_matrices : torch.Tensor
-        `(b, 3, 3)` batched rotation matrices to rotate slices sampled from the template fourier transform.
+        `(b, 3, 3)` batched rotation matrices to rotate slices sampled from the
+        template fourier transform.
     filters : torch.Tensor
-        `(..., h, w // 2 + 1)` filters applied to FFT slices which are fftshifted results of a rfft.
+        `(..., h, w // 2 + 1)` filters applied to FFT slices which are fftshifted
+        results of a rfft.
 
     Returns
     -------

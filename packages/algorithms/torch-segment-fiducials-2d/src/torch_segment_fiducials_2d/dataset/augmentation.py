@@ -26,19 +26,21 @@ def random_crop_at_size(
 
 def random_flip(*images: torch.Tensor, p=0.5) -> List[torch.Tensor]:
     """Apply the same random flip to multiple images."""
+    result = list(images)
     if random.random() > 1 - p:
-        images = [TF.hflip(image) for image in images]
+        result = [TF.hflip(image) for image in result]
     if random.random() > 1 - p:
-        images = [TF.vflip(image) for image in images]
-    return list(images)
+        result = [TF.vflip(image) for image in result]
+    return result
 
 
 def random_rotation(*images: torch.Tensor, p=0.5) -> List[torch.Tensor]:
     """Apply the same random rotation to multiple images."""
     angle = random.uniform(-180, 180)
+    result = list(images)
     if random.random() > 1 - p:
-        images = [
+        result = [
             TF.rotate(image, angle=angle, interpolation=TF.InterpolationMode.BILINEAR)
-            for image in images
+            for image in result
         ]
-    return list(images)
+    return result

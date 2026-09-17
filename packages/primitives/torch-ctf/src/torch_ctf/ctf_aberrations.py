@@ -227,6 +227,35 @@ def resolve_odd_zernikes(
     return zernikes
 
 
+def _as_zernike_coeff(
+    coeff: float | torch.Tensor, dtype: torch.dtype, device: torch.device
+) -> torch.Tensor:
+    """Return a Zernike coefficient as a tensor on the grid's dtype and device.
+
+    Parameters
+    ----------
+    coeff: float | torch.Tensor
+        Zernike coefficient. A scalar applies to every image; a tensor of
+        shape (..., 1, 1) gives one coefficient per image in a batch.
+    dtype: torch.dtype
+        Dtype of the coordinate grid the coefficient will be applied to.
+    device: torch.device
+        Device of the coordinate grid the coefficient will be applied to.
+
+    Returns
+    -------
+    coeff: torch.Tensor
+        The coefficient as a tensor.
+    """
+    if isinstance(coeff, int | float):
+        return torch.tensor(coeff, dtype=dtype, device=device)
+    if isinstance(coeff, torch.Tensor):
+        return coeff.to(device=device, dtype=dtype)
+    raise TypeError(
+        f"Zernike coefficient must be float or torch.Tensor, got {type(coeff)}"
+    )
+
+
 def apply_odd_zernikes(
     odd_zernikes: dict | None,
     rho: torch.Tensor,
@@ -240,8 +269,9 @@ def apply_odd_zernikes(
     Parameters
     ----------
     odd_zernikes: dict | None
-        Odd Zernike coefficients. Values can be floats or tensors.
-        Floats will be converted to tensors for differentiability.
+        Odd Zernike coefficients. Values can be floats or tensors. A
+        coefficient of shape (..., 1, 1) is treated as one value per image
+        and broadcasts the returned phase up to (..., h, w).
     rho: torch.Tensor
         Radial coordinate.
     theta: torch.Tensor
@@ -268,29 +298,18 @@ def apply_odd_zernikes(
         return torch.zeros_like(rho)
 
     phase = torch.zeros_like(rho)
-    device = rho.device
-    dtype = rho.dtype
 
     for name, coeff in odd_zernikes.items():
-        # Convert float to tensor for differentiability
-        if isinstance(coeff, int | float):
-            coeff = torch.tensor(coeff, dtype=dtype, device=device, requires_grad=True)
-        elif isinstance(coeff, torch.Tensor):
-            # Ensure tensor is on correct device and dtype
-            coeff = coeff.to(device=device, dtype=dtype)
-        else:
-            raise TypeError(
-                f"Zernike coefficient must be float or torch.Tensor, got {type(coeff)}"
-            )
+        coeff = _as_zernike_coeff(coeff, dtype=rho.dtype, device=rho.device)
 
         if name == "Z31c":  # beam tilt / axial coma x
-            phase += coeff * rho**3 * torch.cos(theta)
+            phase = phase + coeff * rho**3 * torch.cos(theta)
         elif name == "Z31s":  # beam tilt / axial coma y
-            phase += coeff * rho**3 * torch.sin(theta)
+            phase = phase + coeff * rho**3 * torch.sin(theta)
         elif name == "Z33c":  # trefoil
-            phase += coeff * rho**3 * torch.cos(3 * theta)
+            phase = phase + coeff * rho**3 * torch.cos(3 * theta)
         elif name == "Z33s":
-            phase += coeff * rho**3 * torch.sin(3 * theta)
+            phase = phase + coeff * rho**3 * torch.sin(3 * theta)
         else:
             raise ValueError(f"Unknown odd Zernike: {name}")
 
@@ -311,8 +330,9 @@ def apply_even_zernikes(
         Even Zernike coefficients, keyed by name. Supported names are
         ``Z42c``/``Z42s`` (secondary astigmatism), ``Z44c``/``Z44s``
         (four-fold astigmatism) and ``Z60`` (sixth-order spherical).
-        Values can be floats or tensors. Floats will be converted to
-        tensors for differentiability.
+        Values can be floats or tensors. A coefficient of shape
+        (..., 1, 1) is treated as one value per image and broadcasts the
+        returned phase up to (..., h, w).
     total_phase_shift: torch.Tensor
         Total phase shift.
     rho: torch.Tensor
@@ -326,31 +346,20 @@ def apply_even_zernikes(
         Phase shift with even Zernike coefficients applied.
     """
     chi = total_phase_shift.clone()
-    device = rho.device
-    dtype = rho.dtype
 
     for name, coeff in even_zernikes.items():
-        # Convert float to tensor for differentiability
-        if isinstance(coeff, int | float):
-            coeff = torch.tensor(coeff, dtype=dtype, device=device, requires_grad=True)
-        elif isinstance(coeff, torch.Tensor):
-            # Ensure tensor is on correct device and dtype
-            coeff = coeff.to(device=device, dtype=dtype)
-        else:
-            raise TypeError(
-                f"Zernike coefficient must be float or torch.Tensor, got {type(coeff)}"
-            )
+        coeff = _as_zernike_coeff(coeff, dtype=rho.dtype, device=rho.device)
 
         if name == "Z42c":  # secondary (2-fold) astigmatism
-            chi += coeff * rho**4 * torch.cos(2 * theta)
+            chi = chi + coeff * rho**4 * torch.cos(2 * theta)
         elif name == "Z42s":
-            chi += coeff * rho**4 * torch.sin(2 * theta)
+            chi = chi + coeff * rho**4 * torch.sin(2 * theta)
         elif name == "Z44c":  # 4-fold astigmatism
-            chi += coeff * rho**4 * torch.cos(4 * theta)
+            chi = chi + coeff * rho**4 * torch.cos(4 * theta)
         elif name == "Z44s":
-            chi += coeff * rho**4 * torch.sin(4 * theta)
+            chi = chi + coeff * rho**4 * torch.sin(4 * theta)
         elif name == "Z60":  # 6th-order spherical
-            chi += coeff * rho**6
+            chi = chi + coeff * rho**6
         else:
             raise ValueError(f"Unknown even Zernike: {name}")
     return chi

@@ -8,9 +8,7 @@ def test_subpixel_crop_single_3d():
     image[4:6, 4:6, 4:6] = 1
 
     cropped_image = subpixel_crop_3d(
-        image=image,
-        positions=torch.tensor([5, 5, 5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5, 5, 5]).float(), sidelength=4
     )
     assert cropped_image.shape == (4, 4, 4)
 
@@ -24,9 +22,7 @@ def test_subpixel_crop_single_3d_return_rfft():
     image[4:6, 4:6, 4:6] = 1
 
     cropped_image_real = subpixel_crop_3d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5, 5.5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5.5, 5.5, 5.5]).float(), sidelength=4
     )
 
     cropped_image_rfft = subpixel_crop_3d(
@@ -45,9 +41,7 @@ def test_subpixel_crop_single_3d_return_rfft_decenter():
     image[4:6, 4:6, 4:6] = 1
 
     cropped_image_real = subpixel_crop_3d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5, 5.5]).float(),
-        sidelength=4
+        image=image, positions=torch.tensor([5.5, 5.5, 5.5]).float(), sidelength=4
     )
 
     cropped_image_decenter = subpixel_crop_3d(
@@ -57,11 +51,9 @@ def test_subpixel_crop_single_3d_return_rfft_decenter():
         return_rfft=True,
         decenter=True,
     )
-    cropped_image_decenter = (
-        torch.fft.irfftn(cropped_image_decenter, s=(4, 4, 4))
-    )
-    cropped_image_decenter = (
-        torch.fft.fftshift(cropped_image_decenter, dim=(-3, -2, -1))
+    cropped_image_decenter = torch.fft.irfftn(cropped_image_decenter, s=(4, 4, 4))
+    cropped_image_decenter = torch.fft.fftshift(
+        cropped_image_decenter, dim=(-3, -2, -1)
     )
     assert torch.allclose(cropped_image_decenter, cropped_image_real)
 
@@ -71,9 +63,7 @@ def test_subpixel_crop_single_3d_return_rfft_decenter_odd_sidelength():
     image[4:6, 4:6, 4:6] = 1
 
     cropped_image_real = subpixel_crop_3d(
-        image=image,
-        positions=torch.tensor([5.5, 5.5, 5.5]).float(),
-        sidelength=5
+        image=image, positions=torch.tensor([5.5, 5.5, 5.5]).float(), sidelength=5
     )
 
     cropped_image_decenter = subpixel_crop_3d(
@@ -83,13 +73,11 @@ def test_subpixel_crop_single_3d_return_rfft_decenter_odd_sidelength():
         return_rfft=True,
         decenter=True,
     )
-    cropped_image_decenter = (
-        torch.fft.irfftn(cropped_image_decenter, s=(5, 5, 5))
-    )
+    cropped_image_decenter = torch.fft.irfftn(cropped_image_decenter, s=(5, 5, 5))
     # for odd sidelengths, fftshift and ifftshift differ by one sample;
     # decenter shifts by +(sidelength // 2), so ifftshift is the correct undo
-    cropped_image_decenter = (
-        torch.fft.ifftshift(cropped_image_decenter, dim=(-3, -2, -1))
+    cropped_image_decenter = torch.fft.ifftshift(
+        cropped_image_decenter, dim=(-3, -2, -1)
     )
     assert torch.allclose(cropped_image_decenter, cropped_image_real, atol=1e-5)
 
@@ -101,7 +89,7 @@ def test_subpixel_crop_multi_3d():
     cropped_image = subpixel_crop_3d(
         image=image,
         positions=torch.tensor([[4, 4, 4], [5, 5, 5]]).float(),
-        sidelength=4
+        sidelength=4,
     )
     assert cropped_image.shape == (2, 4, 4, 4)
 

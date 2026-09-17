@@ -1,4 +1,4 @@
-"""A small pre-trained residual U-Net for gold fiducial segmentation in cryo-EM images"""
+"""A small pre-trained residual U-Net for gold fiducial segmentation in cryo-EM."""
 
 from importlib.metadata import PackageNotFoundError, version
 

@@ -55,16 +55,16 @@ def patch_grid_indices(
     if ndim == 2:
         return _patch_indices_2d(
             image_shape=image_shape,
-            patch_shape=cast(tuple[int, int], patch_shape),
-            patch_step=cast(tuple[int, int], patch_step),
+            patch_shape=cast("tuple[int, int]", patch_shape),
+            patch_step=cast("tuple[int, int]", patch_step),
             distribute_patches=distribute_patches,
             device=device,
         )
     elif ndim == 3:
         return _patch_indices_3d(
             image_shape=image_shape,
-            patch_shape=cast(tuple[int, int, int], patch_shape),
-            patch_step=cast(tuple[int, int, int], patch_step),
+            patch_shape=cast("tuple[int, int, int]", patch_shape),
+            patch_step=cast("tuple[int, int, int]", patch_step),
             distribute_patches=distribute_patches,
             device=device,
         )

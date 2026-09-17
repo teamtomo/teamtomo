@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from torch_grid_utils import fftfreq_grid
 
 from .slice_extraction import (
     extract_central_slices_rfft_2d,
@@ -9,7 +8,11 @@ from .slice_extraction import (
     transform_slice_2d,
     transform_slice_2d_multichannel,
 )
-from .volume_utils import compute_cube_face_averages, compute_square_edge_averages
+from .volume_utils import (
+    compute_cube_face_averages,
+    compute_square_edge_averages,
+    separable_sinc2_correction,
+)
 
 
 def project_3d_to_2d(
@@ -87,20 +90,9 @@ def project_3d_to_2d(
     volume_shape = tuple(volume.shape[-3:])
 
     # divide by sinc^2 in real space to correct for the effect of trilinear
-    # interpolation during slice extraction. The interpolation kernel is
-    # separable per-axis, so the correction is a product of 1D sincs, not
-    # the sinc of the radial frequency. See issue #65 for more info.
-    grid = fftfreq_grid(
-        image_shape=volume_shape,
-        rfft=False,
-        fftshift=True,
-        norm=False,
-        device=volume.device,
-    )
-    sinc = (
-        torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1]) * torch.sinc(grid[..., 2])
-    )
-    volume = volume / sinc**2
+    # interpolation during slice extraction. See issue #65 for more info.
+    sinc2 = separable_sinc2_correction(volume_shape, device=volume.device)
+    volume = volume / sinc2
 
     # calculate DFT
     # volume center to array origin
@@ -225,20 +217,9 @@ def project_3d_to_2d_multichannel(
     volume_shape = tuple(volume.shape[-3:])
 
     # divide by sinc^2 in real space to correct for the effect of trilinear
-    # interpolation during slice extraction. The interpolation kernel is
-    # separable per-axis, so the correction is a product of 1D sincs, not
-    # the sinc of the radial frequency. See issue #65 for more info.
-    grid = fftfreq_grid(
-        image_shape=volume_shape,
-        rfft=False,
-        fftshift=True,
-        norm=False,
-        device=volume.device,
-    )
-    sinc = (
-        torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1]) * torch.sinc(grid[..., 2])
-    )
-    volume = volume / sinc**2
+    # interpolation during slice extraction. See issue #65 for more info.
+    sinc2 = separable_sinc2_correction(volume_shape, device=volume.device)
+    volume = volume / sinc2
 
     # calculate DFT
     # volume center to array origin
@@ -341,19 +322,10 @@ def project_2d_to_1d(
     # set the shape as a variable
     image_shape = tuple(image.shape[-2:])
 
-    # divide by sinc^2 in real space to correct for the effect of linear
-    # interpolation during slice extraction. The interpolation kernel is
-    # separable per-axis, so the correction is a product of 1D sincs, not
-    # the sinc of the radial frequency. See issue #65 for more info.
-    grid = fftfreq_grid(
-        image_shape=image_shape,
-        rfft=False,
-        fftshift=True,
-        norm=False,
-        device=image.device,
-    )
-    sinc = torch.sinc(grid[..., 0]) * torch.sinc(grid[..., 1])
-    image = image / sinc**2
+    # divide by sinc^2 in real space to correct for the effect of trilinear
+    # interpolation during slice extraction. See issue #65 for more info.
+    sinc2 = separable_sinc2_correction(image_shape, device=image.device)
+    image = image / sinc2
 
     # calculate DFT
     dft = torch.fft.ifftshift(image, dim=(-2, -1))  # image center to array origin

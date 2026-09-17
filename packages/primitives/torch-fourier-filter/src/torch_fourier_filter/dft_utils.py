@@ -329,8 +329,8 @@ def _1d_to_rotational_average_2d_dft(
         2D tensor of values in frequency bins
     """
     # construct output tensor
-    h, w = image_shape[-2:]
-    h, w = rfft_shape((h, w)) if rfft is True else (h, w)
+    real_h, real_w = image_shape[-2:]
+    h, w = rfft_shape((real_h, real_w)) if rfft is True else (real_h, real_w)
     result_shape = (*image_shape[:-2], h, w)
     average_2d = torch.zeros(
         size=result_shape, dtype=values.dtype, device=values.device
@@ -338,7 +338,7 @@ def _1d_to_rotational_average_2d_dft(
 
     # construct 2d grid of frequencies and find 2d indices for elements in each bin
     grid = fftfreq_grid(
-        image_shape=image_shape[-2:],
+        image_shape=(real_h, real_w),
         rfft=rfft,
         fftshift=fftshifted,
         norm=True,
@@ -383,8 +383,12 @@ def _1d_to_rotational_average_3d_dft(
         3D tensor of values in frequency bins
     """
     # construct output tensor
-    d, h, w = image_shape[-3:]
-    d, h, w = rfft_shape((d, h, w)) if rfft is True else (d, h, w)
+    real_d, real_h, real_w = image_shape[-3:]
+    d, h, w = (
+        rfft_shape((real_d, real_h, real_w))
+        if rfft is True
+        else (real_d, real_h, real_w)
+    )
     result_shape = (*image_shape[:-3], d, h, w)
     average_3d = torch.zeros(
         size=result_shape, dtype=values.dtype, device=values.device
@@ -392,7 +396,7 @@ def _1d_to_rotational_average_3d_dft(
 
     # construct 3d grid of frequencies and find 3d indices for elements in each bin
     grid = fftfreq_grid(
-        image_shape=image_shape[-3:],
+        image_shape=(real_d, real_h, real_w),
         rfft=rfft,
         fftshift=fftshifted,
         norm=True,

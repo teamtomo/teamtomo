@@ -1,7 +1,9 @@
-from typing import Union, Any, Literal
+"""Refine peak positions by fitting Gaussian models around initial coordinates."""
 
-import pandas as pd
+from typing import Any, Literal, Union
+
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -29,19 +31,20 @@ def _refine_peaks_2d_torch(
         A tensor of shape (n, 5) containing the fitted parameters for each peak.
         Each row contains [amplitude, y, x, sigma_x, sigma_y].
     """
-    
     # Crop regions around peaks
-    boxes = subpixel_crop_2d(image, peak_data[...,1:3], boxsize).detach()
+    boxes = subpixel_crop_2d(image, peak_data[..., 1:3], boxsize).detach()
     # Prepare coordinates
     center = dft_center((boxsize, boxsize), rfft=False, fftshift=True)
     grid = coordinate_grid((boxsize, boxsize), center=center, device=image.device)
 
     # Initialize model
-    model = Gaussian2D(amplitude=peak_data[..., 0],
-                       center_x=torch.zeros_like(peak_data[..., 0]),
-                       center_y=torch.zeros_like(peak_data[..., 0]),
-                       sigma_x=peak_data[..., 3],
-                       sigma_y=peak_data[..., 4]).to(image.device)
+    model = Gaussian2D(
+        amplitude=peak_data[..., 0],
+        center_x=torch.zeros_like(peak_data[..., 0]),
+        center_y=torch.zeros_like(peak_data[..., 0]),
+        sigma_x=peak_data[..., 3],
+        sigma_y=peak_data[..., 4],
+    ).to(image.device)
 
     # Create optimizer and criterion
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -71,13 +74,16 @@ def _refine_peaks_2d_torch(
 
     # Combine the (...,1) model parameters to a (...,5) tensor
     # and add the peak coordinates - keeping yx order
-    fitted_params = torch.stack([
-        model.amplitude,
-        model.center_y + peak_data[..., 1],  # y coordinate first
-        model.center_x + peak_data[..., 2],  # x coordinate second
-        model.sigma_x,
-        model.sigma_y
-    ], dim=-1)
+    fitted_params = torch.stack(
+        [
+            model.amplitude,
+            model.center_y + peak_data[..., 1],  # y coordinate first
+            model.center_x + peak_data[..., 2],  # x coordinate second
+            model.sigma_x,
+            model.sigma_y,
+        ],
+        dim=-1,
+    )
 
     return fitted_params
 
@@ -89,9 +95,9 @@ def refine_peaks_2d(
     max_iterations: int = 1000,
     learning_rate: float = 0.01,
     tolerance: float = 1e-6,
-    amplitude: Union[torch.Tensor, float] = 1.,
-    sigma_x: Union[torch.Tensor, float] = 1.,
-    sigma_y: Union[torch.Tensor, float] = 1.,
+    amplitude: Union[torch.Tensor, float] = 1.0,
+    sigma_x: Union[torch.Tensor, float] = 1.0,
+    sigma_y: Union[torch.Tensor, float] = 1.0,
     return_as: Literal["torch", "numpy", "dataframe"] = "torch",
 ) -> torch.Tensor:
     """
@@ -103,7 +109,8 @@ def refine_peaks_2d(
         A 2D tensor-like object (e.g., torch.Tensor, numpy.ndarray)
         containing the image data.
     peak_coords : torch.Tensor, np.ndarray, or pd.DataFrame
-        A tensor-like object of shape (n, 2) containing the initial peak coordinates (y, x).
+        A tensor-like object of shape (n, 2) containing the initial peak
+        coordinates (y, x).
     boxsize : int
         Size of the region to crop around each peak (must be even).
     max_iterations : int, optional
@@ -118,6 +125,9 @@ def refine_peaks_2d(
         Initial standard deviation in the x direction. Default is 1.0.
     sigma_y : Union[torch.Tensor, float], optional
         Initial standard deviation in the y direction. Default is 1.0.
+    return_as : str, optional
+        The format of the output. Default is "torch".
+        Other options are "numpy" and "dataframe".
 
     Returns
     -------
@@ -129,7 +139,7 @@ def refine_peaks_2d(
         image = torch.as_tensor(image)
     if isinstance(peak_coords, pd.DataFrame):
         amplitude = torch.as_tensor(peak_coords["height"].to_numpy())
-        peak_coords = torch.as_tensor(peak_coords[["y","x"]].to_numpy())
+        peak_coords = torch.as_tensor(peak_coords[["y", "x"]].to_numpy())
     if not isinstance(peak_coords, torch.Tensor):
         peak_coords = torch.as_tensor(peak_coords)
 
@@ -141,13 +151,16 @@ def refine_peaks_2d(
     if not isinstance(sigma_y, torch.Tensor):
         sigma_y = torch.tensor([sigma_y] * num_peaks, device=image.device)
 
-    initial_peak_data = torch.stack([
-        amplitude,
-        peak_coords[:, 0],  # y
-        peak_coords[:, 1],  # x
-        sigma_x,
-        sigma_y,
-    ], dim=-1)
+    initial_peak_data = torch.stack(
+        [
+            amplitude,
+            peak_coords[:, 0],  # y
+            peak_coords[:, 1],  # x
+            sigma_x,
+            sigma_y,
+        ],
+        dim=-1,
+    )
 
     refined_peak_data = _refine_peaks_2d_torch(
         image=image,
@@ -158,14 +171,18 @@ def refine_peaks_2d(
         tolerance=tolerance,
     )
 
-    if return_as=="torch":
+    if return_as == "torch":
         return refined_peak_data
-    elif return_as=="numpy":
+    elif return_as == "numpy":
         return refined_peak_data.detach().cpu().numpy()
-    elif return_as=="dataframe":
-        return pd.DataFrame(refined_peak_data.detach().cpu().numpy(), columns=["amplitude", "y", "x", "sigma_x", "sigma_y"])
+    elif return_as == "dataframe":
+        return pd.DataFrame(
+            refined_peak_data.detach().cpu().numpy(),
+            columns=["amplitude", "y", "x", "sigma_x", "sigma_y"],
+        )
     else:
         raise ValueError(f"Invalid return_as value: {return_as}")
+
 
 def _refine_peaks_3d_torch(
     volume: torch.Tensor,
@@ -209,7 +226,9 @@ def _refine_peaks_3d_torch(
 
     # Prepare coordinates
     center = dft_center((boxsize, boxsize, boxsize), rfft=False, fftshift=True)
-    grid = coordinate_grid((boxsize, boxsize, boxsize), center=center, device=volume.device)
+    grid = coordinate_grid(
+        (boxsize, boxsize, boxsize), center=center, device=volume.device
+    )
 
     # Initialize model
     model = Gaussian3D(
@@ -251,15 +270,18 @@ def _refine_peaks_3d_torch(
 
     # Combine the (...,1) model parameters to a (...,7) tensor
     # and add the peak coordinates in zyx order
-    fitted_params = torch.stack([
-        model.amplitude,
-        model.center_z + peak_data[:, 1],  # z coordinate first
-        model.center_y + peak_data[:, 2],  # y coordinate second
-        model.center_x + peak_data[:, 3],  # x coordinate third
-        model.sigma_x,
-        model.sigma_y,
-        model.sigma_z
-    ], dim=-1)
+    fitted_params = torch.stack(
+        [
+            model.amplitude,
+            model.center_z + peak_data[:, 1],  # z coordinate first
+            model.center_y + peak_data[:, 2],  # y coordinate second
+            model.center_x + peak_data[:, 3],  # x coordinate third
+            model.sigma_x,
+            model.sigma_y,
+            model.sigma_z,
+        ],
+        dim=-1,
+    )
 
     return fitted_params, boxes, output
 
@@ -271,10 +293,10 @@ def refine_peaks_3d(
     max_iterations: int = 1000,
     learning_rate: float = 0.01,
     tolerance: float = 1e-6,
-    amplitude: Union[torch.Tensor, float] = 1.,
-    sigma_x: Union[torch.Tensor, float] = 1.,
-    sigma_y: Union[torch.Tensor, float] = 1.,
-    sigma_z: Union[torch.Tensor, float] = 1.,
+    amplitude: Union[torch.Tensor, float] = 1.0,
+    sigma_x: Union[torch.Tensor, float] = 1.0,
+    sigma_y: Union[torch.Tensor, float] = 1.0,
+    sigma_z: Union[torch.Tensor, float] = 1.0,
     return_as: Literal["torch", "numpy", "dataframe"] = "torch",
 ) -> torch.Tensor:
     """
@@ -286,7 +308,8 @@ def refine_peaks_3d(
         A 3D tensor-like object (e.g., torch.Tensor, numpy.ndarray)
         containing the volume data.
     peak_coords : torch.Tensor, np.ndarray, or pd.DataFrame
-        A tensor-like object of shape (n, 3) containing the initial peak coordinates (z, y, x).
+        A tensor-like object of shape (n, 3) containing the initial peak
+        coordinates (z, y, x).
     boxsize : int
         Size of the region to crop around each peak (must be even).
     max_iterations : int, optional
@@ -303,6 +326,9 @@ def refine_peaks_3d(
         Initial standard deviation in the y direction. Default is 1.0.
     sigma_z : Union[torch.Tensor, float], optional
         Initial standard deviation in the z direction. Default is 1.0.
+    return_as : str, optional
+        The format of the output. Default is "torch".
+        Other options are "numpy" and "dataframe".
 
     Returns
     -------
@@ -313,8 +339,12 @@ def refine_peaks_3d(
     if not isinstance(volume, torch.Tensor):
         volume = torch.as_tensor(volume)
     if isinstance(peak_coords, pd.DataFrame):
-        amplitude = torch.as_tensor(peak_coords["height"].to_numpy(),device=volume.device)
-        peak_coords = torch.as_tensor(peak_coords[["z", "y", "x"]].to_numpy(),device=volume.device)
+        amplitude = torch.as_tensor(
+            peak_coords["height"].to_numpy(), device=volume.device
+        )
+        peak_coords = torch.as_tensor(
+            peak_coords[["z", "y", "x"]].to_numpy(), device=volume.device
+        )
     if not isinstance(peak_coords, torch.Tensor):
         peak_coords = torch.as_tensor(peak_coords)
 
@@ -328,15 +358,18 @@ def refine_peaks_3d(
     if not isinstance(sigma_z, torch.Tensor):
         sigma_z = torch.tensor([sigma_z] * num_peaks, device=volume.device)
 
-    initial_peak_data = torch.stack([
-        amplitude,
-        peak_coords[:, 0],  # z
-        peak_coords[:, 1],  # y
-        peak_coords[:, 2],  # x
-        sigma_x,
-        sigma_y,
-        sigma_z,
-    ], dim=-1)
+    initial_peak_data = torch.stack(
+        [
+            amplitude,
+            peak_coords[:, 0],  # z
+            peak_coords[:, 1],  # y
+            peak_coords[:, 2],  # x
+            sigma_x,
+            sigma_y,
+            sigma_z,
+        ],
+        dim=-1,
+    )
 
     refined_peak_data, boxes, output = _refine_peaks_3d_torch(
         volume=volume,
@@ -352,13 +385,19 @@ def refine_peaks_3d(
     elif return_as == "numpy":
         return refined_peak_data.detach().cpu().numpy()
     elif return_as == "dataframe":
-        return pd.DataFrame(refined_peak_data.detach().cpu().numpy(), columns=["amplitude", "z", "y", "x", "sigma_x", "sigma_y", "sigma_z"])
+        return pd.DataFrame(
+            refined_peak_data.detach().cpu().numpy(),
+            columns=["amplitude", "z", "y", "x", "sigma_x", "sigma_y", "sigma_z"],
+        )
     elif return_as == "diagnostic":
         # Return the boxes and output for diagnostic purposes
         return {
-            "refined_peaks": pd.DataFrame(refined_peak_data.detach().cpu().numpy(), columns=["amplitude", "z", "y", "x", "sigma_x", "sigma_y", "sigma_z"]),
+            "refined_peaks": pd.DataFrame(
+                refined_peak_data.detach().cpu().numpy(),
+                columns=["amplitude", "z", "y", "x", "sigma_x", "sigma_y", "sigma_z"],
+            ),
             "boxes": boxes,
-            "output": output
+            "output": output,
         }
     else:
         raise ValueError(f"Invalid return_as value: {return_as}")

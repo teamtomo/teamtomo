@@ -1,3 +1,5 @@
+"""Grids of DFT sample frequencies for 1D/2D/3D signals."""
+
 from __future__ import annotations
 
 from typing import Sequence
@@ -7,11 +9,9 @@ import torch
 
 from torch_fourier_shift.dft_utils import rfft_shape
 
+
 def fftfreq_grid_1d(
-    image_shape: tuple[int],
-    rfft: bool,
-    spacing: float = 1,
-    device: torch.device = None
+    image_shape: tuple[int], rfft: bool, spacing: float = 1, device: torch.device = None
 ) -> torch.Tensor:
     """Construct a grid of DFT sample freqs for a 1D image.
 
@@ -34,15 +34,16 @@ def fftfreq_grid_1d(
     """
     dw = spacing
     frequency_func = torch.fft.rfftfreq if rfft is True else torch.fft.fftfreq
-    (w, ) = image_shape
+    (w,) = image_shape
     freq_x = frequency_func(w, d=dw, device=device)
     return freq_x
+
 
 def fftfreq_grid_2d(
     image_shape: tuple[int, int],
     rfft: bool,
     spacing: float | tuple[float, float] = 1,
-    device: torch.device = None
+    device: torch.device = None,
 ) -> torch.Tensor:
     """Construct a grid of DFT sample freqs for a 2D image.
 
@@ -71,16 +72,16 @@ def fftfreq_grid_2d(
     freq_y = torch.fft.fftfreq(h, d=dh, device=device)
     freq_x = last_axis_frequency_func(w, d=dw, device=device)
     h, w = rfft_shape(image_shape) if rfft is True else image_shape
-    freq_yy = einops.repeat(freq_y, 'h -> h w', w=w)
-    freq_xx = einops.repeat(freq_x, 'w -> h w', h=h)
-    return einops.rearrange([freq_yy, freq_xx], 'freq h w -> h w freq')
+    freq_yy = einops.repeat(freq_y, "h -> h w", w=w)
+    freq_xx = einops.repeat(freq_x, "w -> h w", h=h)
+    return einops.rearrange([freq_yy, freq_xx], "freq h w -> h w freq")
 
 
 def fftfreq_grid_3d(
     image_shape: Sequence[int],
     rfft: bool,
     spacing: float | tuple[float, float, float] = 1,
-    device: torch.device = None
+    device: torch.device = None,
 ) -> torch.Tensor:
     """Construct a grid of DFT sample freqs for a 3D image.
 
@@ -110,7 +111,7 @@ def fftfreq_grid_3d(
     freq_y = torch.fft.fftfreq(h, d=dh, device=device)
     freq_x = last_axis_frequency_func(w, d=dw, device=device)
     d, h, w = rfft_shape(image_shape) if rfft is True else image_shape
-    freq_zz = einops.repeat(freq_z, 'd -> d h w', h=h, w=w)
-    freq_yy = einops.repeat(freq_y, 'h -> d h w', d=d, w=w)
-    freq_xx = einops.repeat(freq_x, 'w -> d h w', d=d, h=h)
-    return einops.rearrange([freq_zz, freq_yy, freq_xx], 'freq ... -> ... freq')
+    freq_zz = einops.repeat(freq_z, "d -> d h w", h=h, w=w)
+    freq_yy = einops.repeat(freq_y, "h -> d h w", d=d, w=w)
+    freq_xx = einops.repeat(freq_x, "w -> d h w", d=d, h=h)
+    return einops.rearrange([freq_zz, freq_yy, freq_xx], "freq ... -> ... freq")

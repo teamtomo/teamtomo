@@ -6,9 +6,13 @@
 [![CI](https://github.com/teamtomo/torch-motion-correction/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-motion-correction/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/teamtomo/torch-motion-correction/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-motion-correction)
 
-Motion estimation and correction in PyTorch.
+Movie motion estimation and correction using PyTorch. Implements a spline-based deformation field to model the beam-induced motion over movie collection.
 
-work in progress
+## Implemented algorithms
+
+- Cross-correlation-based global motion estimation (see `estimate_global_motion` in [estimate_motion_xc.py](src/torch_motion_correction/estimate_motion_xc.py))
+- Spline-based local motion estimation (see `estimate_local_motion` in [estimate_motion_optimizer.py](src/torch_motion_correction/estimate_motion_optimizer.py))
+- Motion correction of movie (not summation to final micrograph) using estimated deformation field (see `correct_motion` in [correct_motion.py](src/torch_motion_correction/correct_motion.py))
 
 ## Authors
 

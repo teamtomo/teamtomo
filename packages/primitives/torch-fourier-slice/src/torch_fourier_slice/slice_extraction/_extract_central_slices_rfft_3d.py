@@ -168,8 +168,14 @@ def extract_central_slices_rfft_3d(
     rotation_matrices = rotation_matrices.to(torch.float32)
 
     if rot_tolerance is not None:
+        # out of place: an in-place write here would modify the caller's array,
+        # and would raise if the caller's matrices require grad
         near_zero_elements = torch.abs(rotation_matrices) < rot_tolerance
-        rotation_matrices[near_zero_elements] = 0.0
+        rotation_matrices = torch.where(
+            near_zero_elements,
+            torch.zeros_like(rotation_matrices),
+            rotation_matrices,
+        )
 
     if not zyx_matrices:
         rotation_matrices = torch.flip(rotation_matrices, dims=(-2, -1))
@@ -339,8 +345,14 @@ def extract_central_slices_rfft_3d_multichannel(
     rotation_matrices = rotation_matrices.to(torch.float32)
 
     if rot_tolerance is not None:
+        # out of place: an in-place write here would modify the caller's array,
+        # and would raise if the caller's matrices require grad
         near_zero_elements = torch.abs(rotation_matrices) < rot_tolerance
-        rotation_matrices[near_zero_elements] = 0.0
+        rotation_matrices = torch.where(
+            near_zero_elements,
+            torch.zeros_like(rotation_matrices),
+            rotation_matrices,
+        )
 
     if not zyx_matrices:
         rotation_matrices = torch.flip(rotation_matrices, dims=(-2, -1))
