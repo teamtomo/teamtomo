@@ -17,13 +17,16 @@ This package provides a simple, consistent API for
 
 Operations are differentiable, multichannel data and complex valued images are supported.
 
+Two interchangeable backends implement the operations (see [Backends](#backends)):
+the pure-PyTorch reference built on
 [`torch.nn.functional.grid_sample`](https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html)
-is used under the hood for sampling.
+/ `index_put_`, and optional fused [Mojo](https://www.modular.com/mojo) kernels.
 
 # Installation
 
 ```shell
-pip install torch-image-interpolation
+pip install torch-image-interpolation          # pure PyTorch
+pip install "torch-image-interpolation[mojo]"  # + fused Mojo kernels (CPU / GPU)
 ```
 
 # Usage
@@ -36,7 +39,7 @@ Fractional coordinates are supported and values are interpolated appropriately.
 
 ### 1D Images
 
-For 1D images (vectors) with shape `(w, )` or `(c, w)` 
+For 1D images (vectors) with shape `(w, )` or `(c, w)`
 coordinates are a `(...)` array of coordinates in the `w` dimension.
 
 For example, in a `(28, )` image, valid coordinates range from `0` to `27`.
@@ -90,7 +93,7 @@ samples_bicubic = sample_image_2d(image=image, coordinates=coords, interpolation
 The API is identical for 1D (`w`) or 3D `(d, h, w)` images but takes `(...)` or `(..., 3)` arrays of
 coordinates respectively.
 
-Sampling is supported for multichannel images in 1D `(c, w)`, 2D `(c, h, w)` and 3D `(c, d, h, w)`. 
+Sampling is supported for multichannel images in 1D `(c, w)`, 2D `(c, h, w)` and 3D `(c, d, h, w)`.
 Sampling multichannel images returns `(..., c)` arrays of values.
 
 ## Insert into image
@@ -123,14 +126,9 @@ image_nearest, weights_nearest = insert_into_image_2d(
 The API is identical for 1D `(w, )` and 3D `(d, h, w)` images but requires `(...)` and (..., 3)` arrays of
 coordinates respectively.
 
-Insertion is supported for multichannel images in 1D `(c, w)`, 2D `(c, h, w)` and 3D `(c, d, h, w)`. 
+Insertion is supported for multichannel images in 1D `(c, w)`, 2D `(c, h, w)` and 3D `(c, d, h, w)`.
 Inserting into multichannel images requires `(..., c)` arrays of values.
-
 
 ## Similar packages
 
-- https://github.com/balbasty/torch-interpol
-
-
-
-
+- <https://github.com/balbasty/torch-interpol>

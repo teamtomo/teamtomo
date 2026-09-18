@@ -22,6 +22,8 @@ git_describe_command = "git describe --dirty --tags --long --match 'torch-image-
 [tool.hatch.build.targets.wheel]
 only-include = ["src"]
 sources = ["src"]
+# Mojo sources ship and compile on first import; never ship a local build cache.
+exclude = ["**/__mojocache__"]
 
 # https://peps.python.org/pep-0621/
 [project]
@@ -49,6 +51,14 @@ dependencies = ["torch", "numpy", "einops"]
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
+
+# Optional fused CPU/GPU kernels (see README "Backends"). GPU support lives in
+# the separate `max` package as of Mojo 1.0.
+[project.optional-dependencies]
+mojo = [
+    "max>=26.5.0",
+    "mojo==1.0.0",
+]
 
 # https://peps.python.org/pep-0735/
 [dependency-groups]
@@ -148,4 +158,4 @@ source = ["torch_image_interpolation"]
 # add files that you want check-manifest to explicitly ignore here
 # (files that are in the repo but shouldn't go in the package)
 [tool.check-manifest]
-ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*"]
+ignore = [".pre-commit-config.yaml", ".ruff_cache/**/*", "tests/**/*", "benchmarks/**/*"]

@@ -6,6 +6,7 @@ import einops
 import torch
 import torch.nn.functional as F
 
+from torch_image_interpolation import _mojo_backend as _mojo
 from torch_image_interpolation import utils
 from torch_image_interpolation.grid_sample_utils import array_to_grid_sample
 
@@ -35,6 +36,11 @@ def sample_image_1d(
     """
     if image.ndim not in (1, 2):
         raise ValueError(f"image should have shape (w, ) or (c, w), got {image.shape}")
+
+    if _mojo.should_use_mojo("sample", image, coordinates, interpolation):
+        return _mojo.sample_image(
+            image, coordinates, ndim=1, interpolation=interpolation
+        )
 
     # keep track of a few image properties
     input_image_is_complex = torch.is_complex(image)
@@ -155,6 +161,13 @@ def insert_into_image_1d(
         raise ValueError("One coordinate is required for each value in data.")
     if image.dtype != values.dtype:
         raise ValueError("Image and values must have the same dtype.")
+
+    if _mojo.should_use_mojo(
+        "insert", image, coordinates, interpolation, values=values, weights=weights
+    ):
+        return _mojo.insert_into_image(
+            values, coordinates, image, weights, ndim=1, interpolation=interpolation
+        )
 
     if weights is None:
         weights = torch.zeros(size=(w,), dtype=torch.float32, device=image.device)

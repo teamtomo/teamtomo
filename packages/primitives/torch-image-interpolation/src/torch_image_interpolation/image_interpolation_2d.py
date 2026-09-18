@@ -6,6 +6,7 @@ import einops
 import torch
 import torch.nn.functional as F
 
+from torch_image_interpolation import _mojo_backend as _mojo
 from torch_image_interpolation import utils
 
 from .grid_sample_utils import array_to_grid_sample
@@ -40,6 +41,11 @@ def sample_image_2d(
     if image.ndim not in (2, 3):
         raise ValueError(
             f"image should have shape (h, w) or (c, h, w), got {image.shape}"
+        )
+
+    if _mojo.should_use_mojo("sample", image, coordinates, interpolation):
+        return _mojo.sample_image(
+            image, coordinates, ndim=2, interpolation=interpolation
         )
 
     # keep track of a few image properties
@@ -151,6 +157,13 @@ def insert_into_image_2d(
         raise ValueError("Coordinates must be 2D with shape (..., 2).")
     if image.dtype != values.dtype:
         raise ValueError("Image and values must have the same dtype.")
+
+    if _mojo.should_use_mojo(
+        "insert", image, coordinates, interpolation, values=values, weights=weights
+    ):
+        return _mojo.insert_into_image(
+            values, coordinates, image, weights, ndim=2, interpolation=interpolation
+        )
 
     if weights is None:
         weights = torch.zeros(size=(h, w), dtype=torch.float32, device=image.device)
