@@ -203,7 +203,7 @@ def _forward_pose_grad_pixel[
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad[interp](rec_b, k[0], k[1], k[2], 1)
+    var vg = _interp3d_with_grad[interp](rec_b, k[0], k[1], k[2])
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
@@ -286,7 +286,7 @@ def _backproject_pose_grad_pixel[
         grad_rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2], 1)
+    var vg = _interp3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2])
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
