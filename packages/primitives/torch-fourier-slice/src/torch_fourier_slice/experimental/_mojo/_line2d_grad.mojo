@@ -26,6 +26,7 @@ from _common import (
     _line2d_shift_phase,
     _line_k_2d,
     _rfft_half,
+    _load_c2_line,
 )
 from _gather_grad import _interp2d_with_grad
 from _pose_grad import _redot
@@ -150,8 +151,11 @@ def _forward_line2d_pose_grad_pixel[
     if p.has_shifts_2d != 0:
         _couple_shift2d(shifts_2d, i_bv, i_bp, val, p, gy, gx)
     var line_half = p.proj_sidelength_half()
-    var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
-    var gp = C2(grad_line[off], grad_line[off + 1])
+    # tile-view load: a raw `C2(ptr[off], ptr[off + 1])` reads zeros inside Metal kernels
+    var grad_line_b = TileTensor(
+        grad_line + i_bv * p.bp * line_half * 2, row_major(p.bp, line_half, 2)
+    )
+    var gp = _load_c2_line(grad_line_b, i_bp, x)
     var pf = _line2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
@@ -207,8 +211,10 @@ def _backproject_line2d_pose_grad_pixel[
     if p.has_shifts_2d != 0:
         _couple_shift2d(shifts_2d, i_bv, i_bp, val, p, gy, gx)
     var line_half = p.proj_sidelength_half()
-    var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
-    var pv = C2(lines[off], lines[off + 1])
+    var lines_b = TileTensor(
+        lines + i_bv * p.bp * line_half * 2, row_major(p.bp, line_half, 2)
+    )
+    var pv = _load_c2_line(lines_b, i_bp, x)
     var pf = _line2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
     _accumulate_line2d_pose_grads(

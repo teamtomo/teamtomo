@@ -26,6 +26,7 @@ from _common import (
     _line_k,
     _line_shift_phase,
     _rfft_half,
+    _load_c2_line,
 )
 from _gather_grad import _interp3d_with_grad
 from _pose_grad import _couple_shift3d, _gather_weight_grad, _redot
@@ -142,8 +143,12 @@ def _forward_line_pose_grad_pixel[
     if p.has_shifts_3d != 0:
         _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var line_half = p.proj_sidelength_half()
-    var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
-    var gp = C2(grad_line[off], grad_line[off + 1])
+    # read the cotangent through a tile view, as the forward/scatter kernels do:
+    # a raw `C2(ptr[off], ptr[off + 1])` load reads zeros inside Metal kernels
+    var grad_line_b = TileTensor(
+        grad_line + i_bv * p.bp * line_half * 2, row_major(p.bp, line_half, 2)
+    )
+    var gp = _load_c2_line(grad_line_b, i_bp, x)
     var pf = _line_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
     # direction cotangent: interp grad paired with grad_line * conj(phase); the
     # shift term pairs grad_line against the forward value modulated by the phase.
@@ -204,8 +209,10 @@ def _backproject_line_pose_grad_pixel[
     if p.has_shifts_3d != 0:
         _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var line_half = p.proj_sidelength_half()
-    var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
-    var pv = C2(lines[off], lines[off + 1])
+    var lines_b = TileTensor(
+        lines + i_bv * p.bp * line_half * 2, row_major(p.bp, line_half, 2)
+    )
+    var pv = _load_c2_line(lines_b, i_bp, x)
     var pf = _line_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
     # insertion applies the conjugate phase to the line value; both the direction
     # and shift terms pair that against the gathered grad_rec field.

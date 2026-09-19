@@ -29,6 +29,7 @@ from _common import (
     _rfft_half,
     _rotated_coord,
     _shift_phase,
+    _load_c2,
 )
 from _gather_grad import _interp3d_with_grad
 
@@ -212,13 +213,13 @@ def _forward_pose_grad_pixel[
     # phase exp(i*scale3d*k.t3d), so augment each spatial grad by d/dk of it.
     if p.has_shifts_3d != 0:
         _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
-    var off = (
-        (
-            ((i_bv * p.bp + i_bp) * p.proj_sidelength + y) * p.proj_sidelength_half()
-            + x
-        )
-    ) * 2
-    var gp = C2(grad_proj[off], grad_proj[off + 1])
+    var ph = p.proj_sidelength
+    var pw = p.proj_sidelength_half()
+    # tile-view load: a raw `C2(ptr[off], ptr[off + 1])` reads zeros inside Metal kernels
+    var grad_proj_b = TileTensor(
+        grad_proj + i_bv * p.bp * ph * pw * 2, row_major(p.bp, ph, pw, 2)
+    )
+    var gp = _load_c2(grad_proj_b, i_bp, y, x)
     var pf = _phase_factor(
         shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2], p
     )
@@ -294,13 +295,12 @@ def _backproject_pose_grad_pixel[
     # 3D shift couples into the rotation grad (same augmentation as the forward).
     if p.has_shifts_3d != 0:
         _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
-    var off = (
-        (
-            ((i_bv * p.bp + i_bp) * p.proj_sidelength + y) * p.proj_sidelength_half()
-            + x
-        )
-    ) * 2
-    var pv = C2(proj[off], proj[off + 1])
+    var ph = p.proj_sidelength
+    var pw = p.proj_sidelength_half()
+    var proj_b = TileTensor(
+        proj + i_bv * p.bp * ph * pw * 2, row_major(p.bp, ph, pw, 2)
+    )
+    var pv = _load_c2(proj_b, i_bp, y, x)
     var pf = _phase_factor(
         shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2], p
     )
