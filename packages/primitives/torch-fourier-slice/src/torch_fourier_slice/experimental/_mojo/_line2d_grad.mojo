@@ -143,7 +143,7 @@ def _forward_line2d_pose_grad_pixel[
         img + i_bv * p.sidelength * half * 2,
         row_major(p.sidelength, half, 2),
     )
-    var vg = _interp2d_with_grad[interp](img_b, k[0], k[1], 0)
+    var vg = _interp2d_with_grad[interp](img_b, k[0], k[1], 1)
     var val = C2(vg[0], vg[1])
     var gy = C2(vg[2], vg[3])
     var gx = C2(vg[4], vg[5])

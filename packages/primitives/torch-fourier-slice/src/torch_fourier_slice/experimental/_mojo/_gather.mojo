@@ -126,14 +126,14 @@ def _interp3d_linear[
     var fz = kz - kz_floor
     var fy = ky - ky_floor
     var fx = kx - kx_floor
-    var p000 = _sample_rfft_3d(rec, z, y, x)
-    var p001 = _sample_rfft_3d(rec, z, y, x + 1)
-    var p010 = _sample_rfft_3d(rec, z, y + 1, x)
-    var p011 = _sample_rfft_3d(rec, z, y + 1, x + 1)
-    var p100 = _sample_rfft_3d(rec, z + 1, y, x)
-    var p101 = _sample_rfft_3d(rec, z + 1, y, x + 1)
-    var p110 = _sample_rfft_3d(rec, z + 1, y + 1, x)
-    var p111 = _sample_rfft_3d(rec, z + 1, y + 1, x + 1)
+    var p000 = _sample_rfft_3d_drop(rec, z, y, x)
+    var p001 = _sample_rfft_3d_drop(rec, z, y, x + 1)
+    var p010 = _sample_rfft_3d_drop(rec, z, y + 1, x)
+    var p011 = _sample_rfft_3d_drop(rec, z, y + 1, x + 1)
+    var p100 = _sample_rfft_3d_drop(rec, z + 1, y, x)
+    var p101 = _sample_rfft_3d_drop(rec, z + 1, y, x + 1)
+    var p110 = _sample_rfft_3d_drop(rec, z + 1, y + 1, x)
+    var p111 = _sample_rfft_3d_drop(rec, z + 1, y + 1, x + 1)
     var p00 = p000 + (p001 - p000) * fx
     var p01 = p010 + (p011 - p010) * fx
     var p10 = p100 + (p101 - p100) * fx
@@ -170,7 +170,7 @@ def _interp3d_cubic[
             var wzy = wz * _cubic_kernel(fy - Float32(oy))
             for ox in range(-1, 3):
                 var w = wzy * _cubic_kernel(fx - Float32(ox))
-                var s = _sample_rfft_3d(rec, z + oz, y + oy, x + ox)
+                var s = _sample_rfft_3d_drop(rec, z + oz, y + oy, x + ox)
                 acc = acc + s * w
     return acc
 
@@ -280,10 +280,10 @@ def _interp2d_linear[
     var x = Int(kx_floor)
     var fy = ky - ky_floor
     var fx = kx - kx_floor
-    var p00 = _sample_rfft_2d(img, y, x)
-    var p01 = _sample_rfft_2d(img, y, x + 1)
-    var p10 = _sample_rfft_2d(img, y + 1, x)
-    var p11 = _sample_rfft_2d(img, y + 1, x + 1)
+    var p00 = _sample_rfft_2d_drop(img, y, x)
+    var p01 = _sample_rfft_2d_drop(img, y, x + 1)
+    var p10 = _sample_rfft_2d_drop(img, y + 1, x)
+    var p11 = _sample_rfft_2d_drop(img, y + 1, x + 1)
     var p0 = p00 + (p01 - p00) * fx
     var p1 = p10 + (p11 - p10) * fx
     return p0 + (p1 - p0) * fy
@@ -309,7 +309,7 @@ def _interp2d_cubic[
         var wy = _cubic_kernel(fy - Float32(oy))
         for ox in range(-1, 3):
             var w = wy * _cubic_kernel(fx - Float32(ox))
-            acc = acc + _sample_rfft_2d(img, y + oy, x + ox) * w
+            acc = acc + _sample_rfft_2d_drop(img, y + oy, x + ox) * w
     return acc
 
 
