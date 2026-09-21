@@ -9,9 +9,14 @@ no Ewald curvature; only the 3D (volume-frame) shift contributes.
 The heavy machinery -- interpolation-with-spatial-gradient, the 3D-shift
 coupling into the pose grad, and the weight-splat adjoint gather -- is reused
 verbatim from the slice kernels; only the 1D geometry and line I/O differ.
+
+`_line_pose_grad_terms` is the pure (no side effects) core, mirroring
+`_pose_grad_terms` in `_pose_grad.mojo`: see that module's docstring for why
+the caller (not this file) decides how to accumulate a pixel's contribution --
+every pixel of a pose targets the same handful of scalars, so the GPU kernel
+reduces across a warp first (`_device.mojo`).
 """
 
-from std.atomic import Atomic, Ordering
 from std.math import cos, floor, sin
 
 from layout import TileTensor, row_major
@@ -50,11 +55,7 @@ def _line_phase_factor(
 
 
 @always_inline
-def _accumulate_line_pose_grads(
-    grad_dir: Float32Ptr,
-    grad_shift_3d: Float32Ptr,
-    i_bv: Int,
-    i_bp: Int,
+def _line_pose_grad_terms(
     sx: Float32,
     kz: Float32,
     ky: Float32,
@@ -66,44 +67,36 @@ def _accumulate_line_pose_grads(
     shift_cotangent: C2,
     modulated: C2,
     p: FourierSliceParams,
-):
-    """Atomically add this line pixel's direction + 3D-shift grads.
+) -> SIMD[DType.float32, 8]:
+    """This line pixel's direction + 3D-shift grad contribution.
 
-    `k = s_x * u`, so `d(value)/du_a = g_a * s_x`; the direction grad is
-    `(dz, dy, dx) * s_x` with `d_a = Re[cotangent * conj(g_a)]`. The 3D shift
-    term ramps with the rotated coordinate `(kz, ky, kx)`, as in the slice kernel.
+    Pure -- see `_pose_grad_terms` in `_pose_grad.mojo`. Layout: `[dir(3),
+    shift_3d(3)]` (padded from 6 to the next power of two -- SIMD widths must
+    be one -- lanes 6-7 unused), `dir` matching `grad_dir`'s storage. `k = s_x
+    * u`, so `d(value)/du_a = g_a * s_x`; the direction grad is `(dz, dy, dx)
+    * s_x` with `d_a = Re[cotangent * conj(g_a)]`. The 3D shift term ramps
+    with the rotated coordinate `(kz, ky, kx)`, as in the slice kernel.
+    `shift_3d` is left zero (`p.has_shifts_3d`, uniform across a launch) when
+    not active.
     """
-    var db = 0 if p.bv_rot == 1 else i_bv
-    var dbase = (db * p.bp + i_bp) * 3
     var dz = _redot(rot_cotangent, gz)
     var dy = _redot(rot_cotangent, gy)
     var dx = _redot(rot_cotangent, gx)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_z
-        grad_dir + dbase + 0, dz * sx
-    )
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_y
-        grad_dir + dbase + 1, dy * sx
-    )
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_x
-        grad_dir + dbase + 2, dx * sx
-    )
+    var out = SIMD[DType.float32, 8](0)
+    out[0] = dz * sx
+    out[1] = dy * sx
+    out[2] = dx * sx
 
     if p.has_shifts_3d != 0:
-        var sb3 = 0 if p.bv_shift_3d == 1 else i_bv
-        var s3 = (sb3 * p.bp + i_bp) * 3
         var scale3 = p.two_pi_over_sidelength()
         var p3z = _cmul(C2(0.0, scale3 * kz), modulated)
         var p3y = _cmul(C2(0.0, scale3 * ky), modulated)
         var p3x = _cmul(C2(0.0, scale3 * kx), modulated)
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift_3d + s3 + 0, _redot(shift_cotangent, p3z)
-        )
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift_3d + s3 + 1, _redot(shift_cotangent, p3y)
-        )
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift_3d + s3 + 2, _redot(shift_cotangent, p3x)
-        )
+        out[3] = _redot(shift_cotangent, p3z)
+        out[4] = _redot(shift_cotangent, p3y)
+        out[5] = _redot(shift_cotangent, p3x)
+
+    return out
 
 
 @always_inline
@@ -114,18 +107,17 @@ def _forward_line_pose_grad_pixel[
     direction: Float32Ptr,
     shifts_3d: Float32Ptr,
     grad_line: Float32Ptr,
-    grad_dir: Float32Ptr,
-    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     x: Int,
     p: FourierSliceParams,
-):
-    """Direction/3D-shift grads for the forward line projection (volume = rec).
+) -> SIMD[DType.float32, 8]:
+    """Direction/3D-shift grad contribution for the forward line projection
+    (volume = rec). Pure -- see `_line_pose_grad_terms`.
     """
     var coord_x = Float32(x)
     if coord_x * coord_x > p.radius_cutoff_sq:
-        return
+        return SIMD[DType.float32, 8](0)
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
     var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
@@ -149,22 +141,8 @@ def _forward_line_pose_grad_pixel[
     # shift term pairs grad_line against the forward value modulated by the phase.
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
-    _accumulate_line_pose_grads(
-        grad_dir,
-        grad_shift_3d,
-        i_bv,
-        i_bp,
-        sx,
-        k[0],
-        k[1],
-        k[2],
-        gpc,
-        gz,
-        gy,
-        gx,
-        gp,
-        modulated,
-        p,
+    return _line_pose_grad_terms(
+        sx, k[0], k[1], k[2], gpc, gz, gy, gx, gp, modulated, p
     )
 
 
@@ -176,18 +154,17 @@ def _backproject_line_pose_grad_pixel[
     direction: Float32Ptr,
     shifts_3d: Float32Ptr,
     lines: Float32Ptr,
-    grad_dir: Float32Ptr,
-    grad_shift_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     x: Int,
     p: FourierSliceParams,
-):
-    """Direction/3D-shift grads for the line insertion (volume = grad_data_rec).
+) -> SIMD[DType.float32, 8]:
+    """Direction/3D-shift grad contribution for the line insertion (volume =
+    grad_data_rec). Pure -- see `_line_pose_grad_terms`.
     """
     var coord_x = Float32(x)
     if coord_x * coord_x > p.radius_cutoff_sq:
-        return
+        return SIMD[DType.float32, 8](0)
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
     var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
@@ -210,22 +187,8 @@ def _backproject_line_pose_grad_pixel[
     # insertion applies the conjugate phase to the line value; both the direction
     # and shift terms pair that against the gathered grad_rec field.
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
-    _accumulate_line_pose_grads(
-        grad_dir,
-        grad_shift_3d,
-        i_bv,
-        i_bp,
-        sx,
-        k[0],
-        k[1],
-        k[2],
-        pvc,
-        gz,
-        gy,
-        gx,
-        pvc,
-        val,
-        p,
+    return _line_pose_grad_terms(
+        sx, k[0], k[1], k[2], pvc, gz, gy, gx, pvc, val, p
     )
 
 

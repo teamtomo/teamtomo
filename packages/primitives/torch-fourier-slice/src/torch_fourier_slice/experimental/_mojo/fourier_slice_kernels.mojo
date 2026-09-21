@@ -55,6 +55,10 @@ from max.gpu.host import DeviceContext
 from _common import (
     CUBIC,
     LINEAR,
+    _grad_add,
+    _line2d_pose_grad_offsets,
+    _line_pose_grad_offsets,
+    _pose_grad_offsets,
     BackprojectGradBuffers,
     BackprojectLine2DGradBuffers,
     BackprojectLineGradBuffers,
@@ -513,19 +517,16 @@ def extract_central_line_rfft_2d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
+        var dbase, sbase = _line2d_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            _forward_line2d_pose_grad_pixel[interp](
-                img,
-                direction,
-                shifts_2d,
-                grad_line,
-                grad_dir,
-                grad_shift,
-                i_bv,
-                i_bp,
-                x,
-                p,
+            var contrib = _forward_line2d_pose_grad_pixel[interp](
+                img, direction, shifts_2d, grad_line, i_bv, i_bp, x, p
             )
+            _grad_add(grad_dir, dbase + 0, contrib[0], True)
+            _grad_add(grad_dir, dbase + 1, contrib[1], True)
+            if p.has_shifts_2d != 0:
+                _grad_add(grad_shift, sbase + 0, contrib[2], True)
+                _grad_add(grad_shift, sbase + 1, contrib[3], True)
 
     if p.interp == CUBIC:
         parallelize[worker[CUBIC]](bv * p.bp, num_physical_cores())
@@ -556,19 +557,16 @@ def insert_central_line_rfft_2d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
+        var dbase, sbase = _line2d_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            _backproject_line2d_pose_grad_pixel[interp](
-                grad_img,
-                direction,
-                shifts_2d,
-                lines,
-                grad_dir,
-                grad_shift,
-                i_bv,
-                i_bp,
-                x,
-                p,
+            var contrib = _backproject_line2d_pose_grad_pixel[interp](
+                grad_img, direction, shifts_2d, lines, i_bv, i_bp, x, p
             )
+            _grad_add(grad_dir, dbase + 0, contrib[0], True)
+            _grad_add(grad_dir, dbase + 1, contrib[1], True)
+            if p.has_shifts_2d != 0:
+                _grad_add(grad_shift, sbase + 0, contrib[2], True)
+                _grad_add(grad_shift, sbase + 1, contrib[3], True)
 
     if p.interp == CUBIC:
         parallelize[worker[CUBIC]](bv * p.bp, num_physical_cores())
@@ -634,19 +632,18 @@ def extract_central_line_rfft_3d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
+        var dbase, s3base = _line_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            _forward_line_pose_grad_pixel[interp](
-                rec,
-                direction,
-                shifts_3d,
-                grad_line,
-                grad_dir,
-                grad_shift_3d,
-                i_bv,
-                i_bp,
-                x,
-                p,
+            var contrib = _forward_line_pose_grad_pixel[interp](
+                rec, direction, shifts_3d, grad_line, i_bv, i_bp, x, p
             )
+            _grad_add(grad_dir, dbase + 0, contrib[0], True)
+            _grad_add(grad_dir, dbase + 1, contrib[1], True)
+            _grad_add(grad_dir, dbase + 2, contrib[2], True)
+            if p.has_shifts_3d != 0:
+                _grad_add(grad_shift_3d, s3base + 0, contrib[3], True)
+                _grad_add(grad_shift_3d, s3base + 1, contrib[4], True)
+                _grad_add(grad_shift_3d, s3base + 2, contrib[5], True)
 
     if p.interp == CUBIC:
         parallelize[worker[CUBIC]](bv * p.bp, num_physical_cores())
@@ -677,19 +674,18 @@ def insert_central_line_rfft_3d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
+        var dbase, s3base = _line_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            _backproject_line_pose_grad_pixel[interp](
-                grad_rec,
-                direction,
-                shifts_3d,
-                lines,
-                grad_dir,
-                grad_shift_3d,
-                i_bv,
-                i_bp,
-                x,
-                p,
+            var contrib = _backproject_line_pose_grad_pixel[interp](
+                grad_rec, direction, shifts_3d, lines, i_bv, i_bp, x, p
             )
+            _grad_add(grad_dir, dbase + 0, contrib[0], True)
+            _grad_add(grad_dir, dbase + 1, contrib[1], True)
+            _grad_add(grad_dir, dbase + 2, contrib[2], True)
+            if p.has_shifts_3d != 0:
+                _grad_add(grad_shift_3d, s3base + 0, contrib[3], True)
+                _grad_add(grad_shift_3d, s3base + 1, contrib[4], True)
+                _grad_add(grad_shift_3d, s3base + 2, contrib[5], True)
 
     if p.interp == CUBIC:
         parallelize[worker[CUBIC]](bv * p.bp, num_physical_cores())
@@ -750,23 +746,38 @@ def extract_central_slices_rfft_3d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
+        var rbase, sbase, s3base = _pose_grad_offsets(i_bv, i_bp, p)
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                _forward_pose_grad_pixel[interp](
+                var contrib = _forward_pose_grad_pixel[interp](
                     rec,
                     rot,
                     shifts_2d,
                     shifts_3d,
                     grad_proj,
-                    grad_rot,
-                    grad_shift,
-                    grad_shift_3d,
                     i_bv,
                     i_bp,
                     y,
                     x,
                     p,
                 )
+                _grad_add(grad_rot, rbase + 1, contrib[1], True)
+                _grad_add(grad_rot, rbase + 2, contrib[2], True)
+                _grad_add(grad_rot, rbase + 4, contrib[4], True)
+                _grad_add(grad_rot, rbase + 5, contrib[5], True)
+                _grad_add(grad_rot, rbase + 7, contrib[7], True)
+                _grad_add(grad_rot, rbase + 8, contrib[8], True)
+                if p.ewald_curvature != 0.0:
+                    _grad_add(grad_rot, rbase + 0, contrib[0], True)
+                    _grad_add(grad_rot, rbase + 3, contrib[3], True)
+                    _grad_add(grad_rot, rbase + 6, contrib[6], True)
+                if p.has_shifts_2d != 0:
+                    _grad_add(grad_shift, sbase + 0, contrib[9], True)
+                    _grad_add(grad_shift, sbase + 1, contrib[10], True)
+                if p.has_shifts_3d != 0:
+                    _grad_add(grad_shift_3d, s3base + 0, contrib[11], True)
+                    _grad_add(grad_shift_3d, s3base + 1, contrib[12], True)
+                    _grad_add(grad_shift_3d, s3base + 2, contrib[13], True)
 
     if (
         p.interp == CUBIC
@@ -799,23 +810,38 @@ def insert_central_slices_rfft_3d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
+        var rbase, sbase, s3base = _pose_grad_offsets(i_bv, i_bp, p)
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                _backproject_pose_grad_pixel[interp](
+                var contrib = _backproject_pose_grad_pixel[interp](
                     grad_rec,
                     rot,
                     shifts_2d,
                     shifts_3d,
                     proj,
-                    grad_rot,
-                    grad_shift,
-                    grad_shift_3d,
                     i_bv,
                     i_bp,
                     y,
                     x,
                     p,
                 )
+                _grad_add(grad_rot, rbase + 1, contrib[1], True)
+                _grad_add(grad_rot, rbase + 2, contrib[2], True)
+                _grad_add(grad_rot, rbase + 4, contrib[4], True)
+                _grad_add(grad_rot, rbase + 5, contrib[5], True)
+                _grad_add(grad_rot, rbase + 7, contrib[7], True)
+                _grad_add(grad_rot, rbase + 8, contrib[8], True)
+                if p.ewald_curvature != 0.0:
+                    _grad_add(grad_rot, rbase + 0, contrib[0], True)
+                    _grad_add(grad_rot, rbase + 3, contrib[3], True)
+                    _grad_add(grad_rot, rbase + 6, contrib[6], True)
+                if p.has_shifts_2d != 0:
+                    _grad_add(grad_shift, sbase + 0, contrib[9], True)
+                    _grad_add(grad_shift, sbase + 1, contrib[10], True)
+                if p.has_shifts_3d != 0:
+                    _grad_add(grad_shift_3d, s3base + 0, contrib[11], True)
+                    _grad_add(grad_shift_3d, s3base + 1, contrib[12], True)
+                    _grad_add(grad_shift_3d, s3base + 2, contrib[13], True)
 
     if (
         p.interp == CUBIC

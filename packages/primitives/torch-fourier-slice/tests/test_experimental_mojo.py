@@ -391,8 +391,14 @@ def test_rfft_layer_rank_single_and_multivolume():
 
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
-def test_gpu_scatter_matches_cpu():
-    """The GPU scatter (backprojection) reproduces the CPU kernel + grad on device."""
+@pytest.mark.parametrize("interp", ["linear", "cubic"])
+def test_gpu_scatter_matches_cpu(interp):
+    """The GPU scatter (backprojection) reproduces the CPU kernel + grad on device.
+
+    Parametrized over interpolation since the GPU scatter kernels use different
+    per-thread pixel coarsening for cubic (64 splat corners/pixel) vs linear (8) --
+    see the ``SCATTER_COARSEN`` comment in ``_mojo/_common.mojo``.
+    """
     from scipy.spatial.transform import Rotation
 
     dev = _gpu_device()
@@ -406,9 +412,11 @@ def test_gpu_scatter_matches_cpu():
     proj = torch.randn(P, d, dh, dtype=torch.complex64)
     w = torch.rand(P, d, dh, dtype=torch.float32)
 
-    cpu_v, cpu_w = insert_central_slices_rfft_3d(proj, rotations=rot, weights=w)
+    cpu_v, cpu_w = insert_central_slices_rfft_3d(
+        proj, rotations=rot, weights=w, interpolation=interp
+    )
     gpu_v, gpu_w = insert_central_slices_rfft_3d(
-        proj.to(dev), rotations=rot, weights=w.to(dev)
+        proj.to(dev), rotations=rot, weights=w.to(dev), interpolation=interp
     )
     assert gpu_v.device.type == dev
     assert torch.allclose(gpu_v.cpu(), cpu_v, atol=1e-4)
@@ -420,7 +428,7 @@ def test_gpu_scatter_matches_cpu():
 
     def loss(rec):
         proj = extract_central_slices_rfft_3d(
-            rec, rotations=rot, fourier_radius_cutoff=cut
+            rec, rotations=rot, fourier_radius_cutoff=cut, interpolation=interp
         )
         return torch.real(torch.sum(torch.conj(wf) * proj))
 

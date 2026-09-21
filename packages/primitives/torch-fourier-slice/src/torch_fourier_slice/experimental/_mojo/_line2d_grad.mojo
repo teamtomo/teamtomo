@@ -9,9 +9,12 @@ plus its own gradient).
 
 Reuses the 2D interpolation-with-spatial-gradient (`_interp2d_with_grad`) and the
 `_redot` helper; only the 1D line geometry and I/O differ.
+
+`_line2d_pose_grad_terms` is the pure (no side effects) core, mirroring
+`_pose_grad_terms` in `_pose_grad.mojo`: see that module's docstring for why
+the caller (not this file) decides how to accumulate a pixel's contribution.
 """
 
-from std.atomic import Atomic, Ordering
 from std.math import cos, floor, sin
 
 from layout import TileTensor, row_major
@@ -70,11 +73,7 @@ def _couple_shift2d(
 
 
 @always_inline
-def _accumulate_line2d_pose_grads(
-    grad_dir: Float32Ptr,
-    grad_shift: Float32Ptr,
-    i_bv: Int,
-    i_bp: Int,
+def _line2d_pose_grad_terms(
     sx: Float32,
     ky: Float32,
     kx: Float32,
@@ -84,35 +83,29 @@ def _accumulate_line2d_pose_grads(
     shift_cotangent: C2,
     modulated: C2,
     p: FourierSliceParams,
-):
-    """Atomically add this line pixel's direction grad `(dy, dx)*s_x` + 2D-shift grad.
+) -> SIMD[DType.float32, 4]:
+    """This line pixel's direction grad `(dy, dx)*s_x` + 2D-shift grad contribution.
 
-    `k = s_x * u`, so `d(value)/du_a = g_a * s_x`; `d_a = Re[cotangent*conj(g_a)]`.
-    The shift term ramps with the sample coordinate `(ky, kx)`.
+    Pure -- see `_pose_grad_terms` in `_pose_grad.mojo`. Layout: `[dir(2),
+    shift_2d(2)]`, `dir` matching `grad_dir`'s storage. `k = s_x * u`, so
+    `d(value)/du_a = g_a * s_x`; `d_a = Re[cotangent*conj(g_a)]`. The shift
+    term ramps with the sample coordinate `(ky, kx)`; `shift_2d` is left zero
+    (`p.has_shifts_2d`, uniform across a launch) when not active.
     """
-    var db = 0 if p.bv_rot == 1 else i_bv
-    var dbase = (db * p.bp + i_bp) * 2
     var dy = _redot(rot_cotangent, gy)
     var dx = _redot(rot_cotangent, gx)
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_y
-        grad_dir + dbase + 0, dy * sx
-    )
-    _ = Atomic.fetch_add[ordering=Ordering.RELAXED](  # d/du_x
-        grad_dir + dbase + 1, dx * sx
-    )
+    var out = SIMD[DType.float32, 4](0)
+    out[0] = dy * sx
+    out[1] = dx * sx
 
     if p.has_shifts_2d != 0:
-        var sb = 0 if p.bv_shift_2d == 1 else i_bv
-        var s2 = (sb * p.bp + i_bp) * 2
         var scale = p.two_pi_over_sidelength()
         var p2y = _cmul(C2(0.0, scale * ky), modulated)
         var p2x = _cmul(C2(0.0, scale * kx), modulated)
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift + s2 + 0, _redot(shift_cotangent, p2y)
-        )
-        _ = Atomic.fetch_add[ordering=Ordering.RELAXED](
-            grad_shift + s2 + 1, _redot(shift_cotangent, p2x)
-        )
+        out[2] = _redot(shift_cotangent, p2y)
+        out[3] = _redot(shift_cotangent, p2x)
+
+    return out
 
 
 @always_inline
@@ -123,18 +116,17 @@ def _forward_line2d_pose_grad_pixel[
     direction: Float32Ptr,
     shifts_2d: Float32Ptr,
     grad_line: Float32Ptr,
-    grad_dir: Float32Ptr,
-    grad_shift: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     x: Int,
     p: FourierSliceParams,
-):
-    """Direction/2D-shift grad for the forward 2D line projection (image = img).
+) -> SIMD[DType.float32, 4]:
+    """Direction/2D-shift grad contribution for the forward 2D line projection
+    (image = img). Pure -- see `_line2d_pose_grad_terms`.
     """
     var coord_x = Float32(x)
     if coord_x * coord_x > p.radius_cutoff_sq:
-        return
+        return SIMD[DType.float32, 4](0)
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
     var k = _line_k_2d(direction, (db * p.bp + i_bp) * 2, sx)
@@ -155,20 +147,8 @@ def _forward_line2d_pose_grad_pixel[
     var pf = _line2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
-    _accumulate_line2d_pose_grads(
-        grad_dir,
-        grad_shift,
-        i_bv,
-        i_bp,
-        sx,
-        k[0],
-        k[1],
-        gpc,
-        gy,
-        gx,
-        gp,
-        modulated,
-        p,
+    return _line2d_pose_grad_terms(
+        sx, k[0], k[1], gpc, gy, gx, gp, modulated, p
     )
 
 
@@ -180,18 +160,17 @@ def _backproject_line2d_pose_grad_pixel[
     direction: Float32Ptr,
     shifts_2d: Float32Ptr,
     lines: Float32Ptr,
-    grad_dir: Float32Ptr,
-    grad_shift: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
     x: Int,
     p: FourierSliceParams,
-):
-    """Direction/2D-shift grad for the 2D line insertion (image = grad_data_img).
+) -> SIMD[DType.float32, 4]:
+    """Direction/2D-shift grad contribution for the 2D line insertion (image =
+    grad_data_img). Pure -- see `_line2d_pose_grad_terms`.
     """
     var coord_x = Float32(x)
     if coord_x * coord_x > p.radius_cutoff_sq:
-        return
+        return SIMD[DType.float32, 4](0)
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
     var k = _line_k_2d(direction, (db * p.bp + i_bp) * 2, sx)
@@ -211,21 +190,7 @@ def _backproject_line2d_pose_grad_pixel[
     var pv = C2(lines[off], lines[off + 1])
     var pf = _line2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
-    _accumulate_line2d_pose_grads(
-        grad_dir,
-        grad_shift,
-        i_bv,
-        i_bp,
-        sx,
-        k[0],
-        k[1],
-        pvc,
-        gy,
-        gx,
-        pvc,
-        val,
-        p,
-    )
+    return _line2d_pose_grad_terms(sx, k[0], k[1], pvc, gy, gx, pvc, val, p)
 
 
 @always_inline
