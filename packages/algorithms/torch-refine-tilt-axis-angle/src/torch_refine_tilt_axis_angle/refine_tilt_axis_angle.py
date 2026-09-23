@@ -20,8 +20,9 @@ def refine_tilt_axis_angle(
 
     All images of a translationally-aligned tilt series share Fourier
     information along a common line through the origin, perpendicular to
-    the tilt axis. Coherently summing the images' Fourier transforms makes
-    this line stand out as a ridge of high power, so the tilt-axis angle
+    the tilt axis. The coherence of the images' Fourier transforms (power
+    of their coherent sum, normalized by the sum of their individual
+    powers) makes this line stand out as a ridge, so the tilt-axis angle
     can be recovered by finding the ridge's orientation via a two-stage
     (coarse, then fine) angular grid search, evaluated as batched tensor
     operations across all candidate angles at once.
@@ -94,8 +95,12 @@ def refine_tilt_axis_angle(
     )
     windowed = tilt_series * mask
 
-    # coherent complex rfft sum across the stack
-    power_sum = torch.fft.rfft2(windowed).sum(dim=0).abs() ** 2
+    # coherence across the stack: power of the coherent complex rfft sum,
+    # normalized by the sum of per-image powers
+    spectra = torch.fft.rfft2(windowed)
+    coherence = spectra.sum(dim=0).abs() ** 2 / (
+        (spectra.abs() ** 2).sum(dim=0) + 1e-12
+    )
 
     # Shared normalized-frequency sample points, converted to per-axis pixel
     # indices only at lookup time. Sampled at the longer dimension's density.
@@ -118,7 +123,7 @@ def refine_tilt_axis_angle(
         device=device,
     )
     image_shape = (h, w)
-    power = _common_line_power(coarse_angles, rhos, power_sum, image_shape)
+    power = _common_line_power(coarse_angles, rhos, coherence, image_shape)
     best_angle = float(coarse_angles[torch.argmax(power)])
 
     if refine:
@@ -129,7 +134,7 @@ def refine_tilt_axis_angle(
             refine_angle_step,
             device=device,
         )
-        power = _common_line_power(fine_angles, rhos, power_sum, image_shape)
+        power = _common_line_power(fine_angles, rhos, coherence, image_shape)
         best_angle = float(fine_angles[torch.argmax(power)])
 
     return best_angle + 90.0
@@ -138,15 +143,16 @@ def refine_tilt_axis_angle(
 def _common_line_power(
     angles_deg: torch.Tensor,
     rhos: torch.Tensor,
-    power_sum: torch.Tensor,
+    spectrum: torch.Tensor,
     image_shape: tuple[int, int],
 ) -> torch.Tensor:
-    """Total power along the line through the origin at each angle.
+    """Total spectrum value along the line through the origin at each angle.
 
-    Looks up only the stored (non-negative-frequency) half of the rfft
-    spectrum: for directions with `cos(theta) < 0`, the conjugate-symmetric
-    point `F(-fy, -fx) = conj(F(fy, fx))` is looked up instead, which has
-    the same magnitude.
+    Samples the spectrum with bilinear interpolation. Looks up only the
+    stored (non-negative-frequency) half of the rfft spectrum: for
+    directions with `cos(theta) < 0`, the conjugate-symmetric point
+    `F(-fy, -fx) = conj(F(fy, fx))` is looked up instead, which has the
+    same magnitude.
 
     Parameters
     ----------
@@ -154,15 +160,17 @@ def _common_line_power(
         `(angle, )` candidate line angles in degrees.
     rhos : torch.Tensor
         `(rho, )` normalized frequency radii shared by both axes.
-    power_sum : torch.Tensor
-        `(h, w // 2 + 1)` power spectrum, non-fftshifted rfft2 layout.
+    spectrum : torch.Tensor
+        `(h, w // 2 + 1)` real-valued spectrum (e.g. coherence),
+        non-fftshifted rfft2 layout.
     image_shape : tuple[int, int]
         `(h, w)` shape of the original (pre-rfft) images.
 
     Returns
     -------
     power : torch.Tensor
-        `(angle, )` total power along the line at each candidate angle.
+        `(angle, )` total spectrum value along the line at each candidate
+        angle.
     """
     h, w = image_shape
     rad = torch.deg2rad(angles_deg)
@@ -172,8 +180,22 @@ def _common_line_power(
     flip = (cos < 0)[:, None]
     fy, fx = torch.where(flip, -fy, fy), torch.where(flip, -fx, fx)
 
-    rows = torch.round(fy * h).long() % h
-    cols = torch.round(fx * w).long()
-    valid = (cols >= 0) & (cols < power_sum.shape[-1])
-    values = power_sum[rows, cols.clamp(0, power_sum.shape[-1] - 1)]
-    return (values * valid).sum(dim=-1)
+    # bilinear interpolation; rows wrap (fftfreq layout), cols are rfft half
+    y, x = fy * h, fx * w
+    y0, x0 = torch.floor(y), torch.floor(x)
+    wy, wx = y - y0, x - x0
+    y0, x0 = y0.long(), x0.long()
+    y1 = (y0 + 1) % h
+    y0 = y0 % h
+    n_cols = spectrum.shape[-1]
+    x1 = x0 + 1
+    valid0 = (x0 >= 0) & (x0 < n_cols)
+    valid1 = (x1 >= 0) & (x1 < n_cols)
+    x0c, x1c = x0.clamp(0, n_cols - 1), x1.clamp(0, n_cols - 1)
+    values = (
+        (1 - wy) * (1 - wx) * spectrum[y0, x0c] * valid0
+        + (1 - wy) * wx * spectrum[y0, x1c] * valid1
+        + wy * (1 - wx) * spectrum[y1, x0c] * valid0
+        + wy * wx * spectrum[y1, x1c] * valid1
+    )
+    return values.sum(dim=-1)
