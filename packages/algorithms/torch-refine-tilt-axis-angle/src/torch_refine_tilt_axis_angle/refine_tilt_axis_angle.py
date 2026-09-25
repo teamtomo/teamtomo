@@ -123,8 +123,8 @@ def refine_tilt_axis_angle(
         device=device,
     )
     image_shape = (h, w)
-    power = _common_line_power(coarse_angles, rhos, coherence, image_shape)
-    best_angle = float(coarse_angles[torch.argmax(power)])
+    score = _common_line_score(coarse_angles, rhos, coherence, image_shape)
+    best_angle = float(coarse_angles[torch.argmax(score)])
 
     if refine:
         # fine grid search around the coarse optimum
@@ -134,13 +134,13 @@ def refine_tilt_axis_angle(
             refine_angle_step,
             device=device,
         )
-        power = _common_line_power(fine_angles, rhos, coherence, image_shape)
-        best_angle = float(fine_angles[torch.argmax(power)])
+        score = _common_line_score(fine_angles, rhos, coherence, image_shape)
+        best_angle = float(fine_angles[torch.argmax(score)])
 
     return best_angle + 90.0
 
 
-def _common_line_power(
+def _common_line_score(
     angles_deg: torch.Tensor,
     rhos: torch.Tensor,
     spectrum: torch.Tensor,
@@ -168,7 +168,7 @@ def _common_line_power(
 
     Returns
     -------
-    power : torch.Tensor
+    score : torch.Tensor
         `(angle, )` total spectrum value along the line at each candidate
         angle.
     """

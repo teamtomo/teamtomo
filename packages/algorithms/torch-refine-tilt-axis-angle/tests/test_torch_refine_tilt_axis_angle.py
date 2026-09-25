@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from torch_refine_tilt_axis_angle import refine_tilt_axis_angle
-from torch_refine_tilt_axis_angle.refine_tilt_axis_angle import _common_line_power
+from torch_refine_tilt_axis_angle.refine_tilt_axis_angle import _common_line_score
 
 
 def _tilt_series_with_common_line(
@@ -214,61 +214,61 @@ def test_refine_tilt_axis_angle_refine_step_improves_precision():
     assert refined_error < 0.5
 
 
-def _make_indexable_power_sum(image_shape: tuple[int, int]) -> torch.Tensor:
-    """A power spectrum with a distinct value at every bin, for exact assertions."""
+def _make_indexable_spectrum(image_shape: tuple[int, int]) -> torch.Tensor:
+    """A spectrum with a distinct value at every bin, for exact assertions."""
     h, w = image_shape
     return torch.arange(h * (w // 2 + 1), dtype=torch.float32).reshape(h, w // 2 + 1)
 
 
-def test_common_line_power_interpolates_expected_bins():
+def test_common_line_score_interpolates_expected_bins():
     """Row wraparound, bilinear weights, and conjugate-symmetry flip.
 
-    Uses a power spectrum where every bin holds a distinct value
+    Uses a spectrum where every bin holds a distinct value
     (`5 * row + col` for an 8x8 image), so the values interpolated by
-    `_common_line_power` can be checked against hand-computed expectations
+    `_common_line_score` can be checked against hand-computed expectations
     rather than merely trusting the code ran.
     """
     image_shape = (8, 8)
-    power_sum = _make_indexable_power_sum(image_shape)
+    spectrum = _make_indexable_spectrum(image_shape)
     diagonal = math.sqrt(2) / 8  # rho that lands on (row, col) = (1, 1) at 45 deg
 
     def lookup(angle: float, rho: float) -> float:
-        return _common_line_power(
-            torch.tensor([angle]), torch.tensor([rho]), power_sum, image_shape
+        return _common_line_score(
+            torch.tensor([angle]), torch.tensor([rho]), spectrum, image_shape
         ).item()
 
     # on-grid points: theta=45 -> (1, 1); theta=-45 -> row -1 wraps to 7.
-    assert lookup(45.0, diagonal) == pytest.approx(power_sum[1, 1].item(), abs=1e-3)
-    assert lookup(-45.0, diagonal) == pytest.approx(power_sum[7, 1].item(), abs=1e-3)
+    assert lookup(45.0, diagonal) == pytest.approx(spectrum[1, 1].item(), abs=1e-3)
+    assert lookup(-45.0, diagonal) == pytest.approx(spectrum[7, 1].item(), abs=1e-3)
     # theta=225 is the same line as 45 but cos<0, so the conjugate point
     # (1, 1) is looked up; likewise theta=135 flips to (-1, 1) -> (7, 1).
-    assert lookup(225.0, diagonal) == pytest.approx(power_sum[1, 1].item(), abs=1e-3)
-    assert lookup(135.0, diagonal) == pytest.approx(power_sum[7, 1].item(), abs=1e-3)
+    assert lookup(225.0, diagonal) == pytest.approx(spectrum[1, 1].item(), abs=1e-3)
+    assert lookup(135.0, diagonal) == pytest.approx(spectrum[7, 1].item(), abs=1e-3)
 
     # halfway between columns 2 and 3 on row 0.
-    expected = (power_sum[0, 2] + power_sum[0, 3]).item() / 2
+    expected = (spectrum[0, 2] + spectrum[0, 3]).item() / 2
     assert lookup(0.0, 2.5 / 8) == pytest.approx(expected, abs=1e-3)
     # (row, col) = (-0.5, 0.5): interpolates across the row wraparound,
     # between rows 7 and 0.
-    expected = power_sum[[7, 7, 0, 0], [0, 1, 0, 1]].mean().item()
+    expected = spectrum[[7, 7, 0, 0], [0, 1, 0, 1]].mean().item()
     assert lookup(-45.0, 0.5 * diagonal) == pytest.approx(expected, abs=1e-3)
 
 
-def test_common_line_power_masks_out_of_range_frequencies():
+def test_common_line_score_masks_out_of_range_frequencies():
     """Neighbours outside the stored rfft columns contribute zero."""
     image_shape = (8, 8)
-    power_sum = _make_indexable_power_sum(image_shape)
+    spectrum = _make_indexable_spectrum(image_shape)
 
     def lookup(rho: float) -> float:
-        return _common_line_power(
-            torch.tensor([0.0]), torch.tensor([rho]), power_sum, image_shape
+        return _common_line_score(
+            torch.tensor([0.0]), torch.tensor([rho]), spectrum, image_shape
         ).item()
 
     # valid columns for a w=8 rfft are 0..4. rho=0.7 -> col 5.6: both
     # neighbours (5, 6) are out of range.
     assert lookup(0.7) == 0.0
     # rho=0.55 -> col 4.4: only the col-4 neighbour (weight 0.6) is in range.
-    assert lookup(0.55) == pytest.approx(0.6 * power_sum[0, 4].item(), abs=1e-3)
+    assert lookup(0.55) == pytest.approx(0.6 * spectrum[0, 4].item(), abs=1e-3)
     # rho=0.4 -> col 3.2: both neighbours are in range.
-    expected = 0.8 * power_sum[0, 3].item() + 0.2 * power_sum[0, 4].item()
+    expected = 0.8 * spectrum[0, 3].item() + 0.2 * spectrum[0, 4].item()
     assert lookup(0.4) == pytest.approx(expected, abs=1e-3)
