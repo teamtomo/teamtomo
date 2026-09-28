@@ -79,7 +79,7 @@ def _warp_xml(n_tilts=3, use_tilt=None, grid_x_value="0"):
 
 
 def test_from_warp_xml_reads_global_alignment(tmp_path):
-    pytest.importorskip("xmlfile")
+    pytest.importorskip("warpxmlfile")
     path = tmp_path / "TS_1.xml"
     path.write_text(_warp_xml())
 
@@ -106,7 +106,7 @@ def test_from_warp_xml_reads_global_alignment(tmp_path):
 
 
 def test_from_warp_xml_drops_unused_tilts(tmp_path):
-    pytest.importorskip("xmlfile")
+    pytest.importorskip("warpxmlfile")
     path = tmp_path / "TS_1.xml"
     path.write_text(_warp_xml(use_tilt=["True", "False", "True"]))
 
@@ -117,7 +117,7 @@ def test_from_warp_xml_drops_unused_tilts(tmp_path):
 
 
 def test_from_warp_xml_warns_on_local_grid_unless_callable_given(tmp_path):
-    pytest.importorskip("xmlfile")
+    pytest.importorskip("warpxmlfile")
     path = tmp_path / "TS_1.xml"
     path.write_text(_warp_xml(grid_x_value="1.5"))
 

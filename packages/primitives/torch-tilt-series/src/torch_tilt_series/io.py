@@ -2,7 +2,7 @@
 
 Alignment metadata is loaded from external alignment formats (current
 support: etomo, via etomofiles; aretomo, via alnfile; and Warp/M tilt-series
-XML, via xmlfile); raw tilt image pixel data is loaded from the MRC stack a
+XML, via warpxmlfile); raw tilt image pixel data is loaded from the MRC stack a
 TiltSeries points to, via mrcfile.
 """
 
@@ -145,24 +145,20 @@ def from_warp_xml(
     sampled at those positions). The 4-D `GridVolumeWarp` of M has no
     equivalent in `TiltSeries` and is ignored.
     """
-    import xmlfile
+    import warpxmlfile
 
     xml_path = Path(xml_path)
-    root = xmlfile.read(xml_path).root
+    xml = warpxmlfile.read(xml_path)
 
-    def child(tag: str) -> xmlfile.XmlElement:
-        element = root.find(tag)
-        if element is None:
-            raise ValueError(f"{xml_path} has no <{tag}> element")
-        return element
-
-    tilt_angles = np.asarray(xmlfile.text_to_list(child("Angles"), float))
-    tilt_axis_angle = np.asarray(xmlfile.text_to_list(child("AxisAngle"), float))
-    offset_x = np.asarray(xmlfile.text_to_list(child("AxisOffsetX"), float))
-    offset_y = np.asarray(xmlfile.text_to_list(child("AxisOffsetY"), float))
-    use_tilt = np.asarray(xmlfile.text_to_list(child("UseTilt"), bool))
+    tilt_angles = np.asarray(xml.angles)
+    tilt_axis_angle = np.asarray(xml.axis_angle)
+    offset_x = np.asarray(xml.axis_offset_x)
+    offset_y = np.asarray(xml.axis_offset_y)
+    use_tilt = np.asarray(xml.use_tilt)
     if pixel_spacing is None:
-        pixel_spacing = float(xmlfile.params_to_dict(child("CTF"))["PixelSize"])
+        if xml.ctf is None or "PixelSize" not in xml.ctf:
+            raise ValueError(f"{xml_path} has no CTF PixelSize; pass pixel_spacing")
+        pixel_spacing = float(xml.ctf["PixelSize"])
 
     # Offsets are added after the in-plane rotation, in Angstroms, as (y, x).
     sample_translations = np.stack([offset_y, offset_x], axis=-1)
@@ -172,8 +168,8 @@ def from_warp_xml(
     idx_valid = np.flatnonzero(use_tilt)
 
     for tag in ("GridMovementX", "GridMovementY"):
-        grid = root.find(tag)
-        if grid is not None and np.any(xmlfile.grid_to_array(grid)):
+        grid = xml.grids.get(tag)
+        if grid is not None and np.any(grid.values):
             if local_shifts_2d is None:
                 warnings.warn(
                     f"{xml_path.name} has a non-zero {tag}; it is not applied. "
