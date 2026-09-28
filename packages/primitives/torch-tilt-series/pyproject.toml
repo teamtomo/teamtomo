@@ -58,7 +58,7 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 # add dependencies for "extra" features here.  Not dev dependencies.
 [project.optional-dependencies]
-io = ["alnfile", "etomofiles", "mrcfile", "xmlfile"]
+io = ["alnfile", "etomofiles", "mrcfile", "warpxmlfile"]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
@@ -80,7 +80,7 @@ changelog = "https://github.com/teamtomo/teamtomo#changelog"
 # https://peps.python.org/pep-0735/
 # setup with `uv sync` or `pip install -e . --group dev`
 [dependency-groups]
-test = ["pytest", "pytest-cov", "mrcfile", "alnfile", "etomofiles", "xmlfile"]
+test = ["pytest", "pytest-cov", "mrcfile", "alnfile", "etomofiles", "warpxmlfile"]
 dev = [
     { include-group = "test" },
     "ipython",
