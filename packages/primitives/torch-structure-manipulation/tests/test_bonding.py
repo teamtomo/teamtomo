@@ -57,7 +57,7 @@ def test_rna_inter_residue_and_terminal_bonds():
     result = annotate_bonding_environments(df)
     assert result.loc[1, "bonded_environments"] == "O(CP)"
     assert result.loc[2, "bonded_environments"] == "P(OO)"
-    assert result.loc[5, "bonded_environments"] == "O(CH)"
+    assert result.loc[5, "bonded_environments"] == "O(HC)"
 
 
 def test_hydrogen_inclusion_is_deterministic():
@@ -70,7 +70,7 @@ def test_hydrogen_inclusion_is_deterministic():
     )
     with_h = annotate_bonding_environments(df)
     without_h = annotate_bonding_environments(df, include_hydrogens=False)
-    assert with_h.loc[0, "bonded_environments"] == "N(CH)"
+    assert with_h.loc[0, "bonded_environments"] == "N(HC)"
     assert without_h.loc[0, "bonded_environments"] == "N(C)"
     assert with_h.loc[2, "bonded_environments"] == "H(N)"
 

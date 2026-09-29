@@ -7,6 +7,7 @@ from importlib.resources import files
 from itertools import pairwise
 from typing import Any
 
+import gemmi
 import pandas as pd
 
 from .structure_transforms import (
@@ -163,12 +164,17 @@ def _environment_for_atom(
             include_hydrogens,
         )
 
-    bonded_key = "".join(sorted(bonded_elements))
+    # Neighbours ordered by atomic number, matching the packaged Peng tables.
+    bonded_key = "".join(sorted(bonded_elements, key=_atomic_number_order))
     category = _oxygen_carbon_category(
         residue, atom, element, bonded_key, key, residue_lookup, next_residue
     )
     suffix = f", {category}" if category is not None else ""
     return f"{element}({bonded_key}{suffix})"
+
+
+def _atomic_number_order(element: str) -> tuple[int, str]:
+    return gemmi.Element(element).atomic_number, element
 
 
 def _oxygen_carbon_category(
