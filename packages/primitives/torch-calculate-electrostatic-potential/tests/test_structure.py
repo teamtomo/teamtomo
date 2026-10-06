@@ -1,3 +1,6 @@
+import re
+
+import gemmi
 import pandas as pd
 import pytest
 import torch
@@ -115,7 +118,9 @@ def test_bonded_fallback_warns_once_or_errors():
             molecule_type=["other", "protein"],
         )
     )
-    with pytest.warns(UserWarning, match="using elemental fallback") as records:
+    with pytest.warns(
+        UserWarning, match=r"for 2/2 atoms \(100\.0%.*using elemental fallback"
+    ) as records:
         fallback = potential_from_structure_3d(
             structure,
             _grid(3),
@@ -222,6 +227,70 @@ def test_bonding_canonical_keys_match_packaged_parameters():
             bonded_fallback="error",
         )
         assert torch.isfinite(potential).all()
+
+
+def test_bonding_keys_with_hydrogens_match_packaged_parameters():
+    atoms = pd.DataFrame(
+        [
+            ("A", 1, "ALA", "N", "N", 0.0),
+            ("A", 1, "ALA", "CA", "C", 1.0),
+            ("A", 1, "ALA", "C", "C", 2.0),
+            ("A", 1, "ALA", "CB", "C", 3.0),
+        ],
+        columns=["chain", "residue_id", "residue", "atom", "element", "x"],
+    )
+    atoms["y"] = 0.0
+    atoms["z"] = 0.0
+    annotated = annotate_bonding_environments(atoms)  # include_hydrogens=True
+    structure = AtomicStructure.from_dataframe(annotated.iloc[[1]])  # CA
+    potential_from_structure_3d(
+        structure,
+        _grid(3),
+        scattering_factors="peng_bonded",
+        bonded_fallback="error",
+    )
+
+
+def test_full_residue_with_hydrogens_matches_packaged_parameters():
+    atoms = pd.DataFrame(
+        [
+            ("A", 1, "GLY", "C", "C"),
+            ("A", 2, "ALA", "N", "N"),
+            ("A", 2, "ALA", "CA", "C"),
+            ("A", 2, "ALA", "C", "C"),
+            ("A", 2, "ALA", "O", "O"),
+            ("A", 2, "ALA", "OXT", "O"),
+            ("A", 2, "ALA", "CB", "C"),
+            ("A", 2, "ALA", "H", "H"),
+            ("A", 2, "ALA", "HA", "H"),
+            ("A", 2, "ALA", "HB1", "H"),
+            ("A", 2, "ALA", "HB2", "H"),
+            ("A", 2, "ALA", "HB3", "H"),
+        ],
+        columns=["chain", "residue_id", "residue", "atom", "element"],
+    )
+    atoms["x"] = 0.0
+    atoms["y"] = 0.0
+    atoms["z"] = 0.0
+    annotated = annotate_bonding_environments(atoms)
+    structure = AtomicStructure.from_dataframe(annotated.iloc[1:])  # ALA only
+    potential_from_structure_3d(
+        structure,
+        _grid(3),
+        scattering_factors="peng_bonded",
+        bonded_fallback="error",
+    )
+
+
+def test_packaged_bonded_keys_order_neighbours_by_atomic_number():
+    for provider in peng_model._load_bonded_providers().values():
+        for key in provider.parameters_a:
+            neighbours = key[key.index("(") :].split(",")[0]
+            numbers = [
+                gemmi.Element(element).atomic_number
+                for element in re.findall(r"[A-Z][a-z]?", neighbours)
+            ]
+            assert numbers == sorted(numbers), key
 
 
 def test_structure_2d_projects_z_and_preserves_gradients():
