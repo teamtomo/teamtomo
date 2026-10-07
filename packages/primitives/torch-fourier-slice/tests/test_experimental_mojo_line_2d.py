@@ -12,12 +12,12 @@ import pytest
 import torch
 
 from torch_fourier_slice.experimental import (
-    extract_central_line_rfft_2d,
-    extract_central_line_rfft_2d_multivolume,
-    extract_central_line_rfft_3d,
+    extract_central_lines_rfft_2d,
+    extract_central_lines_rfft_2d_multichannel,
+    extract_central_lines_rfft_3d,
     extract_central_slices_rfft_3d,
-    insert_central_line_rfft_2d,
-    insert_central_line_rfft_2d_multivolume,
+    insert_central_lines_rfft_2d,
+    insert_central_lines_rfft_2d_multichannel,
     mojo_kernels_available,
 )
 
@@ -68,7 +68,9 @@ def _gpu_usable():
         return False
     try:
         r = _img_rfft(torch.randn(16, 16))
-        extract_central_line_rfft_2d(r.to(dev), torch.tensor([0.0, 1.0]))
+        extract_central_lines_rfft_2d(
+            r.to(dev), torch.tensor([0.0, 1.0]), yx_directions=True
+        )
     except Exception:
         return False
     return True
@@ -99,19 +101,25 @@ def test_2d_crop_line_matches_3d_volume_line(interp):
     R = torch.tensor(
         Rotation.random(1, random_state=3).as_matrix(), dtype=torch.float32
     )
-    crop = extract_central_slices_rfft_3d(vr, rotations=R)[0]  # 2D rfft crop
-    cut = d / 4.0
+    crop = extract_central_slices_rfft_3d(vr, zyx_matrices=True, rotation_matrices=R)[
+        0
+    ]  # 2D rfft crop
+    cut = 0.25
     for uy, ux in [(1.0, 0.0), (0.0, 1.0), (0.6, 0.8), (-0.7, 0.7)]:
         u2 = torch.tensor([uy, ux])
         u2 = u2 / u2.norm()
-        l2 = extract_central_line_rfft_2d(
-            crop, u2, fourier_radius_cutoff=cut, interpolation=interp
+        l2 = extract_central_lines_rfft_2d(
+            crop, u2, fftfreq_max=cut, interpolation=interp, yx_directions=True
         ).reshape(-1)
         u3 = R[0] @ torch.tensor([0.0, u2[0], u2[1]])
-        l3 = extract_central_line_rfft_3d(
-            vr, directions=u3, fourier_radius_cutoff=cut, interpolation=interp
+        l3 = extract_central_lines_rfft_3d(
+            vr,
+            directions=u3,
+            fftfreq_max=cut,
+            interpolation=interp,
+            zyx_directions=True,
         ).reshape(-1)
-        m = torch.arange(len(l2)) <= cut
+        m = torch.arange(len(l2)) <= cut * d
         rel = (l2[m] - l3[m]).abs().sum() / (l3[m].abs().sum() + 1e-9)
         assert rel < 0.05  # interp-of-interp vs direct
 
@@ -129,7 +137,7 @@ def test_2d_line_disk_projection_slice():
     for uy, ux in [(1.0, 0.0), (0.0, 1.0), (0.707, 0.707)]:
         u = torch.tensor([uy, ux])
         u = u / u.norm()
-        line = extract_central_line_rfft_2d(dr, u).reshape(-1)
+        line = extract_central_lines_rfft_2d(dr, u, yx_directions=True).reshape(-1)
         prof = torch.fft.fftshift(torch.fft.irfft(line, n=N))
         c = torch.corrcoef(torch.stack([prof, chord]))[0, 1]
         assert c > 0.99
@@ -146,12 +154,12 @@ def test_2d_line_extract_gradient(interp):
     H, P = 64, 6
     Hh = H // 2 + 1
     u = _rand_dirs(P, 1)
-    cut = H / 4.0
+    cut = 0.25
     w = torch.randn(P, Hh, dtype=torch.complex64)
 
     def loss(img):
-        ln = extract_central_line_rfft_2d(
-            img, u, fourier_radius_cutoff=cut, interpolation=interp
+        ln = extract_central_lines_rfft_2d(
+            img, u, fftfreq_max=cut, interpolation=interp, yx_directions=True
         )
         return torch.real(torch.sum(torch.conj(w) * ln))
 
@@ -165,12 +173,12 @@ def test_2d_line_insert_gradient_and_weights(interp):
     H, P = 64, 6
     Hh = H // 2 + 1
     u = _rand_dirs(P, 1)
-    cut = H / 4.0
+    cut = 0.25
     wv = torch.randn(H, Hh, dtype=torch.complex64)
 
     def loss(lines):
-        img, _ = insert_central_line_rfft_2d(
-            lines, u, fourier_radius_cutoff=cut, interpolation=interp
+        img, _ = insert_central_lines_rfft_2d(
+            lines, u, fftfreq_max=cut, interpolation=interp, yx_directions=True
         )
         return torch.real(torch.sum(torch.conj(wv) * img))
 
@@ -178,9 +186,11 @@ def test_2d_line_insert_gradient_and_weights(interp):
     assert _linear_grad_ratio_ok(loss, lines)
 
     weights = torch.rand(P, Hh)
-    img, wimg = insert_central_line_rfft_2d(lines.detach(), u, weights=weights)
+    img, wimg = insert_central_lines_rfft_2d(
+        lines.detach(), u, weights=weights, yx_directions=True
+    )
     assert wimg is not None and wimg.shape == img.shape and wimg.dtype == torch.float32
-    _, none_w = insert_central_line_rfft_2d(lines.detach(), u)
+    _, none_w = insert_central_lines_rfft_2d(lines.detach(), u, yx_directions=True)
     assert none_w is None
 
 
@@ -195,9 +205,9 @@ def test_2d_line_roundtrip_reconstruction():
     pr = _img_rfft(ph)
     th = torch.linspace(0, np.pi, 180)[:-1]
     U = torch.stack([torch.sin(th), torch.cos(th)], -1)
-    lines = extract_central_line_rfft_2d(pr, U)
-    img, wimg = insert_central_line_rfft_2d(
-        lines, U, weights=torch.ones_like(lines.real)
+    lines = extract_central_lines_rfft_2d(pr, U, yx_directions=True)
+    img, wimg = insert_central_lines_rfft_2d(
+        lines, U, weights=torch.ones_like(lines.real), yx_directions=True
     )
     recon = torch.fft.ifftshift(
         torch.fft.irfftn(img / wimg.clamp(min=1.0), s=(N, N), dim=(-2, -1)),
@@ -235,14 +245,14 @@ def test_2d_line_extract_direction_gradient():
     torch.manual_seed(0)
     H, P = 40, 3
     Hh = H // 2 + 1
-    cut = H / 4.0
+    cut = 0.25
     img = torch.randn(H, Hh, dtype=torch.complex64)
     u0 = _rand_dirs(P, 1)
     target = torch.randn(P, Hh, dtype=torch.complex64)
 
     def loss(u):
-        ln = extract_central_line_rfft_2d(
-            img, u, fourier_radius_cutoff=cut, interpolation="cubic"
+        ln = extract_central_lines_rfft_2d(
+            img, u, fftfreq_max=cut, interpolation="cubic", yx_directions=True
         )
         return ((ln - target).abs() ** 2).sum()
 
@@ -255,14 +265,14 @@ def test_2d_line_insert_direction_and_weight_gradients():
     torch.manual_seed(0)
     H, P = 40, 3
     Hh = H // 2 + 1
-    cut = H / 4.0
+    cut = 0.25
     lines = _herm_lines(P, H, 7)
     u0 = _rand_dirs(P, 1)
     data_t = torch.randn(H, Hh, dtype=torch.complex64)
 
     def data_loss(u):
-        img, _ = insert_central_line_rfft_2d(
-            lines, u, fourier_radius_cutoff=cut, interpolation="cubic"
+        img, _ = insert_central_lines_rfft_2d(
+            lines, u, fftfreq_max=cut, interpolation="cubic", yx_directions=True
         )
         return ((img - data_t).abs() ** 2).sum()
 
@@ -273,8 +283,8 @@ def test_2d_line_insert_direction_and_weight_gradients():
     wc = torch.randn(H, Hh)
 
     def weight_loss(wts):
-        _, wimg = insert_central_line_rfft_2d(
-            lines, u0, weights=wts, fourier_radius_cutoff=cut
+        _, wimg = insert_central_lines_rfft_2d(
+            lines, u0, weights=wts, fftfreq_max=cut, yx_directions=True
         )
         return (wimg * wc).sum()
 
@@ -287,31 +297,35 @@ def test_2d_line_insert_direction_and_weight_gradients():
 # ---------------------------------------------------------------------------
 
 
-def test_2d_line_rank_single_and_multivolume():
+def test_2d_line_rank_single_and_multichannel():
     torch.manual_seed(0)
     H, P, bv = 32, 5, 3
     Hh = H // 2 + 1
     u = _rand_dirs(P, 1)
     imgs = torch.randn(bv, H, Hh, dtype=torch.complex64)
 
-    s0 = extract_central_line_rfft_2d(imgs[0], u)
+    s0 = extract_central_lines_rfft_2d(imgs[0], u, yx_directions=True)
     assert s0.shape == (P, Hh)
 
-    sm = extract_central_line_rfft_2d_multivolume(imgs, u)
+    sm = extract_central_lines_rfft_2d_multichannel(imgs, u, yx_directions=True)
     assert sm.shape == (P, bv, Hh)
     for i in range(bv):
-        assert torch.allclose(sm[:, i], extract_central_line_rfft_2d(imgs[i], u))
+        assert torch.allclose(
+            sm[:, i], extract_central_lines_rfft_2d(imgs[i], u, yx_directions=True)
+        )
 
     lines = torch.randn(P, Hh, dtype=torch.complex64)
-    v0, w0 = insert_central_line_rfft_2d(lines, u)
+    v0, w0 = insert_central_lines_rfft_2d(lines, u, yx_directions=True)
     assert v0.shape == (H, Hh) and w0 is None
 
     lines_m = torch.randn(P, bv, Hh, dtype=torch.complex64)
-    vm, wm = insert_central_line_rfft_2d_multivolume(lines_m, u)
+    vm, wm = insert_central_lines_rfft_2d_multichannel(lines_m, u, yx_directions=True)
     assert vm.shape == (bv, H, Hh) and wm is None
 
     v = imgs[0].clone().requires_grad_(True)
-    extract_central_line_rfft_2d(v, u).abs().pow(2).sum().backward()
+    extract_central_lines_rfft_2d(v, u, yx_directions=True).abs().pow(
+        2
+    ).sum().backward()
     assert v.grad is not None and v.grad.shape == imgs[0].shape
 
 
@@ -325,16 +339,22 @@ def test_gpu_2d_line_matches_cpu(interp):
     rfft = _img_rfft(torch.randn(H, H))
     u = _rand_dirs(P, 3)
 
-    cpu = extract_central_line_rfft_2d(rfft, u, interpolation=interp)
-    gpu = extract_central_line_rfft_2d(rfft.to(dev), u, interpolation=interp)
+    cpu = extract_central_lines_rfft_2d(
+        rfft, u, interpolation=interp, yx_directions=True
+    )
+    gpu = extract_central_lines_rfft_2d(
+        rfft.to(dev), u, interpolation=interp, yx_directions=True
+    )
     assert gpu.device.type == dev
     assert torch.allclose(gpu.cpu(), cpu, atol=1e-3)
 
     lines = torch.randn(P, Hh, dtype=torch.complex64)
     w = torch.rand(P, Hh)
-    cv, cw = insert_central_line_rfft_2d(lines, u, weights=w, interpolation=interp)
-    gv, gw = insert_central_line_rfft_2d(
-        lines.to(dev), u, weights=w.to(dev), interpolation=interp
+    cv, cw = insert_central_lines_rfft_2d(
+        lines, u, weights=w, interpolation=interp, yx_directions=True
+    )
+    gv, gw = insert_central_lines_rfft_2d(
+        lines.to(dev), u, weights=w.to(dev), interpolation=interp, yx_directions=True
     )
     assert gv.device.type == dev
     assert torch.allclose(gv.cpu(), cv, atol=1e-4)
@@ -356,14 +376,18 @@ def test_gpu_2d_line_grads_match_cpu():
 
     def fwd_dir(device):
         u = u0.clone().to(device).requires_grad_(True)
-        ln = extract_central_line_rfft_2d(img.to(device), directions=u)
+        ln = extract_central_lines_rfft_2d(
+            img.to(device), directions=u, yx_directions=True
+        )
         ((ln - target.to(device)).abs() ** 2).sum().backward()
         return u.grad.cpu()
 
     def bp_grads(device):
         u = u0.clone().to(device).requires_grad_(True)
         w = wts0.clone().to(device).requires_grad_(True)
-        dv, _ = insert_central_line_rfft_2d(lines.to(device), directions=u, weights=w)
+        dv, _ = insert_central_lines_rfft_2d(
+            lines.to(device), directions=u, weights=w, yx_directions=True
+        )
         (dv.abs() ** 2).sum().backward()
         return u.grad.cpu(), w.grad.cpu()
 
@@ -383,17 +407,19 @@ def test_2d_line_shift_phase_ramp():
     """A 2D shift t applies exp(-2pi/N * s*(u.t)) to the line."""
     torch.manual_seed(0)
     H = 48
-    cut = H / 4.0
+    cut = 0.25
     img = torch.randn(H, H // 2 + 1, dtype=torch.complex64)
     u = _rand_dirs(4, 1)
     t = torch.randn(4, 2)
-    l0 = extract_central_line_rfft_2d(img, u, fourier_radius_cutoff=cut)
-    ls = extract_central_line_rfft_2d(img, u, shifts_2d=t, fourier_radius_cutoff=cut)
+    l0 = extract_central_lines_rfft_2d(img, u, fftfreq_max=cut, yx_directions=True)
+    ls = extract_central_lines_rfft_2d(
+        img, u, shifts_2d=t, fftfreq_max=cut, yx_directions=True, yx_shifts=True
+    )
     s = torch.arange(H // 2 + 1).float()
     udott = (u * t).sum(-1)
     phase = -2 * np.pi / H * s[None, :] * udott[:, None]
     ramp = torch.complex(torch.cos(phase), torch.sin(phase))
-    m = s <= cut
+    m = s <= cut * H
     assert torch.allclose(ls[:, m], (l0 * ramp)[:, m], atol=1e-4)
 
 
@@ -402,15 +428,21 @@ def test_2d_line_shift_gradients():
     torch.manual_seed(0)
     H, P = 48, 3
     Hh = H // 2 + 1
-    cut = H / 4.0
+    cut = 0.25
     img = torch.randn(H, Hh, dtype=torch.complex64)
     u = _rand_dirs(P, 1)
     t0 = torch.randn(P, 2) * 0.5
     target = torch.randn(P, Hh, dtype=torch.complex64)
 
     def eloss(sh):
-        ln = extract_central_line_rfft_2d(
-            img, u, shifts_2d=sh, fourier_radius_cutoff=cut, interpolation="cubic"
+        ln = extract_central_lines_rfft_2d(
+            img,
+            u,
+            shifts_2d=sh,
+            fftfreq_max=cut,
+            interpolation="cubic",
+            yx_directions=True,
+            yx_shifts=True,
         )
         return ((ln - target).abs() ** 2).sum()
 
@@ -421,10 +453,42 @@ def test_2d_line_shift_gradients():
     data_t = torch.randn(H, Hh, dtype=torch.complex64)
 
     def iloss(sh):
-        img2, _ = insert_central_line_rfft_2d(
-            lines, u, shifts_2d=sh, fourier_radius_cutoff=cut, interpolation="cubic"
+        img2, _ = insert_central_lines_rfft_2d(
+            lines,
+            u,
+            shifts_2d=sh,
+            fftfreq_max=cut,
+            interpolation="cubic",
+            yx_directions=True,
+            yx_shifts=True,
         )
         return ((img2 - data_t).abs() ** 2).sum()
 
     sh = t0.clone().requires_grad_(True)
     assert _fd_ratio(iloss, sh, eps=1e-3) < 3e-2
+
+
+def test_2d_directions_and_shifts_default_to_xy_order():
+    """Directions / shifts are xy by default; the yx flags take them flipped."""
+    torch.manual_seed(0)
+    H, P = 32, 5
+    img = torch.randn(H, H // 2 + 1, dtype=torch.complex64)
+    lines = _herm_lines(P, H, 7)
+    u = _rand_dirs(P, 1)
+    t = torch.randn(P, 2) * 0.5
+    flipped = {
+        "directions": u.flip(-1),
+        "shifts_2d": t.flip(-1),
+        "yx_directions": True,
+        "yx_shifts": True,
+    }
+
+    xy = extract_central_lines_rfft_2d(img, u, shifts_2d=t)
+    yx = extract_central_lines_rfft_2d(img, **flipped)
+    assert torch.equal(xy, yx)
+    assert not torch.allclose(xy, extract_central_lines_rfft_2d(img, u), atol=1e-4)
+
+    xy_img, _ = insert_central_lines_rfft_2d(lines, u, shifts_2d=t)
+    yx_img, _ = insert_central_lines_rfft_2d(lines, **flipped)
+    # atomic accumulation order varies between runs: not bit-for-bit
+    assert torch.allclose(xy_img, yx_img, rtol=1e-5, atol=1e-5)

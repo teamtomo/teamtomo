@@ -1,6 +1,6 @@
 """Experimental Mojo-backed real-space projection: 3D volume -> 2D images.
 
-The real-space layer over :mod:`.slice_extraction`: pad, correct for the
+The real-space layer over :mod:`.extraction`: pad, correct for the
 interpolation kernel, ``rfftn`` over the spatial dims, extract central slices
 with the Mojo kernel, ``irfftn`` back, unpad. Callers work entirely in real
 space; the rfft layout is an implementation detail.
@@ -16,9 +16,9 @@ import torch
 import torch.nn.functional as F
 
 from ._gridding import gridding_correction
-from .slice_extraction import (
+from .extraction import (
     extract_central_slices_rfft_3d,
-    extract_central_slices_rfft_3d_multivolume,
+    extract_central_slices_rfft_3d_multichannel,
 )
 
 
@@ -33,16 +33,22 @@ def _pad_width(sidelength: int, pad_factor: float) -> int:
 
 def _project(
     volume: torch.Tensor,
-    rotations: torch.Tensor,
+    rotation_matrices: torch.Tensor,
     shifts_3d: torch.Tensor | None,
     shifts_2d: torch.Tensor | None,
     pad_factor: float,
-    fourier_radius_cutoff: float | None,
+    fftfreq_max: float | None,
+    zyx_matrices: bool,
+    zyx_shifts: bool,
+    yx_shifts: bool,
     interpolation: str,
-    ewald_curvature: float,
+    apply_ewald_curvature: bool,
+    ewald_voltage_kv: float,
+    ewald_flip_sign: bool,
+    ewald_px_size: float,
     extract_fn,
 ) -> torch.Tensor:
-    """Shared pipeline; ``extract_fn`` picks the single / multivolume rank form."""
+    """Shared pipeline; ``extract_fn`` picks the single / multichannel rank form."""
     pad = _pad_width(volume.shape[-1], pad_factor)
     if pad > 0:
         volume = F.pad(volume, pad=[pad] * 6)
@@ -56,12 +62,18 @@ def _project(
     )
     slices = extract_fn(
         volume_rfft.contiguous(),
-        rotations,
+        rotation_matrices,
         shifts_3d=shifts_3d,
         shifts_2d=shifts_2d,
-        fourier_radius_cutoff=fourier_radius_cutoff,
+        fftfreq_max=fftfreq_max,
+        zyx_matrices=zyx_matrices,
+        zyx_shifts=zyx_shifts,
+        yx_shifts=yx_shifts,
         interpolation=interpolation,
-        ewald_curvature=ewald_curvature,
+        apply_ewald_curvature=apply_ewald_curvature,
+        ewald_voltage_kv=ewald_voltage_kv,
+        ewald_flip_sign=ewald_flip_sign,
+        ewald_px_size=ewald_px_size,
     )
     images = torch.fft.fftshift(
         torch.fft.irfftn(slices, dim=(-2, -1), s=(box, box)), dim=(-2, -1)
@@ -73,13 +85,19 @@ def _project(
 
 def project_3d_to_2d(
     volume: torch.Tensor,
-    rotations: torch.Tensor,
+    rotation_matrices: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fourier_radius_cutoff: float | None = None,
+    fftfreq_max: float | None = None,
+    zyx_matrices: bool = False,
+    zyx_shifts: bool = False,
+    yx_shifts: bool = False,
     interpolation: str = "linear",
-    ewald_curvature: float = 0.0,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,
+    ewald_flip_sign: bool = False,
+    ewald_px_size: float = 1.0,
 ) -> torch.Tensor:
     """Project a real cubic volume to real 2D images (Mojo kernel).
 
@@ -88,25 +106,38 @@ def project_3d_to_2d(
     volume : torch.Tensor
         Real cubic volume ``(d, d, d)`` with an even side length. Its device
         selects the CPU/GPU backend.
-    rotations : torch.Tensor
-        Real ``(3, 3)`` or ``(bp, 3, 3)`` **zyx** rotation matrices.
+    rotation_matrices : torch.Tensor
+        Real ``(3, 3)`` or ``(bp, 3, 3)`` rotation matrices (see ``zyx_matrices``).
     shifts_3d : torch.Tensor | None
-        Optional ``(..., bp, 3)`` zyx shifts in the volume frame, applied before
+        Optional ``(..., bp, 3)`` shifts in the volume frame, applied before
         the rotation.
     shifts_2d : torch.Tensor | None
-        Optional ``(..., bp, 2)`` yx shifts in the image plane, applied after.
+        Optional ``(..., bp, 2)`` shifts in the image plane, applied after.
     pad_factor : float
         Real-space padding applied before the transform; ``2.0`` (default)
         doubles the box. Must be ``>= 1.0``.
-    fourier_radius_cutoff : float | None
-        Frequency radius in cycles beyond which output pixels are left at zero.
-        Defaults to Nyquist for the padded box.
+    fftfreq_max : float | None
+        Maximum frequency (cycles/pixel, Nyquist = 0.5) to include; output
+        pixels beyond it are left at zero. Defaults to Nyquist.
+    zyx_matrices : bool
+        If True, ``rotation_matrices`` act on zyx vectors. If False (default)
+        they act on xyz vectors and are converted by flipping the last two axes.
+    zyx_shifts : bool
+        If True, ``shifts_3d`` are in zyx order. If False (default) they are xyz.
+    yx_shifts : bool
+        If True, ``shifts_2d`` are in yx order. If False (default) they are xy.
     interpolation : str
         ``"linear"`` (trilinear, default) or ``"cubic"`` (tricubic Catmull-Rom).
         The gridding correction follows this choice.
-    ewald_curvature : float
-        Signed Ewald-sphere curvature coefficient; ``0.0`` (default) keeps the
-        central slice flat.
+    apply_ewald_curvature : bool
+        If True, bend the central slice onto an Ewald sphere. If False (default),
+        use a flat central slice.
+    ewald_voltage_kv : float
+        Acceleration voltage in kV (default 300.0); sets the wavelength.
+    ewald_flip_sign : bool
+        If True, flip the sign of the Ewald curvature.
+    ewald_px_size : float
+        Pixel size in Angstroms / pixel.
 
     Returns
     -------
@@ -115,31 +146,43 @@ def project_3d_to_2d(
     """
     if volume.dim() != 3:
         raise ValueError(
-            "volume must be (d, d, d); use project_3d_to_2d_multivolume for "
+            "volume must be (d, d, d); use project_3d_to_2d_multichannel for "
             "(bv, d, d, d)"
         )
     return _project(
         volume,
-        rotations,
+        rotation_matrices,
         shifts_3d,
         shifts_2d,
         pad_factor,
-        fourier_radius_cutoff,
+        fftfreq_max,
+        zyx_matrices,
+        zyx_shifts,
+        yx_shifts,
         interpolation,
-        ewald_curvature,
+        apply_ewald_curvature,
+        ewald_voltage_kv,
+        ewald_flip_sign,
+        ewald_px_size,
         extract_central_slices_rfft_3d,
     )
 
 
-def project_3d_to_2d_multivolume(
+def project_3d_to_2d_multichannel(
     volume: torch.Tensor,
-    rotations: torch.Tensor,
+    rotation_matrices: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fourier_radius_cutoff: float | None = None,
+    fftfreq_max: float | None = None,
+    zyx_matrices: bool = False,
+    zyx_shifts: bool = False,
+    yx_shifts: bool = False,
     interpolation: str = "linear",
-    ewald_curvature: float = 0.0,
+    apply_ewald_curvature: bool = False,
+    ewald_voltage_kv: float = 300.0,
+    ewald_flip_sign: bool = False,
+    ewald_px_size: float = 1.0,
 ) -> torch.Tensor:
     """Project a batch of real cubic volumes to real 2D images (Mojo kernel).
 
@@ -150,15 +193,21 @@ def project_3d_to_2d_multivolume(
     Returns real ``(bp, bv, d, d)`` images (pose-major) on the input device.
     """
     if volume.dim() != 4:
-        raise ValueError("volume must be (bv, d, d, d) for multi-volume")
+        raise ValueError("volume must be (bv, d, d, d) for multi-channel")
     return _project(
         volume,
-        rotations,
+        rotation_matrices,
         shifts_3d,
         shifts_2d,
         pad_factor,
-        fourier_radius_cutoff,
+        fftfreq_max,
+        zyx_matrices,
+        zyx_shifts,
+        yx_shifts,
         interpolation,
-        ewald_curvature,
-        extract_central_slices_rfft_3d_multivolume,
+        apply_ewald_curvature,
+        ewald_voltage_kv,
+        ewald_flip_sign,
+        ewald_px_size,
+        extract_central_slices_rfft_3d_multichannel,
     )

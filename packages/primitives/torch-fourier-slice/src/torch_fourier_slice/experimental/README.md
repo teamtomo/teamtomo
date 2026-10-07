@@ -22,8 +22,8 @@ It runs in three places from that single source:
 
 ```
                          ┌───────────────────────────┐
-                         │  per-pixel numeric core    │   _pixel / _gather /
-                         │  (Mojo, written ONCE)      │   _scatter / _pose_grad
+                         │  per-pixel numeric core    │   _slice_3d / _gather /
+                         │  (Mojo, written ONCE)      │   _scatter / _slice_3d_grad
                          └────────────┬──────────────┘
              ┌────────────────────────┼─
              ▼                        ▼            
@@ -58,7 +58,7 @@ from torch_fourier_slice.experimental import (
 assert mojo_kernels_available()          # False if the `mojo` package is missing
 
 volume = ...                             # real (d, d, d), even side
-rotations = ...                          # (bp, 3, 3) zyx rotation matrices
+rotations = ...                          # (bp, 3, 3) xyz rotation matrices
 
 images = project_3d_to_2d(volume, rotations)               # CPU  -> CPU kernel
 images = project_3d_to_2d(volume.to("cuda"), rotations)    # CUDA -> GPU kernel
@@ -88,16 +88,16 @@ real-space layer's gridding correction follows this choice (§7).
 
 ---
 
-## 3. What "projection" means here (30 seconds of theory)
+## 3. What extraction and insertion mean here (30 seconds of theory)
 
 By the **Fourier-slice theorem**, a 2D projection image of a 3D volume equals a
 central planar slice through the volume's 3D Fourier transform, oriented by the
 projection direction. So:
 
-- **Forward (project):** for each 2D output pixel, rotate its frequency
+- **Extraction:** for each 2D output pixel, rotate its frequency
   coordinate into the volume, **sample+interpolate** the 3D rfft volume there,
   apply any shift phase. This is a **gather** (each output reads a few inputs).
-- **Backward (backproject):** for each 2D input pixel, rotate into the volume and
+- **Insertion:** for each 2D input pixel, rotate into the volume and
   **splat+accumulate** its value into the nearby voxels. This is a **scatter**
   (each input writes a few outputs, hence atomics).
 
@@ -120,18 +120,17 @@ Python side (`experimental/`):
 
 | file | role |
 |------|------|
-| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` (+ `_multivolume`) — padding, FFTs, gridding correction |
-| `slice_extraction.py`, `slice_insertion.py` | Fourier API: 3D volume ↔ 2D central slices, posed by a rotation matrix |
-| `line_extraction.py`, `line_insertion.py` | Fourier API: 3D volume ↔ 1D central lines, posed by a direction |
-| `line_extraction_2d.py`, `line_insertion_2d.py` | Fourier API: 2D image ↔ 1D central lines |
+| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` (+ `_multichannel`) — padding, FFTs, gridding correction |
+| `extraction.py`, `insertion.py` | **Fourier API**: 3D volume ↔ 2D central slices (posed by a rotation matrix), 3D volume ↔ 1D central lines (posed by a direction), 2D image ↔ 1D central lines |
 | `_gridding.py` | the de-apodization correction for each interpolation kernel (§7) |
-| `_autograd.py` | torch `autograd.Function`s wiring forward/backward |
-| `_ops.py` | orchestration: validate → build buffers + `KernelParams` → call a kernel |
-| `_validation.py` | shape checks, `prep_*`, `interp_code`, the **`KernelParams`** carrier |
-| `_gpu.py` | device addresses (CUDA VA / Metal `gpuAddress`), Metal heap residency, launch prep |
-| `_kernels.py` | compiles + loads the Mojo module on import; `mojo_kernels_available()` |
+| `_conventions.py` | translates the canonical pose / Ewald arguments into kernel conventions |
+| `_backend/_slice_3d.py`, `_line_3d.py`, `_line_2d.py` | one module per operator family: the `run_*` ops (validate → build buffers + `KernelParams` → call a kernel) and the torch `autograd.Function`s built on them |
+| `_backend/_common.py` | helpers shared by the families |
+| `_backend/_validation.py` | shape checks, `prep_*`, `interp_code`, the **`KernelParams`** carrier |
+| `_backend/_device.py` | device addresses (CUDA VA / Metal `gpuAddress`), Metal heap residency, launch prep |
+| `_backend/_loader.py` | compiles + loads the Mojo module on import; `mojo_kernels_available()` |
 
-Mojo kernels (`experimental/_mojo/`) — one extension module split into grouped
+Mojo kernels (`experimental/_backend/_mojo/`) — one extension module split into grouped
 files, all compiled together on first import:
 
 | file | contents |
@@ -140,15 +139,15 @@ files, all compiled together on first import:
 | `_gather.mojo` | **sample + interpolate** the rfft volume (extraction) — linear & cubic |
 | `_gather_grad.mojo` | interpolate **+ analytical spatial gradient** (for pose grads) |
 | `_scatter.mojo` | **atomic accumulate + splat** into the rfft volume (insertion) |
-| `_pixel.mojo` | `_project_pixel` / `_scatter_pixel` — the **per-output-element op**, shared by CPU loops and GPU threads |
-| `_pose_grad.mojo` | per-pixel rotation/shift/weight gradient ops (shared CPU/GPU) |
-| `_line.mojo`, `_line_grad.mojo` | the 3D↔1D central-line per-pixel ops and their direction/shift/weight gradients |
-| `_line2d.mojo`, `_line2d_grad.mojo` | the same, one dimension lower (2D image ↔ 1D line) |
+| `_slice_3d.mojo` | `_extract_slice_3d_pixel` / `_insert_slice_3d_pixel` — the **per-output-element op**, shared by CPU loops and GPU threads |
+| `_slice_3d_grad.mojo` | per-pixel rotation/shift/weight gradient ops (shared CPU/GPU) |
+| `_line_3d.mojo`, `_line_3d_grad.mojo` | the 3D↔1D central-line per-pixel ops and their direction/shift/weight gradients |
+| `_line_2d.mojo`, `_line_2d_grad.mojo` | the same, one dimension lower (2D image ↔ 1D line) |
 | `_device.mojo` | GPU kernels (one thread per pixel) + their launchers |
 | `fourier_slice_kernels.mojo` | Python-facing entry points (CPU + GPU) + `PyInit_fourier_slice_kernels` + `DeviceSession` |
 
-**The numeric core is `_gather` / `_scatter` / `_pixel` / `_pose_grad` (plus the
-`_line*` analogues).** Those files never mention CPU or GPU — they are just math
+**The numeric core is `_gather` / `_scatter` / `_slice_3d` / `_slice_3d_grad` (plus the
+`_line_3d*` / `_line_2d*` analogues).** Those files never mention CPU or GPU — they are just math
 over pointers and indices. `fourier_slice_kernels.mojo` (CPU) and `_device.mojo`
 (GPU) are the two *drivers* that call into that core.
 
@@ -157,7 +156,7 @@ over pointers and indices. `fourier_slice_kernels.mojo` (CPU) and `_device.mojo`
 ## 5. CPU vs GPU: same math, different execution strategy
 
 **What they share:** every per-pixel computation. Both paths ultimately call the
-*same* `_project_pixel[interp](...)` / `_scatter_pixel[interp](...)`. If you fix a
+*same* `_extract_slice_3d_pixel[interp](...)` / `_insert_slice_3d_pixel[interp](...)`. If you fix a
 bug in the interpolation, both devices get the fix — there is no second copy.
 
 **What differs is the parallelism model and where memory lives:**
@@ -180,13 +179,13 @@ occupied. Same math, mapped to the hardware's grain.
 
 `interpolation="linear"|"cubic"` is resolved **at compile time**, not per voxel.
 The interpolation kind is a Mojo `comptime` parameter threaded through the core
-(`_interp3d[interp]`, `_project_pixel[interp]`, the kernels). At the Python→Mojo
+(`_interp_3d[interp]`, `_extract_slice_3d_pixel[interp]`, the kernels). At the Python→Mojo
 boundary the runtime code (`KernelParams.interp`, `0`/`1`) is read **once** and
 dispatched to the specialized build:
 
 ```mojo
-if p.interp == CUBIC: _launch_project[CUBIC](...)   # a kernel with NO interp branch,
-else:                 _launch_project[LINEAR](...)  # cubic/linear baked in
+if p.interp == CUBIC: _launch_extract_slice_3d[CUBIC](...)   # a kernel with NO interp branch,
+else:                 _launch_extract_slice_3d[LINEAR](...)  # cubic/linear baked in
 ```
 
 So the hot loop over millions of voxels never asks "linear or cubic?" — that
@@ -312,7 +311,7 @@ a named `KernelParams`, so the hot loops never call back into Python.
 **CPU path** (`extract_central_slices_rfft_3d` / `insert_...`):
 
 ```
-torch tensors ──(data_ptr, _ptr)──▶ Float32Ptr ──▶ parallelize workers ──▶ _project_pixel[interp]
+torch tensors ──(data_ptr, _ptr)──▶ Float32Ptr ──▶ parallelize workers ──▶ _extract_slice_3d_pixel[interp]
 KernelParams  ──(read by name)────▶ FourierSliceParams
 ```
 
@@ -325,17 +324,17 @@ place inputs + PRE-ZEROED outputs on device
         ├─ device addresses:  CUDA → data_ptr() is already a device VA
         │                     Metal → data_ptr() is an MTLBuffer object ptr, so
         │                             recover the real VA = [MTLBuffer gpuAddress]
-        │                             + storage_offset   (_gpu.py)
+        │                             + storage_offset   (_device.py)
         ├─ stream address:    CUDA → torch's current stream (kernel enqueues on it,
         │                            so it's ordered with surrounding torch ops)
         │                     Metal → 0 (own DeviceContext stream; entry point syncs)
         ▼
-Mojo entry point:  _dptr(addr) → build a per-kernel buffer struct (ProjectBuffers …)
-                   dispatch _launch_project[LINEAR|CUBIC](ctx, buffers=…, params=…, stream=…)
-                   → one GPU thread per rfft pixel → _project_pixel[interp]
+Mojo entry point:  _dptr(addr) → build a per-kernel buffer struct (ExtractSlice3DBuffers …)
+                   dispatch _launch_extract_slice_3d[LINEAR|CUBIC](ctx, buffers=…, params=…, stream=…)
+                   → one GPU thread per rfft pixel → _extract_slice_3d_pixel[interp]
 ```
 
-Two device-specific wrinkles handled in `_gpu.py`:
+Two device-specific wrinkles handled in `_backend/_device.py`:
 
 - **Metal heap residency.** macOS evicts idle GPU heaps after ~1–1.5 s, and Mojo
   doesn't declare foreign (torch-owned) buffers to its command encoder — a kernel
@@ -366,7 +365,7 @@ Consistent across Python and Mojo:
 | `Float32Ptr` | raw pointer into a contiguous float32 buffer (CPU or GPU); grouped into buffer structs where several travel together |
 | `C2` / `C6` / `C8` | complex `(re, im)` SIMD / value + 2 spatial gradients (2D) / value + 3 spatial gradients (3D) |
 | `KernelParams` (Python) ↔ `FourierSliceParams` (Mojo) | the scalar parameters, read by **name** across the boundary (no positional index conventions) |
-| `ProjectBuffers`, `ScatterBuffers`, `…GradBuffers` | per-kernel bundles naming exactly the buffers that kernel uses |
+| `ExtractSlice3DBuffers`, `InsertSlice3DBuffers`, `…GradBuffers` | per-kernel bundles naming exactly the buffers that kernel uses |
 | `LINEAR` / `CUBIC` | the comptime interpolation kinds |
 
 Complex volume/projection data is read/written through a per-volume 4D
@@ -378,16 +377,16 @@ Complex volume/projection data is read/written through a per-volume 4D
 ## 11. Differentiability
 
 Every op is **fully differentiable**: the extraction w.r.t. `reconstruction`,
-`rotations` (or `directions`), `shifts`; the insertion w.r.t. `projections`,
-`weights`, `rotations` (or `directions`), `shifts`.
+`rotation_matrices` (or `directions`), `shifts`; the insertion w.r.t. `projections`,
+`weights`, `rotation_matrices` (or `directions`), `shifts`.
 
 The **data** gradients use the adjoint relationship — each extraction/insertion
 pair are adjoints, so each one's data-backward is the *other* op's kernel
 (`d/d(volume)` of an extraction is the scatter; `d/d(projections)` of an
 insertion is the gather, with an exact correction for the Hermitian
 double-insert and the skipped `x=0` line). The pose / `shifts` / `weights`
-gradients are dedicated backward kernels (`_pose_grad.mojo`, `_line_grad.mojo`,
-`_line2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
+gradients are dedicated backward kernels (`_slice_3d_grad.mojo`, `_line_3d_grad.mojo`,
+`_line_2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
 the interpolated field (`_gather_grad.mojo`) through the rotated sample
 coordinate; the shift grad differentiates the phase ramp; the weight grad is the
 exact adjoint of the weight splat. All are validated by finite differences (CPU

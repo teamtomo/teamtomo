@@ -65,7 +65,7 @@ def _accumulate_3d[
 
 
 @always_inline
-def _accumulate_weight[
+def _accumulate_weight_3d[
     L: TensorLayout
 ](
     wvol: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -109,7 +109,7 @@ def _accumulate_weight[
 
 
 @always_inline
-def _splat_one[
+def _splat_3d_one[
     Lv: TensorLayout, Lw: TensorLayout
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -126,11 +126,11 @@ def _splat_one[
     """Accumulate a single interpolation corner (data + optional weight)."""
     _accumulate_3d(vol, z, y, x, vre * w, vim * w, p.friedel_double)
     if p.has_weights != 0:
-        _accumulate_weight(wvol, z, y, x, wval * w, p.friedel_double)
+        _accumulate_weight_3d(wvol, z, y, x, wval * w, p.friedel_double)
 
 
 @always_inline
-def _splat_linear[
+def _splat_3d_linear[
     Lv: TensorLayout, Lw: TensorLayout
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -156,18 +156,18 @@ def _splat_linear[
     var ifz = 1.0 - fz
     var ify = 1.0 - fy
     var ifx = 1.0 - fx
-    _splat_one(vol, wvol, p, z, y, x, ifz * ify * ifx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z, y, x + 1, ifz * ify * fx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z, y + 1, x, ifz * fy * ifx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z, y + 1, x + 1, ifz * fy * fx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z + 1, y, x, fz * ify * ifx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z + 1, y, x + 1, fz * ify * fx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z + 1, y + 1, x, fz * fy * ifx, vre, vim, wval)
-    _splat_one(vol, wvol, p, z + 1, y + 1, x + 1, fz * fy * fx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z, y, x, ifz * ify * ifx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z, y, x + 1, ifz * ify * fx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z, y + 1, x, ifz * fy * ifx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z, y + 1, x + 1, ifz * fy * fx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z + 1, y, x, fz * ify * ifx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z + 1, y, x + 1, fz * ify * fx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z + 1, y + 1, x, fz * fy * ifx, vre, vim, wval)
+    _splat_3d_one(vol, wvol, p, z + 1, y + 1, x + 1, fz * fy * fx, vre, vim, wval)
 
 
 @always_inline
-def _splat_cubic[
+def _splat_3d_cubic[
     Lv: TensorLayout, Lw: TensorLayout
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -196,13 +196,13 @@ def _splat_cubic[
             var wzy = wz * _cubic_kernel(fy - Float32(oy))
             for ox in range(-1, 3):
                 var w = wzy * _cubic_kernel(fx - Float32(ox))
-                _splat_one(
+                _splat_3d_one(
                     vol, wvol, p, z + oz, y + oy, x + ox, w, vre, vim, wval
                 )
 
 
 @always_inline
-def _splat[
+def _splat_3d[
     Lv: TensorLayout, Lw: TensorLayout, //, interp: Int
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -218,9 +218,9 @@ def _splat[
     """Splat a complex value (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
     """
     comptime if interp == CUBIC:
-        _splat_cubic(vol, wvol, p, kz, ky, kx, vre, vim, wval)
+        _splat_3d_cubic(vol, wvol, p, kz, ky, kx, vre, vim, wval)
     else:
-        _splat_linear(vol, wvol, p, kz, ky, kx, vre, vim, wval)
+        _splat_3d_linear(vol, wvol, p, kz, ky, kx, vre, vim, wval)
 
 
 # ===========================================================================
@@ -317,7 +317,7 @@ def _accumulate_weight_2d[
 
 
 @always_inline
-def _splat2d_one[
+def _splat_2d_one[
     Lv: TensorLayout, Lw: TensorLayout
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -337,7 +337,7 @@ def _splat2d_one[
 
 
 @always_inline
-def _splat2d_linear[
+def _splat_2d_linear[
     Lv: TensorLayout, Lw: TensorLayout
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -358,14 +358,14 @@ def _splat2d_linear[
     var fx = kx - kx_floor
     var ify = 1.0 - fy
     var ifx = 1.0 - fx
-    _splat2d_one(vol, wvol, p, y, x, ify * ifx, vre, vim, wval)
-    _splat2d_one(vol, wvol, p, y, x + 1, ify * fx, vre, vim, wval)
-    _splat2d_one(vol, wvol, p, y + 1, x, fy * ifx, vre, vim, wval)
-    _splat2d_one(vol, wvol, p, y + 1, x + 1, fy * fx, vre, vim, wval)
+    _splat_2d_one(vol, wvol, p, y, x, ify * ifx, vre, vim, wval)
+    _splat_2d_one(vol, wvol, p, y, x + 1, ify * fx, vre, vim, wval)
+    _splat_2d_one(vol, wvol, p, y + 1, x, fy * ifx, vre, vim, wval)
+    _splat_2d_one(vol, wvol, p, y + 1, x + 1, fy * fx, vre, vim, wval)
 
 
 @always_inline
-def _splat2d_cubic[
+def _splat_2d_cubic[
     Lv: TensorLayout, Lw: TensorLayout
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -388,11 +388,11 @@ def _splat2d_cubic[
         var wy = _cubic_kernel(fy - Float32(oy))
         for ox in range(-1, 3):
             var w = wy * _cubic_kernel(fx - Float32(ox))
-            _splat2d_one(vol, wvol, p, y + oy, x + ox, w, vre, vim, wval)
+            _splat_2d_one(vol, wvol, p, y + oy, x + ox, w, vre, vim, wval)
 
 
 @always_inline
-def _splat2d[
+def _splat_2d[
     Lv: TensorLayout, Lw: TensorLayout, //, interp: Int
 ](
     vol: TileTensor[DType.float32, Lv, MutAnyOrigin],
@@ -407,6 +407,6 @@ def _splat2d[
     """Splat a complex value (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
     """
     comptime if interp == CUBIC:
-        _splat2d_cubic(vol, wvol, p, ky, kx, vre, vim, wval)
+        _splat_2d_cubic(vol, wvol, p, ky, kx, vre, vim, wval)
     else:
-        _splat2d_linear(vol, wvol, p, ky, kx, vre, vim, wval)
+        _splat_2d_linear(vol, wvol, p, ky, kx, vre, vim, wval)

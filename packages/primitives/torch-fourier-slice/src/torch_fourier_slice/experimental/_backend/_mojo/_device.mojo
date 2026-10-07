@@ -7,7 +7,7 @@ kernel takes that as its single params argument, unpacking it back to a
 `FourierSliceParams` on entry -- the per-pixel math is shared with the CPU
 path unchanged. The kernels read and write torch device memory in place --
 the Python caller passes raw device addresses (see `fourier_slice_kernels.mojo`
-/ `experimental/_gpu.py`), so there is no host<->device staging here.
+/ `_backend/_device.py`), so there is no host<->device staging here.
 """
 
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
@@ -21,47 +21,47 @@ from _common import (
     SCATTER_BLOCK,
     SCATTER_COARSEN_LINEAR,
     _grad_add,
-    _line2d_pose_grad_offsets,
-    _line_pose_grad_offsets,
-    _pose_grad_offsets,
+    _line_2d_pose_grad_offsets,
+    _line_3d_pose_grad_offsets,
+    _slice_3d_pose_grad_offsets,
     _scatter_coarsen,
     _warp_pose_uniform,
-    BackprojectGradBuffers,
-    BackprojectLine2DGradBuffers,
-    BackprojectLineGradBuffers,
+    InsertSlice3DPoseGradBuffers,
+    InsertLine2DPoseGradBuffers,
+    InsertLine3DPoseGradBuffers,
     DeviceParams,
     Float32Ptr,
-    ForwardGradBuffers,
-    ForwardLine2DGradBuffers,
-    ForwardLineGradBuffers,
+    ExtractSlice3DPoseGradBuffers,
+    ExtractLine2DPoseGradBuffers,
+    ExtractLine3DPoseGradBuffers,
     FourierSliceParams,
-    ProjectBuffers,
-    ProjectLine2DBuffers,
-    ProjectLineBuffers,
-    ScatterBuffers,
-    ScatterLine2DBuffers,
-    ScatterLineBuffers,
-    WeightGradBuffers,
-    WeightLine2DGradBuffers,
-    WeightLineGradBuffers,
+    ExtractSlice3DBuffers,
+    ExtractLine2DBuffers,
+    ExtractLine3DBuffers,
+    InsertSlice3DBuffers,
+    InsertLine2DBuffers,
+    InsertLine3DBuffers,
+    InsertSlice3DWeightGradBuffers,
+    InsertLine2DWeightGradBuffers,
+    InsertLine3DWeightGradBuffers,
 )
-from _line import _project_line_pixel, _scatter_line_pixel
-from _line2d import _project_line2d_pixel, _scatter_line2d_pixel
-from _line2d_grad import (
-    _backproject_line2d_pose_grad_pixel,
-    _forward_line2d_pose_grad_pixel,
-    _weight_line2d_grad_pixel,
+from _line_3d import _extract_line_3d_pixel, _insert_line_3d_pixel
+from _line_2d import _extract_line_2d_pixel, _insert_line_2d_pixel
+from _line_2d_grad import (
+    _insert_line_2d_pose_grad_pixel,
+    _extract_line_2d_pose_grad_pixel,
+    _insert_line_2d_weight_grad_pixel,
 )
-from _line_grad import (
-    _backproject_line_pose_grad_pixel,
-    _forward_line_pose_grad_pixel,
-    _weight_line_grad_pixel,
+from _line_3d_grad import (
+    _insert_line_3d_pose_grad_pixel,
+    _extract_line_3d_pose_grad_pixel,
+    _insert_line_3d_weight_grad_pixel,
 )
-from _pixel import _project_pixel, _scatter_pixel
-from _pose_grad import (
-    _backproject_pose_grad_pixel,
-    _forward_pose_grad_pixel,
-    _weight_grad_pixel,
+from _slice_3d import _extract_slice_3d_pixel, _insert_slice_3d_pixel
+from _slice_3d_grad import (
+    _insert_slice_3d_pose_grad_pixel,
+    _extract_slice_3d_pose_grad_pixel,
+    _insert_slice_3d_weight_grad_pixel,
 )
 
 
@@ -70,7 +70,7 @@ from _pose_grad import (
 # ---------------------------------------------------------------------------
 
 
-def _project_gpu_kernel[
+def _extract_slice_3d_gpu_kernel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -89,12 +89,12 @@ def _project_gpu_kernel[
     var t = idx // psh
     var y = t % p.proj_sidelength
     var vp = t // p.proj_sidelength
-    _project_pixel[interp](
+    _extract_slice_3d_pixel[interp](
         rec, rot, shifts_2d, shifts_3d, proj, vp // p.bp, vp % p.bp, y, x, p
     )
 
 
-def _scatter_gpu_kernel[
+def _insert_slice_3d_gpu_kernel[
     interp: Int, coarsen: Int
 ](
     inp: Float32Ptr,
@@ -124,7 +124,7 @@ def _scatter_gpu_kernel[
             var t = idx // psh
             var y = t % p.proj_sidelength
             var vp = t // p.proj_sidelength
-            _scatter_pixel[interp](
+            _insert_slice_3d_pixel[interp](
                 inp,
                 weights,
                 rot,
@@ -140,7 +140,7 @@ def _scatter_gpu_kernel[
             )
 
 
-def _project_line_gpu_kernel[
+def _extract_line_3d_gpu_kernel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -156,12 +156,12 @@ def _project_line_gpu_kernel[
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
-    _project_line_pixel[interp](
+    _extract_line_3d_pixel[interp](
         rec, direction, shifts_3d, line, vp // p.bp, vp % p.bp, x, p
     )
 
 
-def _scatter_line_gpu_kernel[
+def _insert_line_3d_gpu_kernel[
     interp: Int, coarsen: Int
 ](
     inp: Float32Ptr,
@@ -183,7 +183,7 @@ def _scatter_line_gpu_kernel[
         if idx < total:
             var x = idx % lsh
             var vp = idx // lsh
-            _scatter_line_pixel[interp](
+            _insert_line_3d_pixel[interp](
                 inp,
                 weights,
                 direction,
@@ -197,7 +197,7 @@ def _scatter_line_gpu_kernel[
             )
 
 
-def _project_line2d_gpu_kernel[
+def _extract_line_2d_gpu_kernel[
     interp: Int
 ](
     img: Float32Ptr,
@@ -213,12 +213,12 @@ def _project_line2d_gpu_kernel[
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
-    _project_line2d_pixel[interp](
+    _extract_line_2d_pixel[interp](
         img, direction, shifts_2d, line, vp // p.bp, vp % p.bp, x, p
     )
 
 
-def _scatter_line2d_gpu_kernel[
+def _insert_line_2d_gpu_kernel[
     interp: Int, coarsen: Int
 ](
     inp: Float32Ptr,
@@ -240,7 +240,7 @@ def _scatter_line2d_gpu_kernel[
         if idx < total:
             var x = idx % lsh
             var vp = idx // lsh
-            _scatter_line2d_pixel[interp](
+            _insert_line_2d_pixel[interp](
                 inp,
                 weights,
                 direction,
@@ -254,7 +254,7 @@ def _scatter_line2d_gpu_kernel[
             )
 
 
-def _forward_line2d_pose_grad_kernel[
+def _extract_line_2d_pose_grad_kernel[
     interp: Int
 ](
     img: Float32Ptr,
@@ -265,7 +265,7 @@ def _forward_line2d_pose_grad_kernel[
     grad_shift: Float32Ptr,
     dp: DeviceParams,
 ):
-    # Same per-pose atomic-contention fix as _forward_pose_grad_kernel: reduce
+    # Same per-pose atomic-contention fix as _extract_slice_3d_pose_grad_kernel: reduce
     # across a warp before one atomic add per warp; clamp-and-mask instead of
     # early-return for out-of-bounds threads to keep the warp uniform.
     var idx = global_idx.x
@@ -278,13 +278,13 @@ def _forward_line2d_pose_grad_kernel[
     var vp = idx_safe // lsh
     var i_bv = vp // p.bp
     var i_bp = vp % p.bp
-    var contrib = _forward_line2d_pose_grad_pixel[interp](
+    var contrib = _extract_line_2d_pose_grad_pixel[interp](
         img, direction, shifts_2d, grad_line, i_bv, i_bp, x, p
     )
     if not in_bounds:
         contrib = SIMD[DType.float32, 4](0)
     var uniform = _warp_pose_uniform(vp)
-    var dbase, sbase = _line2d_pose_grad_offsets(i_bv, i_bp, p)
+    var dbase, sbase = _line_2d_pose_grad_offsets(i_bv, i_bp, p)
     _grad_add(grad_dir, dbase + 0, contrib[0], uniform)
     _grad_add(grad_dir, dbase + 1, contrib[1], uniform)
     if p.has_shifts_2d != 0:
@@ -292,7 +292,7 @@ def _forward_line2d_pose_grad_kernel[
         _grad_add(grad_shift, sbase + 1, contrib[3], uniform)
 
 
-def _backproject_line2d_pose_grad_kernel[
+def _insert_line_2d_pose_grad_kernel[
     interp: Int
 ](
     grad_img: Float32Ptr,
@@ -303,7 +303,7 @@ def _backproject_line2d_pose_grad_kernel[
     grad_shift: Float32Ptr,
     dp: DeviceParams,
 ):
-    # See _forward_line2d_pose_grad_kernel above for the reduction rationale.
+    # See _extract_line_2d_pose_grad_kernel above for the reduction rationale.
     var idx = global_idx.x
     var total = Int(dp.total)
     var in_bounds = idx < total
@@ -314,13 +314,13 @@ def _backproject_line2d_pose_grad_kernel[
     var vp = idx_safe // lsh
     var i_bv = vp // p.bp
     var i_bp = vp % p.bp
-    var contrib = _backproject_line2d_pose_grad_pixel[interp](
+    var contrib = _insert_line_2d_pose_grad_pixel[interp](
         grad_img, direction, shifts_2d, lines, i_bv, i_bp, x, p
     )
     if not in_bounds:
         contrib = SIMD[DType.float32, 4](0)
     var uniform = _warp_pose_uniform(vp)
-    var dbase, sbase = _line2d_pose_grad_offsets(i_bv, i_bp, p)
+    var dbase, sbase = _line_2d_pose_grad_offsets(i_bv, i_bp, p)
     _grad_add(grad_dir, dbase + 0, contrib[0], uniform)
     _grad_add(grad_dir, dbase + 1, contrib[1], uniform)
     if p.has_shifts_2d != 0:
@@ -328,7 +328,7 @@ def _backproject_line2d_pose_grad_kernel[
         _grad_add(grad_shift, sbase + 1, contrib[3], uniform)
 
 
-def _weight_line2d_grad_kernel[
+def _insert_line_2d_weight_grad_kernel[
     interp: Int
 ](
     gwimg: Float32Ptr,
@@ -343,12 +343,12 @@ def _weight_line2d_grad_kernel[
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
-    _weight_line2d_grad_pixel[interp](
+    _insert_line_2d_weight_grad_pixel[interp](
         gwimg, direction, grad_weight, vp // p.bp, vp % p.bp, x, p
     )
 
 
-def _forward_line_pose_grad_kernel[
+def _extract_line_3d_pose_grad_kernel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -359,7 +359,7 @@ def _forward_line_pose_grad_kernel[
     grad_shift_3d: Float32Ptr,
     dp: DeviceParams,
 ):
-    # Same per-pose atomic-contention fix as _forward_pose_grad_kernel: reduce
+    # Same per-pose atomic-contention fix as _extract_slice_3d_pose_grad_kernel: reduce
     # across a warp before one atomic add per warp; clamp-and-mask instead of
     # early-return for out-of-bounds threads to keep the warp uniform.
     var idx = global_idx.x
@@ -372,13 +372,13 @@ def _forward_line_pose_grad_kernel[
     var vp = idx_safe // lsh
     var i_bv = vp // p.bp
     var i_bp = vp % p.bp
-    var contrib = _forward_line_pose_grad_pixel[interp](
+    var contrib = _extract_line_3d_pose_grad_pixel[interp](
         rec, direction, shifts_3d, grad_line, i_bv, i_bp, x, p
     )
     if not in_bounds:
         contrib = SIMD[DType.float32, 8](0)
     var uniform = _warp_pose_uniform(vp)
-    var dbase, s3base = _line_pose_grad_offsets(i_bv, i_bp, p)
+    var dbase, s3base = _line_3d_pose_grad_offsets(i_bv, i_bp, p)
     _grad_add(grad_dir, dbase + 0, contrib[0], uniform)
     _grad_add(grad_dir, dbase + 1, contrib[1], uniform)
     _grad_add(grad_dir, dbase + 2, contrib[2], uniform)
@@ -388,7 +388,7 @@ def _forward_line_pose_grad_kernel[
         _grad_add(grad_shift_3d, s3base + 2, contrib[5], uniform)
 
 
-def _backproject_line_pose_grad_kernel[
+def _insert_line_3d_pose_grad_kernel[
     interp: Int
 ](
     grad_rec: Float32Ptr,
@@ -399,7 +399,7 @@ def _backproject_line_pose_grad_kernel[
     grad_shift_3d: Float32Ptr,
     dp: DeviceParams,
 ):
-    # See _forward_line_pose_grad_kernel above for the reduction rationale.
+    # See _extract_line_3d_pose_grad_kernel above for the reduction rationale.
     var idx = global_idx.x
     var total = Int(dp.total)
     var in_bounds = idx < total
@@ -410,13 +410,13 @@ def _backproject_line_pose_grad_kernel[
     var vp = idx_safe // lsh
     var i_bv = vp // p.bp
     var i_bp = vp % p.bp
-    var contrib = _backproject_line_pose_grad_pixel[interp](
+    var contrib = _insert_line_3d_pose_grad_pixel[interp](
         grad_rec, direction, shifts_3d, lines, i_bv, i_bp, x, p
     )
     if not in_bounds:
         contrib = SIMD[DType.float32, 8](0)
     var uniform = _warp_pose_uniform(vp)
-    var dbase, s3base = _line_pose_grad_offsets(i_bv, i_bp, p)
+    var dbase, s3base = _line_3d_pose_grad_offsets(i_bv, i_bp, p)
     _grad_add(grad_dir, dbase + 0, contrib[0], uniform)
     _grad_add(grad_dir, dbase + 1, contrib[1], uniform)
     _grad_add(grad_dir, dbase + 2, contrib[2], uniform)
@@ -426,7 +426,7 @@ def _backproject_line_pose_grad_kernel[
         _grad_add(grad_shift_3d, s3base + 2, contrib[5], uniform)
 
 
-def _weight_line_grad_kernel[
+def _insert_line_3d_weight_grad_kernel[
     interp: Int
 ](
     gwvol: Float32Ptr,
@@ -441,12 +441,12 @@ def _weight_line_grad_kernel[
     var lsh = p.proj_sidelength_half()
     var x = idx % lsh
     var vp = idx // lsh
-    _weight_line_grad_pixel[interp](
+    _insert_line_3d_weight_grad_pixel[interp](
         gwvol, direction, grad_weight, vp // p.bp, vp % p.bp, x, p
     )
 
 
-def _forward_pose_grad_kernel[
+def _extract_slice_3d_pose_grad_kernel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -478,13 +478,13 @@ def _forward_pose_grad_kernel[
     var vp = t // p.proj_sidelength
     var i_bv = vp // p.bp
     var i_bp = vp % p.bp
-    var contrib = _forward_pose_grad_pixel[interp](
+    var contrib = _extract_slice_3d_pose_grad_pixel[interp](
         rec, rot, shifts_2d, shifts_3d, grad_proj, i_bv, i_bp, y, x, p
     )
     if not in_bounds:
         contrib = SIMD[DType.float32, 16](0)
     var uniform = _warp_pose_uniform(vp)
-    var rbase, sbase, s3base = _pose_grad_offsets(i_bv, i_bp, p)
+    var rbase, sbase, s3base = _slice_3d_pose_grad_offsets(i_bv, i_bp, p)
     _grad_add(grad_rot, rbase + 1, contrib[1], uniform)
     _grad_add(grad_rot, rbase + 2, contrib[2], uniform)
     _grad_add(grad_rot, rbase + 4, contrib[4], uniform)
@@ -504,7 +504,7 @@ def _forward_pose_grad_kernel[
         _grad_add(grad_shift_3d, s3base + 2, contrib[13], uniform)
 
 
-def _backproject_pose_grad_kernel[
+def _insert_slice_3d_pose_grad_kernel[
     interp: Int
 ](
     grad_rec: Float32Ptr,
@@ -517,7 +517,7 @@ def _backproject_pose_grad_kernel[
     grad_shift_3d: Float32Ptr,
     dp: DeviceParams,
 ):
-    # See the comment in _forward_pose_grad_kernel: same per-pose atomic-contention
+    # See the comment in _extract_slice_3d_pose_grad_kernel: same per-pose atomic-contention
     # fix, with the same clamp-and-mask instead of early-return for out-of-bounds
     # threads to keep the warp uniformly reaching the reduction.
     var idx = global_idx.x
@@ -532,13 +532,13 @@ def _backproject_pose_grad_kernel[
     var vp = t // p.proj_sidelength
     var i_bv = vp // p.bp
     var i_bp = vp % p.bp
-    var contrib = _backproject_pose_grad_pixel[interp](
+    var contrib = _insert_slice_3d_pose_grad_pixel[interp](
         grad_rec, rot, shifts_2d, shifts_3d, proj, i_bv, i_bp, y, x, p
     )
     if not in_bounds:
         contrib = SIMD[DType.float32, 16](0)
     var uniform = _warp_pose_uniform(vp)
-    var rbase, sbase, s3base = _pose_grad_offsets(i_bv, i_bp, p)
+    var rbase, sbase, s3base = _slice_3d_pose_grad_offsets(i_bv, i_bp, p)
     _grad_add(grad_rot, rbase + 1, contrib[1], uniform)
     _grad_add(grad_rot, rbase + 2, contrib[2], uniform)
     _grad_add(grad_rot, rbase + 4, contrib[4], uniform)
@@ -558,7 +558,7 @@ def _backproject_pose_grad_kernel[
         _grad_add(grad_shift_3d, s3base + 2, contrib[13], uniform)
 
 
-def _weight_grad_kernel[
+def _insert_slice_3d_weight_grad_kernel[
     interp: Int
 ](
     gwvol: Float32Ptr,
@@ -575,7 +575,7 @@ def _weight_grad_kernel[
     var t = idx // psh
     var y = t % p.proj_sidelength
     var vp = t // p.proj_sidelength
-    _weight_grad_pixel[interp](
+    _insert_slice_3d_weight_grad_pixel[interp](
         gwvol, rot, grad_weight, vp // p.bp, vp % p.bp, y, x, p
     )
 
@@ -595,11 +595,11 @@ def _weight_grad_kernel[
 
 
 @always_inline
-def _launch_project[
+def _launch_extract_slice_3d[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ProjectBuffers,
+    buffers: ExtractSlice3DBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -610,7 +610,7 @@ def _launch_project[
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
-        var compiled = ctx.compile_function[_project_gpu_kernel[interp]]()
+        var compiled = ctx.compile_function[_extract_slice_3d_gpu_kernel[interp]]()
         stream.enqueue_function(
             compiled,
             buffers.rec,
@@ -623,7 +623,7 @@ def _launch_project[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_project_gpu_kernel[interp]](
+    ctx.enqueue_function[_extract_slice_3d_gpu_kernel[interp]](
         buffers.rec,
         buffers.rot,
         buffers.shifts_2d,
@@ -636,11 +636,11 @@ def _launch_project[
 
 
 @always_inline
-def _launch_scatter[
+def _launch_insert_slice_3d[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ScatterBuffers,
+    buffers: InsertSlice3DBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -652,7 +652,7 @@ def _launch_scatter[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _scatter_gpu_kernel[interp, coarsen]
+            _insert_slice_3d_gpu_kernel[interp, coarsen]
         ]()
         stream.enqueue_function(
             compiled,
@@ -668,7 +668,7 @@ def _launch_scatter[
             block_dim=SCATTER_BLOCK,
         )
         return
-    ctx.enqueue_function[_scatter_gpu_kernel[interp, coarsen]](
+    ctx.enqueue_function[_insert_slice_3d_gpu_kernel[interp, coarsen]](
         buffers.inp,
         buffers.weights,
         buffers.rot,
@@ -683,11 +683,11 @@ def _launch_scatter[
 
 
 @always_inline
-def _launch_project_line[
+def _launch_extract_line_3d[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ProjectLineBuffers,
+    buffers: ExtractLine3DBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -697,7 +697,7 @@ def _launch_project_line[
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
-        var compiled = ctx.compile_function[_project_line_gpu_kernel[interp]]()
+        var compiled = ctx.compile_function[_extract_line_3d_gpu_kernel[interp]]()
         stream.enqueue_function(
             compiled,
             buffers.rec,
@@ -709,7 +709,7 @@ def _launch_project_line[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_project_line_gpu_kernel[interp]](
+    ctx.enqueue_function[_extract_line_3d_gpu_kernel[interp]](
         buffers.rec,
         buffers.direction,
         buffers.shifts_3d,
@@ -721,11 +721,11 @@ def _launch_project_line[
 
 
 @always_inline
-def _launch_scatter_line[
+def _launch_insert_line_3d[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ScatterLineBuffers,
+    buffers: InsertLine3DBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -737,7 +737,7 @@ def _launch_scatter_line[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _scatter_line_gpu_kernel[interp, coarsen]
+            _insert_line_3d_gpu_kernel[interp, coarsen]
         ]()
         stream.enqueue_function(
             compiled,
@@ -752,7 +752,7 @@ def _launch_scatter_line[
             block_dim=SCATTER_BLOCK,
         )
         return
-    ctx.enqueue_function[_scatter_line_gpu_kernel[interp, coarsen]](
+    ctx.enqueue_function[_insert_line_3d_gpu_kernel[interp, coarsen]](
         buffers.inp,
         buffers.weights,
         buffers.direction,
@@ -766,11 +766,11 @@ def _launch_scatter_line[
 
 
 @always_inline
-def _launch_project_line2d[
+def _launch_extract_line_2d[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ProjectLine2DBuffers,
+    buffers: ExtractLine2DBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -781,7 +781,7 @@ def _launch_project_line2d[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _project_line2d_gpu_kernel[interp]
+            _extract_line_2d_gpu_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -794,7 +794,7 @@ def _launch_project_line2d[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_project_line2d_gpu_kernel[interp]](
+    ctx.enqueue_function[_extract_line_2d_gpu_kernel[interp]](
         buffers.img,
         buffers.direction,
         buffers.shifts_2d,
@@ -806,11 +806,11 @@ def _launch_project_line2d[
 
 
 @always_inline
-def _launch_scatter_line2d[
+def _launch_insert_line_2d[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ScatterLine2DBuffers,
+    buffers: InsertLine2DBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -825,7 +825,7 @@ def _launch_scatter_line2d[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _scatter_line2d_gpu_kernel[interp, coarsen]
+            _insert_line_2d_gpu_kernel[interp, coarsen]
         ]()
         stream.enqueue_function(
             compiled,
@@ -840,7 +840,7 @@ def _launch_scatter_line2d[
             block_dim=SCATTER_BLOCK,
         )
         return
-    ctx.enqueue_function[_scatter_line2d_gpu_kernel[interp, coarsen]](
+    ctx.enqueue_function[_insert_line_2d_gpu_kernel[interp, coarsen]](
         buffers.inp,
         buffers.weights,
         buffers.direction,
@@ -854,11 +854,11 @@ def _launch_scatter_line2d[
 
 
 @always_inline
-def _launch_forward_line2d_pose_grad[
+def _launch_extract_line_2d_pose_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ForwardLine2DGradBuffers,
+    buffers: ExtractLine2DPoseGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -869,7 +869,7 @@ def _launch_forward_line2d_pose_grad[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _forward_line2d_pose_grad_kernel[interp]
+            _extract_line_2d_pose_grad_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -884,7 +884,7 @@ def _launch_forward_line2d_pose_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_forward_line2d_pose_grad_kernel[interp]](
+    ctx.enqueue_function[_extract_line_2d_pose_grad_kernel[interp]](
         buffers.img,
         buffers.direction,
         buffers.shifts_2d,
@@ -898,11 +898,11 @@ def _launch_forward_line2d_pose_grad[
 
 
 @always_inline
-def _launch_backproject_line2d_pose_grad[
+def _launch_insert_line_2d_pose_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: BackprojectLine2DGradBuffers,
+    buffers: InsertLine2DPoseGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -913,7 +913,7 @@ def _launch_backproject_line2d_pose_grad[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _backproject_line2d_pose_grad_kernel[interp]
+            _insert_line_2d_pose_grad_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -928,7 +928,7 @@ def _launch_backproject_line2d_pose_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_backproject_line2d_pose_grad_kernel[interp]](
+    ctx.enqueue_function[_insert_line_2d_pose_grad_kernel[interp]](
         buffers.grad_img,
         buffers.direction,
         buffers.shifts_2d,
@@ -942,11 +942,11 @@ def _launch_backproject_line2d_pose_grad[
 
 
 @always_inline
-def _launch_weight_line2d_grad[
+def _launch_insert_line_2d_weight_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: WeightLine2DGradBuffers,
+    buffers: InsertLine2DWeightGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -957,7 +957,7 @@ def _launch_weight_line2d_grad[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _weight_line2d_grad_kernel[interp]
+            _insert_line_2d_weight_grad_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -969,7 +969,7 @@ def _launch_weight_line2d_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_weight_line2d_grad_kernel[interp]](
+    ctx.enqueue_function[_insert_line_2d_weight_grad_kernel[interp]](
         buffers.gwimg,
         buffers.direction,
         buffers.grad_weight,
@@ -980,11 +980,11 @@ def _launch_weight_line2d_grad[
 
 
 @always_inline
-def _launch_forward_line_pose_grad[
+def _launch_extract_line_3d_pose_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ForwardLineGradBuffers,
+    buffers: ExtractLine3DPoseGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -995,7 +995,7 @@ def _launch_forward_line_pose_grad[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _forward_line_pose_grad_kernel[interp]
+            _extract_line_3d_pose_grad_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -1010,7 +1010,7 @@ def _launch_forward_line_pose_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_forward_line_pose_grad_kernel[interp]](
+    ctx.enqueue_function[_extract_line_3d_pose_grad_kernel[interp]](
         buffers.rec,
         buffers.direction,
         buffers.shifts_3d,
@@ -1024,11 +1024,11 @@ def _launch_forward_line_pose_grad[
 
 
 @always_inline
-def _launch_backproject_line_pose_grad[
+def _launch_insert_line_3d_pose_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: BackprojectLineGradBuffers,
+    buffers: InsertLine3DPoseGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -1039,7 +1039,7 @@ def _launch_backproject_line_pose_grad[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _backproject_line_pose_grad_kernel[interp]
+            _insert_line_3d_pose_grad_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -1054,7 +1054,7 @@ def _launch_backproject_line_pose_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_backproject_line_pose_grad_kernel[interp]](
+    ctx.enqueue_function[_insert_line_3d_pose_grad_kernel[interp]](
         buffers.grad_rec,
         buffers.direction,
         buffers.shifts_3d,
@@ -1068,11 +1068,11 @@ def _launch_backproject_line_pose_grad[
 
 
 @always_inline
-def _launch_weight_line_grad[
+def _launch_insert_line_3d_weight_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: WeightLineGradBuffers,
+    buffers: InsertLine3DWeightGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -1082,7 +1082,7 @@ def _launch_weight_line_grad[
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
-        var compiled = ctx.compile_function[_weight_line_grad_kernel[interp]]()
+        var compiled = ctx.compile_function[_insert_line_3d_weight_grad_kernel[interp]]()
         stream.enqueue_function(
             compiled,
             buffers.gwvol,
@@ -1093,7 +1093,7 @@ def _launch_weight_line_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_weight_line_grad_kernel[interp]](
+    ctx.enqueue_function[_insert_line_3d_weight_grad_kernel[interp]](
         buffers.gwvol,
         buffers.direction,
         buffers.grad_weight,
@@ -1104,11 +1104,11 @@ def _launch_weight_line_grad[
 
 
 @always_inline
-def _launch_forward_pose_grad[
+def _launch_extract_slice_3d_pose_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: ForwardGradBuffers,
+    buffers: ExtractSlice3DPoseGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -1118,7 +1118,7 @@ def _launch_forward_pose_grad[
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
-        var compiled = ctx.compile_function[_forward_pose_grad_kernel[interp]]()
+        var compiled = ctx.compile_function[_extract_slice_3d_pose_grad_kernel[interp]]()
         stream.enqueue_function(
             compiled,
             buffers.rec,
@@ -1134,7 +1134,7 @@ def _launch_forward_pose_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_forward_pose_grad_kernel[interp]](
+    ctx.enqueue_function[_extract_slice_3d_pose_grad_kernel[interp]](
         buffers.rec,
         buffers.rot,
         buffers.shifts_2d,
@@ -1150,11 +1150,11 @@ def _launch_forward_pose_grad[
 
 
 @always_inline
-def _launch_backproject_pose_grad[
+def _launch_insert_slice_3d_pose_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: BackprojectGradBuffers,
+    buffers: InsertSlice3DPoseGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -1165,7 +1165,7 @@ def _launch_backproject_pose_grad[
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
         var compiled = ctx.compile_function[
-            _backproject_pose_grad_kernel[interp]
+            _insert_slice_3d_pose_grad_kernel[interp]
         ]()
         stream.enqueue_function(
             compiled,
@@ -1182,7 +1182,7 @@ def _launch_backproject_pose_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_backproject_pose_grad_kernel[interp]](
+    ctx.enqueue_function[_insert_slice_3d_pose_grad_kernel[interp]](
         buffers.grad_rec,
         buffers.rot,
         buffers.shifts_2d,
@@ -1198,11 +1198,11 @@ def _launch_backproject_pose_grad[
 
 
 @always_inline
-def _launch_weight_grad[
+def _launch_insert_slice_3d_weight_grad[
     interp: Int
 ](
     ctx: DeviceContext,
-    buffers: WeightGradBuffers,
+    buffers: InsertSlice3DWeightGradBuffers,
     total: Int,
     p: FourierSliceParams,
     stream_addr: Int,
@@ -1212,7 +1212,7 @@ def _launch_weight_grad[
         var stream = ctx.create_external_stream(
             OpaquePointer[MutAnyOrigin](unsafe_from_address=stream_addr)
         )
-        var compiled = ctx.compile_function[_weight_grad_kernel[interp]]()
+        var compiled = ctx.compile_function[_insert_slice_3d_weight_grad_kernel[interp]]()
         stream.enqueue_function(
             compiled,
             buffers.gwvol,
@@ -1223,7 +1223,7 @@ def _launch_weight_grad[
             block_dim=BLOCK,
         )
         return
-    ctx.enqueue_function[_weight_grad_kernel[interp]](
+    ctx.enqueue_function[_insert_slice_3d_weight_grad_kernel[interp]](
         buffers.gwvol,
         buffers.rot,
         buffers.grad_weight,

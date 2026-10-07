@@ -4,8 +4,8 @@ A central line is the degenerate central slice whose in-plane (y) axis is
 collapsed to the single DC row: the node is a 1D complex rfft array of Fourier
 coefficients sampled along a **direction** `u` on the sphere (a zyx unit vector,
 the real-space line direction; the same vector in Fourier space). One line pixel
-`x` maps to the 3D sample coordinate `k = s * u`; the gather (`_interp3d`) and
-scatter (`_splat`) are reused verbatim from the slice kernels -- only the
+`x` maps to the 3D sample coordinate `k = s * u`; the gather (`_interp_3d`) and
+scatter (`_splat_3d`) are reused verbatim from the slice kernels -- only the
 coordinate setup, the radius test, and the 1D I/O layout differ.
 
 Unlike a 2D slice (which needs a full rotation matrix), a 1D line needs only its
@@ -24,18 +24,18 @@ from _common import (
     Float32Ptr,
     FourierSliceParams,
     _cmul,
-    _line_k,
-    _line_shift_phase,
+    _line_3d_k,
+    _line_3d_shift_phase,
     _load_c2_line,
     _rfft_half,
     _store_c2_line,
 )
-from _gather import _interp3d
-from _scatter import _splat
+from _gather import _interp_3d
+from _scatter import _splat_3d
 
 
 @always_inline
-def _project_line_pixel[
+def _extract_line_3d_pixel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -55,7 +55,7 @@ def _project_line_pixel[
     # per-node direction broadcasts over the volume batch via bv_rot (= bv_dir).
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
+    var k = _line_3d_k(direction, (db * p.bp + i_bp) * 3, sx)
 
     # per-volume 4D view of the rfft cube [d, h, w, 2] (zero-copy over `rec`)
     var half = _rfft_half(p.sidelength)
@@ -63,10 +63,10 @@ def _project_line_pixel[
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var val = _interp3d[interp](rec_b, k[0], k[1], k[2])
+    var val = _interp_3d[interp](rec_b, k[0], k[1], k[2])
 
     if p.has_shifts_3d != 0:
-        var phase = _line_shift_phase(
+        var phase = _line_3d_shift_phase(
             p, shifts_3d, i_bv, i_bp, k[0], k[1], k[2]
         )
         val = _cmul(val, C2(cos(phase), sin(phase)))
@@ -81,7 +81,7 @@ def _project_line_pixel[
 
 
 @always_inline
-def _scatter_line_pixel[
+def _insert_line_3d_pixel[
     interp: Int
 ](
     inp: Float32Ptr,
@@ -113,11 +113,11 @@ def _scatter_line_pixel[
 
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
+    var k = _line_3d_k(direction, (db * p.bp + i_bp) * 3, sx)
 
     if p.has_shifts_3d != 0:
         # conjugate phase factor (adjoint of the forward line shift)
-        var phase = _line_shift_phase(
+        var phase = _line_3d_shift_phase(
             p, shifts_3d, i_bv, i_bp, k[0], k[1], k[2]
         )
         var cr = cos(phase)
@@ -140,4 +140,4 @@ def _scatter_line_pixel[
         wvol + i_bv * p.sidelength * p.sidelength * half,
         row_major(p.sidelength, p.sidelength, half),
     )
-    _splat[interp](vol_b, wvol_b, p, k[0], k[1], k[2], vre, vim, wval)
+    _splat_3d[interp](vol_b, wvol_b, p, k[0], k[1], k[2], vre, vim, wval)

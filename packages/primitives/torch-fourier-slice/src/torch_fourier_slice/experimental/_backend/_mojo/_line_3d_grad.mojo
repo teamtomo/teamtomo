@@ -1,6 +1,6 @@
 """Per-pixel backward ops for the central-*line* pose / weight gradients.
 
-The line analogues of `_pose_grad.mojo`. A line samples along a direction
+The line analogues of `_slice_3d_grad.mojo`. A line samples along a direction
 `u = (u_z, u_y, u_x)` with `k = s_x * u`, so the pose gradient is simply the
 gradient w.r.t. that 3-vector: `d(value)/du_a = g_a * s_x` summed over the line.
 There is no rotation matrix (hence no gauge column), no 2D image-plane shift and
@@ -10,8 +10,8 @@ The heavy machinery -- interpolation-with-spatial-gradient, the 3D-shift
 coupling into the pose grad, and the weight-splat adjoint gather -- is reused
 verbatim from the slice kernels; only the 1D geometry and line I/O differ.
 
-`_line_pose_grad_terms` is the pure (no side effects) core, mirroring
-`_pose_grad_terms` in `_pose_grad.mojo`: see that module's docstring for why
+`_line_3d_pose_grad_terms` is the pure (no side effects) core, mirroring
+`_slice_3d_pose_grad_terms` in `_slice_3d_grad.mojo`: see that module's docstring for why
 the caller (not this file) decides how to accumulate a pixel's contribution --
 every pixel of a pose targets the same handful of scalars, so the GPU kernel
 reduces across a warp first (`_device.mojo`).
@@ -28,16 +28,16 @@ from _common import (
     FourierSliceParams,
     _cmul,
     _cubic_kernel,
-    _line_k,
-    _line_shift_phase,
+    _line_3d_k,
+    _line_3d_shift_phase,
     _rfft_half,
 )
-from _gather_grad import _interp3d_with_grad
-from _pose_grad import _couple_shift3d, _gather_weight_grad, _redot
+from _gather_grad import _interp_3d_with_grad
+from _slice_3d_grad import _couple_shift_3d, _gather_weight_grad_3d, _redot
 
 
 @always_inline
-def _line_phase_factor(
+def _line_3d_phase_factor(
     shifts_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
@@ -50,12 +50,12 @@ def _line_phase_factor(
     """
     if p.has_shifts_3d == 0:
         return C2(1.0, 0.0)
-    var phase = _line_shift_phase(p, shifts_3d, i_bv, i_bp, kz, ky, kx)
+    var phase = _line_3d_shift_phase(p, shifts_3d, i_bv, i_bp, kz, ky, kx)
     return C2(cos(phase), sin(phase))
 
 
 @always_inline
-def _line_pose_grad_terms(
+def _line_3d_pose_grad_terms(
     sx: Float32,
     kz: Float32,
     ky: Float32,
@@ -70,7 +70,7 @@ def _line_pose_grad_terms(
 ) -> SIMD[DType.float32, 8]:
     """This line pixel's direction + 3D-shift grad contribution.
 
-    Pure -- see `_pose_grad_terms` in `_pose_grad.mojo`. Layout: `[dir(3),
+    Pure -- see `_slice_3d_pose_grad_terms` in `_slice_3d_grad.mojo`. Layout: `[dir(3),
     shift_3d(3)]` (padded from 6 to the next power of two -- SIMD widths must
     be one -- lanes 6-7 unused), `dir` matching `grad_dir`'s storage. `k = s_x
     * u`, so `d(value)/du_a = g_a * s_x`; the direction grad is `(dz, dy, dx)
@@ -100,7 +100,7 @@ def _line_pose_grad_terms(
 
 
 @always_inline
-def _forward_line_pose_grad_pixel[
+def _extract_line_3d_pose_grad_pixel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -112,42 +112,42 @@ def _forward_line_pose_grad_pixel[
     x: Int,
     p: FourierSliceParams,
 ) -> SIMD[DType.float32, 8]:
-    """Direction/3D-shift grad contribution for the forward line projection
-    (volume = rec). Pure -- see `_line_pose_grad_terms`.
+    """Direction/3D-shift grad contribution for the line extraction
+    (volume = rec). Pure -- see `_line_3d_pose_grad_terms`.
     """
     var coord_x = Float32(x)
     if coord_x * coord_x > p.radius_cutoff_sq:
         return SIMD[DType.float32, 8](0)
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
+    var k = _line_3d_k(direction, (db * p.bp + i_bp) * 3, sx)
     var half = _rfft_half(p.sidelength)
     var rec_b = TileTensor(
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad[interp](rec_b, k[0], k[1], k[2], 0)
+    var vg = _interp_3d_with_grad[interp](rec_b, k[0], k[1], k[2], 0)
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
     var gx = C2(vg[6], vg[7])
     if p.has_shifts_3d != 0:
-        _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
+        _couple_shift_3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var line_half = p.proj_sidelength_half()
     var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
     var gp = C2(grad_line[off], grad_line[off + 1])
-    var pf = _line_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
+    var pf = _line_3d_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
     # direction cotangent: interp grad paired with grad_line * conj(phase); the
     # shift term pairs grad_line against the forward value modulated by the phase.
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
-    return _line_pose_grad_terms(
+    return _line_3d_pose_grad_terms(
         sx, k[0], k[1], k[2], gpc, gz, gy, gx, gp, modulated, p
     )
 
 
 @always_inline
-def _backproject_line_pose_grad_pixel[
+def _insert_line_3d_pose_grad_pixel[
     interp: Int
 ](
     grad_rec: Float32Ptr,
@@ -160,40 +160,40 @@ def _backproject_line_pose_grad_pixel[
     p: FourierSliceParams,
 ) -> SIMD[DType.float32, 8]:
     """Direction/3D-shift grad contribution for the line insertion (volume =
-    grad_data_rec). Pure -- see `_line_pose_grad_terms`.
+    grad_data_rec). Pure -- see `_line_3d_pose_grad_terms`.
     """
     var coord_x = Float32(x)
     if coord_x * coord_x > p.radius_cutoff_sq:
         return SIMD[DType.float32, 8](0)
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
+    var k = _line_3d_k(direction, (db * p.bp + i_bp) * 3, sx)
     var half = _rfft_half(p.sidelength)
     var grad_rec_b = TileTensor(
         grad_rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2], 1)
+    var vg = _interp_3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2], 1)
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
     var gx = C2(vg[6], vg[7])
     if p.has_shifts_3d != 0:
-        _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
+        _couple_shift_3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var line_half = p.proj_sidelength_half()
     var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
     var pv = C2(lines[off], lines[off + 1])
-    var pf = _line_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
+    var pf = _line_3d_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
     # insertion applies the conjugate phase to the line value; both the direction
     # and shift terms pair that against the gathered grad_rec field.
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
-    return _line_pose_grad_terms(
+    return _line_3d_pose_grad_terms(
         sx, k[0], k[1], k[2], pvc, gz, gy, gx, pvc, val, p
     )
 
 
 @always_inline
-def _weight_line_grad_pixel[
+def _insert_line_3d_weight_grad_pixel[
     interp: Int
 ](
     gwvol: Float32Ptr,
@@ -211,7 +211,7 @@ def _weight_line_grad_pixel[
         return
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k(direction, (db * p.bp + i_bp) * 3, sx)
+    var k = _line_3d_k(direction, (db * p.bp + i_bp) * 3, sx)
     var kz = k[0]
     var ky = k[1]
     var kx = k[2]
@@ -232,7 +232,7 @@ def _weight_line_grad_pixel[
                 var wzy = wz * _cubic_kernel(fy - Float32(oy))
                 for ox in range(-1, 3):
                     var w = wzy * _cubic_kernel(fx - Float32(ox))
-                    acc += w * _gather_weight_grad(
+                    acc += w * _gather_weight_grad_3d(
                         gwvol,
                         i_bv,
                         p.sidelength,
@@ -251,35 +251,35 @@ def _weight_line_grad_pixel[
             ifz
             * ify
             * ifx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0, y0, x0, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0, y0, x0, fd)
             + ifz
             * ify
             * fx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0, y0, x0 + 1, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0, y0, x0 + 1, fd)
             + ifz
             * fy
             * ifx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0, y0 + 1, x0, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0, y0 + 1, x0, fd)
             + ifz
             * fy
             * fx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0, y0 + 1, x0 + 1, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0, y0 + 1, x0 + 1, fd)
             + fz
             * ify
             * ifx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0 + 1, y0, x0, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0 + 1, y0, x0, fd)
             + fz
             * ify
             * fx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0 + 1, y0, x0 + 1, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0 + 1, y0, x0 + 1, fd)
             + fz
             * fy
             * ifx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0 + 1, y0 + 1, x0, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0 + 1, y0 + 1, x0, fd)
             + fz
             * fy
             * fx
-            * _gather_weight_grad(gwvol, i_bv, sl, z0 + 1, y0 + 1, x0 + 1, fd)
+            * _gather_weight_grad_3d(gwvol, i_bv, sl, z0 + 1, y0 + 1, x0 + 1, fd)
         )
     var line_half = p.proj_sidelength_half()
     grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = acc

@@ -59,17 +59,6 @@ def _rfft_layouts(volume: torch.Tensor):
     return rfft, rfft_shifted
 
 
-def _xyz_to_zyx(rot: torch.Tensor) -> torch.Tensor:
-    """Convert an xyz-convention rotation matrix to our kernel's zyx convention.
-
-    Our kernel multiplies coordinate vectors ordered (z, y, x); reversing both
-    the rows and the columns of an xyz matrix gives the matrix for the same
-    physical rotation acting on zyx-ordered vectors. The canonical reference
-    kernels take xyz matrices by default, so wrap our calls with this.
-    """
-    return torch.flip(rot, dims=(-2, -1)).contiguous()
-
-
 def _radius_mask(boxsize: int, fftfreq_max: float) -> torch.Tensor:
     """Boolean (H, W//2+1) mask of rfft pixels with |k| <= fftfreq_max."""
     h = torch.fft.fftshift(torch.fft.fftfreq(boxsize))  # matches teamtomo h-fftshift
@@ -94,7 +83,9 @@ def test_identity_exact_in_band():
     ref = canonical_extract_central_slices_rfft_3d(
         volume_rfft=shifted, rotation_matrices=rot
     )
-    out = extract_central_slices_rfft_3d(rfft, rotations=rot, fourier_radius_cutoff=d)
+    out = extract_central_slices_rfft_3d(
+        rfft, zyx_matrices=True, rotation_matrices=rot, fftfreq_max=1.0
+    )
     out_shifted = torch.fft.fftshift(out, dim=-2)
 
     mask = _radius_mask(d, fftfreq_max=0.45)
@@ -117,7 +108,7 @@ def test_matches_teamtomo_within_nyquist():
         volume_rfft=shifted, rotation_matrices=rot
     )
     out = extract_central_slices_rfft_3d(
-        rfft, rotations=_xyz_to_zyx(rot)
+        rfft, rotation_matrices=rot
     )  # (1, 8, d, d//2+1)
     out_shifted = torch.fft.fftshift(out, dim=-2)
 
@@ -136,9 +127,13 @@ def test_shifts_apply_phase_ramp():
     rfft, _ = _rfft_layouts(volume)
     rot = torch.eye(3).reshape(1, 3, 3)
 
-    no_shift = extract_central_slices_rfft_3d(rfft, rotations=rot)
+    no_shift = extract_central_slices_rfft_3d(
+        rfft, zyx_matrices=True, rotation_matrices=rot
+    )
     shift = torch.tensor([[[2.0, -3.0]]])  # (1, 1, 2) xy
-    with_shift = extract_central_slices_rfft_3d(rfft, rotations=rot, shifts_2d=shift)
+    with_shift = extract_central_slices_rfft_3d(
+        rfft, zyx_matrices=True, rotation_matrices=rot, shifts_2d=shift, yx_shifts=True
+    )
 
     # Build the expected phase ramp: phase = -2pi/box * (ky*sx + kx*sy)
     ky = torch.fft.fftfreq(d)[:, None] * d  # rfft-ordered cycles (DC at origin)
@@ -166,7 +161,9 @@ def _gpu_usable() -> bool:
         vol = torch.randn(8, 8, 8)
         rfft, _ = _rfft_layouts(vol)
         extract_central_slices_rfft_3d(
-            rfft.to(dev), rotations=torch.eye(3).reshape(1, 3, 3)
+            rfft.to(dev),
+            zyx_matrices=True,
+            rotation_matrices=torch.eye(3).reshape(1, 3, 3),
         )
     except Exception:
         return False
@@ -188,10 +185,10 @@ def test_gpu_matches_cpu():
     )
 
     cpu = extract_central_slices_rfft_3d(
-        rfft, rotations=rot
+        rfft, zyx_matrices=True, rotation_matrices=rot
     )  # CPU tensor -> CPU kernel
     gpu = extract_central_slices_rfft_3d(
-        rfft.to(dev), rotations=rot
+        rfft.to(dev), zyx_matrices=True, rotation_matrices=rot
     )  # GPU tensor -> GPU kernel
     assert gpu.device.type == dev
     assert gpu.shape == cpu.shape
@@ -199,8 +196,16 @@ def test_gpu_matches_cpu():
 
     # with shifts (GPU transcendental precision differs slightly)
     shift = torch.randn(1, 6, 2)
-    cpu_s = extract_central_slices_rfft_3d(rfft, rotations=rot, shifts_2d=shift)
-    gpu_s = extract_central_slices_rfft_3d(rfft.to(dev), rotations=rot, shifts_2d=shift)
+    cpu_s = extract_central_slices_rfft_3d(
+        rfft, zyx_matrices=True, rotation_matrices=rot, shifts_2d=shift, yx_shifts=True
+    )
+    gpu_s = extract_central_slices_rfft_3d(
+        rfft.to(dev),
+        zyx_matrices=True,
+        rotation_matrices=rot,
+        shifts_2d=shift,
+        yx_shifts=True,
+    )
     assert torch.allclose(gpu_s.cpu(), cpu_s, atol=1e-3)
 
 
@@ -220,15 +225,21 @@ def test_gpu_repeated_and_inplace():
     gpu_rfft = rfft.to(dev)
     rot = torch.eye(3).reshape(1, 3, 3)
 
-    cpu = extract_central_slices_rfft_3d(rfft, rotations=rot)
-    first = extract_central_slices_rfft_3d(gpu_rfft, rotations=rot)
-    second = extract_central_slices_rfft_3d(gpu_rfft, rotations=rot)
+    cpu = extract_central_slices_rfft_3d(rfft, zyx_matrices=True, rotation_matrices=rot)
+    first = extract_central_slices_rfft_3d(
+        gpu_rfft, zyx_matrices=True, rotation_matrices=rot
+    )
+    second = extract_central_slices_rfft_3d(
+        gpu_rfft, zyx_matrices=True, rotation_matrices=rot
+    )
     assert torch.allclose(first.cpu(), cpu, atol=1e-4)
     assert torch.allclose(second.cpu(), cpu, atol=1e-4)
 
     # in-place mutation is read live on the next call
     gpu_rfft.mul_(2.0)
-    after = extract_central_slices_rfft_3d(gpu_rfft, rotations=rot)
+    after = extract_central_slices_rfft_3d(
+        gpu_rfft, zyx_matrices=True, rotation_matrices=rot
+    )
     assert torch.allclose(after.cpu(), 2 * cpu, atol=1e-3)
 
 
@@ -241,12 +252,12 @@ def test_forward_projection_gradient():
     rot = torch.tensor(
         Rotation.random(5, random_state=1).as_matrix(), dtype=torch.float32
     ).unsqueeze(0)
-    cut = d / 4.0  # interior samples (avoids the boundary clamp/drop asymmetry)
+    cut = 0.25  # interior samples (avoids the boundary clamp/drop asymmetry)
     w = torch.randn(1, 5, d, d // 2 + 1, dtype=torch.complex64)
 
     def loss(rec):
         proj = extract_central_slices_rfft_3d(
-            rec, rotations=rot, fourier_radius_cutoff=cut
+            rec, zyx_matrices=True, rotation_matrices=rot, fftfreq_max=cut
         )
         return torch.real(torch.sum(torch.conj(w) * proj))
 
@@ -276,9 +287,9 @@ def test_backprojection_matches_teamtomo_within_nyquist():
 
     mine, mine_w = insert_central_slices_rfft_3d(
         proj,
-        rotations=_xyz_to_zyx(rot),
+        rotation_matrices=rot,
         weights=torch.ones_like(proj, dtype=torch.float32),
-        fourier_radius_cutoff=fftfreq_max * d,
+        fftfreq_max=fftfreq_max,
     )
     ref, ref_w = canonical_insert_central_slices_rfft_3d(
         image_rfft=torch.fft.fftshift(proj, dim=-2),  # canonical: DC centred on h
@@ -313,12 +324,12 @@ def test_backprojection_gradient_and_weights():
     rot = torch.tensor(
         Rotation.random(P, random_state=1).as_matrix(), dtype=torch.float32
     ).unsqueeze(0)
-    cut = d / 4.0
+    cut = 0.25
     w_func = torch.randn(d, d, dh, dtype=torch.complex64)
 
     def loss(p):
         dvol, _ = insert_central_slices_rfft_3d(
-            p, rotations=rot, fourier_radius_cutoff=cut
+            p, zyx_matrices=True, rotation_matrices=rot, fftfreq_max=cut
         )
         return torch.real(torch.sum(torch.conj(w_func) * dvol))
 
@@ -328,23 +339,25 @@ def test_backprojection_gradient_and_weights():
     # weight accumulation returns a matching real volume
     weights = torch.rand(P, d, dh, dtype=torch.float32)
     data_vol, weight_vol = insert_central_slices_rfft_3d(
-        proj.detach(), rotations=rot, weights=weights
+        proj.detach(), zyx_matrices=True, rotation_matrices=rot, weights=weights
     )
     assert weight_vol is not None
     assert weight_vol.shape == data_vol.shape
     assert weight_vol.dtype == torch.float32
     # no weights -> None
-    _, none_w = insert_central_slices_rfft_3d(proj.detach(), rotations=rot)
+    _, none_w = insert_central_slices_rfft_3d(
+        proj.detach(), zyx_matrices=True, rotation_matrices=rot
+    )
     assert none_w is None
 
 
-def test_rfft_layer_rank_single_and_multivolume():
-    """rfft-layer extract/insert: single (squeeze) vs multivolume (transpose)."""
+def test_rfft_layer_rank_single_and_multichannel():
+    """rfft-layer extract/insert: single (squeeze) vs multichannel (transpose)."""
     from torch_fourier_slice.experimental import (
         extract_central_slices_rfft_3d,
-        extract_central_slices_rfft_3d_multivolume,
+        extract_central_slices_rfft_3d_multichannel,
         insert_central_slices_rfft_3d,
-        insert_central_slices_rfft_3d_multivolume,
+        insert_central_slices_rfft_3d_multichannel,
     )
 
     torch.manual_seed(0)
@@ -357,15 +370,15 @@ def test_rfft_layer_rank_single_and_multivolume():
     s0 = extract_central_slices_rfft_3d(vols[0], rot)
     assert s0.shape == (P, d, dh)
 
-    # multivolume, shared poses: (bv, d, h, w) -> (P, bv, h, w)
-    sm = extract_central_slices_rfft_3d_multivolume(vols, rot)
+    # multichannel, shared poses: (bv, d, h, w) -> (P, bv, h, w)
+    sm = extract_central_slices_rfft_3d_multichannel(vols, rot)
     assert sm.shape == (P, bv, d, dh)
     for i in range(bv):
         assert torch.allclose(sm[:, i], extract_central_slices_rfft_3d(vols[i], rot))
 
-    # multivolume, per-volume poses: rotations (bv, P, 3, 3)
+    # multichannel, per-volume poses: rotations (bv, P, 3, 3)
     rots_pv = torch.stack([_rand_rot(P, i + 1) for i in range(bv)])
-    smp = extract_central_slices_rfft_3d_multivolume(vols, rots_pv)
+    smp = extract_central_slices_rfft_3d_multichannel(vols, rots_pv)
     assert smp.shape == (P, bv, d, dh)
     for i in range(bv):
         ref = extract_central_slices_rfft_3d(vols[i], rots_pv[i])
@@ -376,9 +389,9 @@ def test_rfft_layer_rank_single_and_multivolume():
     v0, w0 = insert_central_slices_rfft_3d(imgs, rot)
     assert v0.shape == (d, d, dh) and w0 is None
 
-    # multivolume insert: (P, bv, h, w) -> (bv, d, h, w)
+    # multichannel insert: (P, bv, h, w) -> (bv, d, h, w)
     imgs_m = torch.randn(P, bv, d, dh, dtype=torch.complex64)
-    vm, wm = insert_central_slices_rfft_3d_multivolume(imgs_m, rot)
+    vm, wm = insert_central_slices_rfft_3d_multichannel(imgs_m, rot)
     assert vm.shape == (bv, d, d, dh) and wm is None
     for i in range(bv):
         vi, _ = insert_central_slices_rfft_3d(imgs_m[:, i], rot)
@@ -413,22 +426,30 @@ def test_gpu_scatter_matches_cpu(interp):
     w = torch.rand(P, d, dh, dtype=torch.float32)
 
     cpu_v, cpu_w = insert_central_slices_rfft_3d(
-        proj, rotations=rot, weights=w, interpolation=interp
+        proj, zyx_matrices=True, rotation_matrices=rot, weights=w, interpolation=interp
     )
     gpu_v, gpu_w = insert_central_slices_rfft_3d(
-        proj.to(dev), rotations=rot, weights=w.to(dev), interpolation=interp
+        proj.to(dev),
+        zyx_matrices=True,
+        rotation_matrices=rot,
+        weights=w.to(dev),
+        interpolation=interp,
     )
     assert gpu_v.device.type == dev
     assert torch.allclose(gpu_v.cpu(), cpu_v, atol=1e-4)
     assert torch.allclose(gpu_w.cpu(), cpu_w, atol=1e-4)
 
     # forward-projection gradient on device exercises the GPU scatter as backward
-    cut = d / 4.0
+    cut = 0.25
     wf = torch.randn(P, d, dh, dtype=torch.complex64, device=dev)
 
     def loss(rec):
         proj = extract_central_slices_rfft_3d(
-            rec, rotations=rot, fourier_radius_cutoff=cut, interpolation=interp
+            rec,
+            zyx_matrices=True,
+            rotation_matrices=rot,
+            fftfreq_max=cut,
+            interpolation=interp,
         )
         return torch.real(torch.sum(torch.conj(wf) * proj))
 
@@ -442,7 +463,10 @@ def test_invalid_interpolation_raises():
     rfft, _ = _rfft_layouts(vol)
     with pytest.raises(ValueError, match="interpolation"):
         extract_central_slices_rfft_3d(
-            rfft, rotations=torch.eye(3).reshape(1, 3, 3), interpolation="nope"
+            rfft,
+            zyx_matrices=True,
+            rotation_matrices=torch.eye(3).reshape(1, 3, 3),
+            interpolation="nope",
         )
 
 
@@ -462,10 +486,13 @@ def test_cubic_is_more_accurate_than_linear():
     zz, yy, xx = torch.meshgrid(axis, axis, axis, indexing="ij")
     volume = torch.exp(-(zz**2 + yy**2 + xx**2) / (2 * 3.0**2))
     rfft, _ = _rfft_layouts(volume)
-    cutoff = d / 4  # stay well inside the band, away from the boundary clamp
+    cutoff = 0.25  # stay well inside the band, away from the boundary clamp
 
     truth = extract_central_slices_rfft_3d(
-        rfft, rotations=torch.eye(3).reshape(1, 3, 3), fourier_radius_cutoff=cutoff
+        rfft,
+        zyx_matrices=True,
+        rotation_matrices=torch.eye(3).reshape(1, 3, 3),
+        fftfreq_max=cutoff,
     )[0]
     rotations = torch.tensor(
         Rotation.random(8, random_state=5).as_matrix(), dtype=torch.float32
@@ -475,8 +502,9 @@ def test_cubic_is_more_accurate_than_linear():
     for interpolation in ("linear", "cubic"):
         out = extract_central_slices_rfft_3d(
             rfft,
-            rotations=rotations,
-            fourier_radius_cutoff=cutoff,
+            zyx_matrices=True,
+            rotation_matrices=rotations,
+            fftfreq_max=cutoff,
             interpolation=interpolation,
         )
         errors[interpolation] = (out - truth[None]).abs().mean()
@@ -497,20 +525,28 @@ def test_cubic_gradients():
     rot = torch.tensor(
         Rotation.random(P, random_state=1).as_matrix(), dtype=torch.float32
     ).unsqueeze(0)
-    cut = d / 4.0
+    cut = 0.25
 
     wf = torch.randn(P, d, dh, dtype=torch.complex64)
     wv = torch.randn(d, d, dh, dtype=torch.complex64)
 
     def forward_loss(rec):
         proj = extract_central_slices_rfft_3d(
-            rec, rotations=rot, fourier_radius_cutoff=cut, interpolation="cubic"
+            rec,
+            zyx_matrices=True,
+            rotation_matrices=rot,
+            fftfreq_max=cut,
+            interpolation="cubic",
         )
         return torch.real(torch.sum(torch.conj(wf) * proj))
 
     def backproject_loss(proj):
         vol, _ = insert_central_slices_rfft_3d(
-            proj, rotations=rot, fourier_radius_cutoff=cut, interpolation="cubic"
+            proj,
+            zyx_matrices=True,
+            rotation_matrices=rot,
+            fftfreq_max=cut,
+            interpolation="cubic",
         )
         return torch.real(torch.sum(torch.conj(wv) * vol))
 
@@ -558,7 +594,7 @@ def test_forward_pose_gradients(interp):
     """Forward-projection gradients w.r.t. rotations and shifts (finite difference)."""
     torch.manual_seed(0)
     d, P = 20, 3
-    cut = d / 4.0  # interior samples (avoids the boundary clamp/drop asymmetry)
+    cut = 0.25  # interior samples (avoids the boundary clamp/drop asymmetry)
     vol = torch.randn(d, d, d // 2 + 1, dtype=torch.complex64)
     rot0 = _rand_rot(P, 1).unsqueeze(0)
     sh0 = torch.randn(1, P, 2) * 0.5
@@ -567,10 +603,12 @@ def test_forward_pose_gradients(interp):
     def proj_loss(rot, sh):
         p = extract_central_slices_rfft_3d(
             vol,
-            rotations=rot,
+            zyx_matrices=True,
+            rotation_matrices=rot,
             shifts_2d=sh,
-            fourier_radius_cutoff=cut,
+            fftfreq_max=cut,
             interpolation=interp,
+            yx_shifts=True,
         )
         return ((p - target).abs() ** 2).sum()
 
@@ -587,7 +625,7 @@ def test_backprojection_pose_and_weight_gradients(interp):
     torch.manual_seed(0)
     d, P = 20, 3
     dh = d // 2 + 1
-    cut = d / 4.0
+    cut = 0.25
     proj = _herm_projection(P, d, 7)  # Hermitian: a valid projection stack
     rot0 = _rand_rot(P, 1).unsqueeze(0)
     sh0 = torch.randn(1, P, 2) * 0.5
@@ -598,19 +636,22 @@ def test_backprojection_pose_and_weight_gradients(interp):
     def data_loss(rot, sh):
         dvol, _ = insert_central_slices_rfft_3d(
             proj,
-            rotations=rot,
+            zyx_matrices=True,
+            rotation_matrices=rot,
             shifts_2d=sh,
-            fourier_radius_cutoff=cut,
+            fftfreq_max=cut,
             interpolation=interp,
+            yx_shifts=True,
         )
         return ((dvol - data_t).abs() ** 2).sum()
 
     def weight_loss(wts):
         _, wvol = insert_central_slices_rfft_3d(
             proj,
-            rotations=rot0,
+            zyx_matrices=True,
+            rotation_matrices=rot0,
             weights=wts,
-            fourier_radius_cutoff=cut,
+            fftfreq_max=cut,
             interpolation=interp,
         )
         return ((wvol - weight_t) ** 2).sum()
@@ -625,19 +666,57 @@ def test_backprojection_pose_and_weight_gradients(interp):
     assert _fd_ratio(weight_loss, wts, eps=1e-3) < 2e-2
 
 
+@pytest.mark.parametrize("flip_sign", [False, True])
+def test_ewald_curvature_matches_teamtomo(flip_sign):
+    """The canonical Ewald arguments bend the slice exactly as teamtomo does."""
+    from scipy.spatial.transform import Rotation
+
+    torch.manual_seed(0)
+    d = 32
+    volume = torch.randn(d, d, d, dtype=torch.float32)
+    rfft, shifted = _rfft_layouts(volume)
+    rot = torch.tensor(
+        Rotation.random(8, random_state=2).as_matrix(), dtype=torch.float32
+    )
+    # a tiny pixel size makes the curvature large enough to matter at d = 32
+    ewald = {
+        "apply_ewald_curvature": True,
+        "ewald_voltage_kv": 200.0,
+        "ewald_flip_sign": flip_sign,
+        "ewald_px_size": 0.02,
+    }
+    ref = canonical_extract_central_slices_rfft_3d(
+        volume_rfft=shifted, rotation_matrices=rot, **ewald
+    )
+    flat = canonical_extract_central_slices_rfft_3d(
+        volume_rfft=shifted, rotation_matrices=rot
+    )
+    out = extract_central_slices_rfft_3d(rfft, rotation_matrices=rot, **ewald)
+    out_shifted = torch.fft.fftshift(out, dim=-2)
+
+    mask = _radius_mask(d, fftfreq_max=0.3)  # curved slice must stay in band
+    # teamtomo zeroes the DC pixel for some rotations when the curvature is on
+    mask[d // 2, 0] = False
+    scale = ref.abs()[:, mask].mean()
+    assert (flat - ref).abs()[:, mask].mean() > 0.1 * scale  # not vacuous
+    diff = (out_shifted - ref).abs()[:, mask]
+    assert diff.max() < 1e-2 * scale.clamp(min=1.0) + 1e-3
+    assert diff.mean() < 1e-4 * scale.clamp(min=1.0)
+
+
 @pytest.mark.parametrize("interp", ["linear", "cubic"])
 def test_ewald_curvature_gradients(interp):
     """Ewald curvature bends the slice; FD-check the now-active z-column Jacobian.
 
     A flat slice leaves the rotation's z-input column with zero gradient; a
-    non-zero ``ewald_curvature`` gives every pixel a z-offset, so that column
+    Ewald curvature gives every pixel a z-offset, so that column
     becomes active in both the forward and backprojection pose-gradient kernels.
     """
     torch.manual_seed(0)
     d, P = 20, 3
     dh = d // 2 + 1
-    cut = d / 4.0
-    ewald = 0.02
+    cut = 0.25
+    ewald = {"apply_ewald_curvature": True, "ewald_px_size": 0.025}
     vol = torch.randn(d, d, dh, dtype=torch.complex64)
     rot0 = _rand_rot(P, 1).unsqueeze(0)
     sh0 = torch.randn(1, P, 2) * 0.5
@@ -647,35 +726,43 @@ def test_ewald_curvature_gradients(interp):
 
     # curvature must actually change the projection (otherwise the test is vacuous)
     flat = extract_central_slices_rfft_3d(
-        vol, rotations=rot0, fourier_radius_cutoff=cut, interpolation=interp
+        vol,
+        zyx_matrices=True,
+        rotation_matrices=rot0,
+        fftfreq_max=cut,
+        interpolation=interp,
     )
     curved = extract_central_slices_rfft_3d(
         vol,
-        rotations=rot0,
-        fourier_radius_cutoff=cut,
+        zyx_matrices=True,
+        rotation_matrices=rot0,
+        fftfreq_max=cut,
         interpolation=interp,
-        ewald_curvature=ewald,
+        **ewald,
     )
     assert not torch.allclose(flat, curved, atol=1e-4)
 
     def proj_loss(rot, sh):
         p = extract_central_slices_rfft_3d(
             vol,
-            rotations=rot,
+            zyx_matrices=True,
+            rotation_matrices=rot,
             shifts_2d=sh,
-            fourier_radius_cutoff=cut,
+            fftfreq_max=cut,
             interpolation=interp,
-            ewald_curvature=ewald,
+            **ewald,
+            yx_shifts=True,
         )
         return ((p - target).abs() ** 2).sum()
 
     def data_loss(rot):
         dvol, _ = insert_central_slices_rfft_3d(
             proj,
-            rotations=rot,
-            fourier_radius_cutoff=cut,
+            zyx_matrices=True,
+            rotation_matrices=rot,
+            fftfreq_max=cut,
             interpolation=interp,
-            ewald_curvature=ewald,
+            **ewald,
         )
         return ((dvol - data_t).abs() ** 2).sum()
 
@@ -695,7 +782,7 @@ def test_shifts_3d_gradients(interp):
     torch.manual_seed(0)
     d, P = 20, 3
     dh = d // 2 + 1
-    cut = d / 4.0
+    cut = 0.25
     vol = torch.randn(d, d, dh, dtype=torch.complex64)
     rot0 = _rand_rot(P, 1).unsqueeze(0)
     target = torch.randn(P, d, dh, dtype=torch.complex64)
@@ -710,20 +797,32 @@ def test_shifts_3d_gradients(interp):
     s3 = torch.zeros(1, P, 3)
     s3[..., 1:] = s2
     a = extract_central_slices_rfft_3d(
-        vol, rotations=eye, shifts_2d=s2, interpolation=interp
+        vol,
+        zyx_matrices=True,
+        rotation_matrices=eye,
+        shifts_2d=s2,
+        interpolation=interp,
+        yx_shifts=True,
     )
     b = extract_central_slices_rfft_3d(
-        vol, rotations=eye, shifts_3d=s3, interpolation=interp
+        vol,
+        zyx_matrices=True,
+        rotation_matrices=eye,
+        shifts_3d=s3,
+        interpolation=interp,
+        zyx_shifts=True,
     )
     assert torch.allclose(a, b, atol=1e-4)
 
     def proj_loss(rot, s3d):
         p = extract_central_slices_rfft_3d(
             vol,
-            rotations=rot,
+            zyx_matrices=True,
+            rotation_matrices=rot,
             shifts_3d=s3d,
-            fourier_radius_cutoff=cut,
+            fftfreq_max=cut,
             interpolation=interp,
+            zyx_shifts=True,
         )
         return ((p - target).abs() ** 2).sum()
 
@@ -738,10 +837,12 @@ def test_shifts_3d_gradients(interp):
     def data_loss(rot, s3d):
         dvol, _ = insert_central_slices_rfft_3d(
             proj,
-            rotations=rot,
+            zyx_matrices=True,
+            rotation_matrices=rot,
             shifts_3d=s3d,
-            fourier_radius_cutoff=cut,
+            fftfreq_max=cut,
             interpolation=interp,
+            zyx_shifts=True,
         )
         return ((dvol - data_t).abs() ** 2).sum()
 
@@ -768,7 +869,13 @@ def test_gpu_pose_weight_gradients_match_cpu():
     def fwd_grads(device):
         r = rot0.clone().to(device).requires_grad_(True)
         s = sh0.clone().to(device).requires_grad_(True)
-        p = extract_central_slices_rfft_3d(vol.to(device), rotations=r, shifts_2d=s)
+        p = extract_central_slices_rfft_3d(
+            vol.to(device),
+            zyx_matrices=True,
+            rotation_matrices=r,
+            shifts_2d=s,
+            yx_shifts=True,
+        )
         ((p - target.to(device)).abs() ** 2).sum().backward()
         return r.grad.cpu(), s.grad.cpu()
 
@@ -777,7 +884,12 @@ def test_gpu_pose_weight_gradients_match_cpu():
         s = sh0.clone().to(device).requires_grad_(True)
         w = wts0.clone().to(device).requires_grad_(True)
         dvol, _wvol = insert_central_slices_rfft_3d(
-            proj.to(device), rotations=r, weights=w, shifts_2d=s
+            proj.to(device),
+            zyx_matrices=True,
+            rotation_matrices=r,
+            weights=w,
+            shifts_2d=s,
+            yx_shifts=True,
         )
         (dvol.abs() ** 2).sum().backward()
         return r.grad.cpu(), s.grad.cpu(), w.grad.cpu()
@@ -797,7 +909,7 @@ def test_gpu_pose_weight_gradients_match_cpu():
 def test_output_shape_and_batching():
     """Multi-volume / per-volume poses and custom output_shape (pose-major out)."""
     from torch_fourier_slice.experimental import (
-        extract_central_slices_rfft_3d_multivolume,
+        extract_central_slices_rfft_3d_multichannel,
     )
 
     torch.manual_seed(2)
@@ -807,11 +919,39 @@ def test_output_shape_and_batching():
     rfft = torch.stack([_rfft_layouts(v)[0] for v in vols])
 
     rot = torch.eye(3).reshape(1, 1, 3, 3).repeat(2, 3, 1, 1)  # (bv=2, P=3, 3, 3)
-    out = extract_central_slices_rfft_3d_multivolume(rfft, rot)
+    out = extract_central_slices_rfft_3d_multichannel(rfft, rot)
     assert out.shape == (3, 2, d, d // 2 + 1)  # (P, bv, h, w)
     assert out.is_complex()
 
-    out_small = extract_central_slices_rfft_3d_multivolume(
+    out_small = extract_central_slices_rfft_3d_multichannel(
         rfft, rot, output_shape=(8, 8)
     )
     assert out_small.shape == (3, 2, 8, 8 // 2 + 1)
+
+
+def test_shifts_default_to_xyz_order():
+    """Shifts are xyz / xy by default; the zyx / yx flags take them flipped."""
+    torch.manual_seed(0)
+    d, P = 16, 4
+    rfft = torch.randn(d, d, d // 2 + 1, dtype=torch.complex64)
+    proj = torch.randn(P, d, d // 2 + 1, dtype=torch.complex64)
+    rot = _rand_rot(P, 3)
+    s3 = torch.randn(1, P, 3) * 0.5
+    s2 = torch.randn(1, P, 2) * 0.5
+    flipped = {
+        "shifts_3d": s3.flip(-1),
+        "shifts_2d": s2.flip(-1),
+        "zyx_shifts": True,
+        "yx_shifts": True,
+    }
+
+    xyz = extract_central_slices_rfft_3d(rfft, rot, shifts_3d=s3, shifts_2d=s2)
+    zyx = extract_central_slices_rfft_3d(rfft, rot, **flipped)
+    unshifted = extract_central_slices_rfft_3d(rfft, rot)
+    assert torch.equal(xyz, zyx)
+    assert not torch.allclose(xyz, unshifted, atol=1e-4)
+
+    xyz_vol, _ = insert_central_slices_rfft_3d(proj, rot, shifts_3d=s3, shifts_2d=s2)
+    zyx_vol, _ = insert_central_slices_rfft_3d(proj, rot, **flipped)
+    # atomic accumulation order varies between runs: not bit-for-bit
+    assert torch.allclose(xyz_vol, zyx_vol, rtol=1e-5, atol=1e-5)

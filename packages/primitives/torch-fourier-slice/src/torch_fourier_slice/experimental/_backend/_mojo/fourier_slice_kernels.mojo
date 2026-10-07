@@ -4,17 +4,17 @@ This is the Python entry module of a single extension module. The Fourier-space
 math is written **once** and shared by two execution strategies; the
 implementation is split into grouped files:
 
-    _common.mojo      types, constants, FourierSliceParams, geometry/complex helpers
-    _gather.mojo      sample + interpolate (extraction)
-    _gather_grad.mojo interpolate + analytical spatial gradient (pose gradients)
-    _scatter.mojo     atomic accumulate + splat (insertion)
-    _pixel.mojo       per-pixel slice ops shared by CPU loops and GPU threads
-    _pose_grad.mojo   per-pixel rotation / shift / weight gradient ops
-    _line.mojo        per-pixel 3D <-> 1D central-line ops
-    _line_grad.mojo   per-pixel 3D line direction / shift / weight gradient ops
-    _line2d.mojo      per-pixel 2D <-> 1D central-line ops
-    _line2d_grad.mojo per-pixel 2D line direction / shift / weight gradient ops
-    _device.mojo      GPU kernels + launchers
+    _common.mojo        types, constants, FourierSliceParams, geometry/complex helpers
+    _gather.mojo        sample + interpolate (extraction)
+    _gather_grad.mojo   interpolate + analytical spatial gradient (pose gradients)
+    _scatter.mojo       atomic accumulate + splat (insertion)
+    _slice_3d.mojo      per-pixel slice ops shared by CPU loops and GPU threads
+    _slice_3d_grad.mojo per-pixel slice rotation / shift / weight gradient ops
+    _line_3d.mojo       per-pixel 3D <-> 1D central-line ops
+    _line_3d_grad.mojo  per-pixel 3D line direction / shift / weight gradient ops
+    _line_2d.mojo       per-pixel 2D <-> 1D central-line ops
+    _line_2d_grad.mojo  per-pixel 2D line direction / shift / weight gradient ops
+    _device.mojo        GPU kernels + launchers
     fourier_slice_kernels.mojo  (this file) the Python-facing entry points
 
 - **CPU**: `parallelize` over projections (one thread per pose), atomic scatter.
@@ -56,63 +56,63 @@ from _common import (
     CUBIC,
     LINEAR,
     _grad_add,
-    _line2d_pose_grad_offsets,
-    _line_pose_grad_offsets,
-    _pose_grad_offsets,
-    BackprojectGradBuffers,
-    BackprojectLine2DGradBuffers,
-    BackprojectLineGradBuffers,
+    _line_2d_pose_grad_offsets,
+    _line_3d_pose_grad_offsets,
+    _slice_3d_pose_grad_offsets,
+    InsertSlice3DPoseGradBuffers,
+    InsertLine2DPoseGradBuffers,
+    InsertLine3DPoseGradBuffers,
     Float32Ptr,
-    ForwardGradBuffers,
-    ForwardLine2DGradBuffers,
-    ForwardLineGradBuffers,
+    ExtractSlice3DPoseGradBuffers,
+    ExtractLine2DPoseGradBuffers,
+    ExtractLine3DPoseGradBuffers,
     FourierSliceParams,
-    ProjectBuffers,
-    ProjectLine2DBuffers,
-    ProjectLineBuffers,
-    ScatterBuffers,
-    ScatterLine2DBuffers,
-    ScatterLineBuffers,
-    WeightGradBuffers,
-    WeightLine2DGradBuffers,
-    WeightLineGradBuffers,
+    ExtractSlice3DBuffers,
+    ExtractLine2DBuffers,
+    ExtractLine3DBuffers,
+    InsertSlice3DBuffers,
+    InsertLine2DBuffers,
+    InsertLine3DBuffers,
+    InsertSlice3DWeightGradBuffers,
+    InsertLine2DWeightGradBuffers,
+    InsertLine3DWeightGradBuffers,
     _dptr,
     _ptr,
 )
 from _device import (
-    _launch_backproject_line2d_pose_grad,
-    _launch_backproject_line_pose_grad,
-    _launch_backproject_pose_grad,
-    _launch_forward_line2d_pose_grad,
-    _launch_forward_line_pose_grad,
-    _launch_forward_pose_grad,
-    _launch_project,
-    _launch_project_line,
-    _launch_project_line2d,
-    _launch_scatter,
-    _launch_scatter_line,
-    _launch_scatter_line2d,
-    _launch_weight_grad,
-    _launch_weight_line2d_grad,
-    _launch_weight_line_grad,
+    _launch_insert_line_2d_pose_grad,
+    _launch_insert_line_3d_pose_grad,
+    _launch_insert_slice_3d_pose_grad,
+    _launch_extract_line_2d_pose_grad,
+    _launch_extract_line_3d_pose_grad,
+    _launch_extract_slice_3d_pose_grad,
+    _launch_extract_slice_3d,
+    _launch_extract_line_3d,
+    _launch_extract_line_2d,
+    _launch_insert_slice_3d,
+    _launch_insert_line_3d,
+    _launch_insert_line_2d,
+    _launch_insert_slice_3d_weight_grad,
+    _launch_insert_line_2d_weight_grad,
+    _launch_insert_line_3d_weight_grad,
 )
-from _line import _project_line_pixel, _scatter_line_pixel
-from _line2d import _project_line2d_pixel, _scatter_line2d_pixel
-from _line2d_grad import (
-    _backproject_line2d_pose_grad_pixel,
-    _forward_line2d_pose_grad_pixel,
-    _weight_line2d_grad_pixel,
+from _line_3d import _extract_line_3d_pixel, _insert_line_3d_pixel
+from _line_2d import _extract_line_2d_pixel, _insert_line_2d_pixel
+from _line_2d_grad import (
+    _insert_line_2d_pose_grad_pixel,
+    _extract_line_2d_pose_grad_pixel,
+    _insert_line_2d_weight_grad_pixel,
 )
-from _line_grad import (
-    _backproject_line_pose_grad_pixel,
-    _forward_line_pose_grad_pixel,
-    _weight_line_grad_pixel,
+from _line_3d_grad import (
+    _insert_line_3d_pose_grad_pixel,
+    _extract_line_3d_pose_grad_pixel,
+    _insert_line_3d_weight_grad_pixel,
 )
-from _pixel import _project_pixel, _scatter_pixel
-from _pose_grad import (
-    _backproject_pose_grad_pixel,
-    _forward_pose_grad_pixel,
-    _weight_grad_pixel,
+from _slice_3d import _extract_slice_3d_pixel, _insert_slice_3d_pixel
+from _slice_3d_grad import (
+    _insert_slice_3d_pose_grad_pixel,
+    _extract_slice_3d_pose_grad_pixel,
+    _insert_slice_3d_weight_grad_pixel,
 )
 
 
@@ -122,98 +122,98 @@ def PyInit_fourier_slice_kernels() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("fourier_slice_kernels")
         m.def_function[extract_central_slices_rfft_3d](
             "extract_central_slices_rfft_3d",
-            docstring="Forward 3D->2D projection (CPU).",
+            docstring="Extract 2D central slices from a 3D volume (CPU).",
         )
         m.def_function[extract_central_slices_rfft_3d_gpu](
             "extract_central_slices_rfft_3d_gpu",
-            docstring="Forward 3D->2D projection (GPU).",
+            docstring="Extract 2D central slices from a 3D volume (GPU).",
         )
         m.def_function[insert_central_slices_rfft_3d](
             "insert_central_slices_rfft_3d",
-            docstring="Scatter 2D slices into a 3D volume (CPU).",
+            docstring="Insert 2D central slices into a 3D volume (CPU).",
         )
         m.def_function[insert_central_slices_rfft_3d_gpu](
             "insert_central_slices_rfft_3d_gpu",
-            docstring="Scatter 2D slices into a 3D volume (GPU).",
+            docstring="Insert 2D central slices into a 3D volume (GPU).",
         )
-        m.def_function[extract_central_line_rfft_3d](
-            "extract_central_line_rfft_3d",
-            docstring="Forward 3D->1D central-line projection (CPU).",
+        m.def_function[extract_central_lines_rfft_3d](
+            "extract_central_lines_rfft_3d",
+            docstring="Extract 1D central lines from a 3D volume (CPU).",
         )
-        m.def_function[extract_central_line_rfft_3d_gpu](
-            "extract_central_line_rfft_3d_gpu",
-            docstring="Forward 3D->1D central-line projection (GPU).",
+        m.def_function[extract_central_lines_rfft_3d_gpu](
+            "extract_central_lines_rfft_3d_gpu",
+            docstring="Extract 1D central lines from a 3D volume (GPU).",
         )
-        m.def_function[insert_central_line_rfft_3d](
-            "insert_central_line_rfft_3d",
-            docstring="Scatter 1D central lines into a 3D volume (CPU).",
+        m.def_function[insert_central_lines_rfft_3d](
+            "insert_central_lines_rfft_3d",
+            docstring="Insert 1D central lines into a 3D volume (CPU).",
         )
-        m.def_function[insert_central_line_rfft_3d_gpu](
-            "insert_central_line_rfft_3d_gpu",
-            docstring="Scatter 1D central lines into a 3D volume (GPU).",
+        m.def_function[insert_central_lines_rfft_3d_gpu](
+            "insert_central_lines_rfft_3d_gpu",
+            docstring="Insert 1D central lines into a 3D volume (GPU).",
         )
-        m.def_function[extract_central_line_rfft_3d_pose_grad](
-            "extract_central_line_rfft_3d_pose_grad",
-            docstring="Forward-line direction/3D-shift gradients (CPU).",
+        m.def_function[extract_central_lines_rfft_3d_pose_grad](
+            "extract_central_lines_rfft_3d_pose_grad",
+            docstring="Line-extraction direction/3D-shift gradients (CPU).",
         )
-        m.def_function[extract_central_line_rfft_3d_pose_grad_gpu](
-            "extract_central_line_rfft_3d_pose_grad_gpu",
-            docstring="Forward-line direction/3D-shift gradients (GPU).",
+        m.def_function[extract_central_lines_rfft_3d_pose_grad_gpu](
+            "extract_central_lines_rfft_3d_pose_grad_gpu",
+            docstring="Line-extraction direction/3D-shift gradients (GPU).",
         )
-        m.def_function[insert_central_line_rfft_3d_pose_grad](
-            "insert_central_line_rfft_3d_pose_grad",
+        m.def_function[insert_central_lines_rfft_3d_pose_grad](
+            "insert_central_lines_rfft_3d_pose_grad",
             docstring="Line-insertion direction/3D-shift gradients (CPU).",
         )
-        m.def_function[insert_central_line_rfft_3d_pose_grad_gpu](
-            "insert_central_line_rfft_3d_pose_grad_gpu",
+        m.def_function[insert_central_lines_rfft_3d_pose_grad_gpu](
+            "insert_central_lines_rfft_3d_pose_grad_gpu",
             docstring="Line-insertion direction/3D-shift gradients (GPU).",
         )
-        m.def_function[insert_central_line_rfft_3d_weight_grad](
-            "insert_central_line_rfft_3d_weight_grad",
+        m.def_function[insert_central_lines_rfft_3d_weight_grad](
+            "insert_central_lines_rfft_3d_weight_grad",
             docstring="Line-insertion weight gradients (CPU).",
         )
-        m.def_function[insert_central_line_rfft_3d_weight_grad_gpu](
-            "insert_central_line_rfft_3d_weight_grad_gpu",
+        m.def_function[insert_central_lines_rfft_3d_weight_grad_gpu](
+            "insert_central_lines_rfft_3d_weight_grad_gpu",
             docstring="Line-insertion weight gradients (GPU).",
         )
-        m.def_function[extract_central_line_rfft_2d](
-            "extract_central_line_rfft_2d",
-            docstring="Forward 2D->1D central-line projection (CPU).",
+        m.def_function[extract_central_lines_rfft_2d](
+            "extract_central_lines_rfft_2d",
+            docstring="Extract 1D central lines from a 2D image (CPU).",
         )
-        m.def_function[extract_central_line_rfft_2d_gpu](
-            "extract_central_line_rfft_2d_gpu",
-            docstring="Forward 2D->1D central-line projection (GPU).",
+        m.def_function[extract_central_lines_rfft_2d_gpu](
+            "extract_central_lines_rfft_2d_gpu",
+            docstring="Extract 1D central lines from a 2D image (GPU).",
         )
-        m.def_function[insert_central_line_rfft_2d](
-            "insert_central_line_rfft_2d",
-            docstring="Scatter 1D central lines into a 2D image (CPU).",
+        m.def_function[insert_central_lines_rfft_2d](
+            "insert_central_lines_rfft_2d",
+            docstring="Insert 1D central lines into a 2D image (CPU).",
         )
-        m.def_function[insert_central_line_rfft_2d_gpu](
-            "insert_central_line_rfft_2d_gpu",
-            docstring="Scatter 1D central lines into a 2D image (GPU).",
+        m.def_function[insert_central_lines_rfft_2d_gpu](
+            "insert_central_lines_rfft_2d_gpu",
+            docstring="Insert 1D central lines into a 2D image (GPU).",
         )
-        m.def_function[extract_central_line_rfft_2d_pose_grad](
-            "extract_central_line_rfft_2d_pose_grad",
-            docstring="Forward 2D-line direction gradients (CPU).",
+        m.def_function[extract_central_lines_rfft_2d_pose_grad](
+            "extract_central_lines_rfft_2d_pose_grad",
+            docstring="2D-line-extraction direction gradients (CPU).",
         )
-        m.def_function[extract_central_line_rfft_2d_pose_grad_gpu](
-            "extract_central_line_rfft_2d_pose_grad_gpu",
-            docstring="Forward 2D-line direction gradients (GPU).",
+        m.def_function[extract_central_lines_rfft_2d_pose_grad_gpu](
+            "extract_central_lines_rfft_2d_pose_grad_gpu",
+            docstring="2D-line-extraction direction gradients (GPU).",
         )
-        m.def_function[insert_central_line_rfft_2d_pose_grad](
-            "insert_central_line_rfft_2d_pose_grad",
+        m.def_function[insert_central_lines_rfft_2d_pose_grad](
+            "insert_central_lines_rfft_2d_pose_grad",
             docstring="2D-line insertion direction gradients (CPU).",
         )
-        m.def_function[insert_central_line_rfft_2d_pose_grad_gpu](
-            "insert_central_line_rfft_2d_pose_grad_gpu",
+        m.def_function[insert_central_lines_rfft_2d_pose_grad_gpu](
+            "insert_central_lines_rfft_2d_pose_grad_gpu",
             docstring="2D-line insertion direction gradients (GPU).",
         )
-        m.def_function[insert_central_line_rfft_2d_weight_grad](
-            "insert_central_line_rfft_2d_weight_grad",
+        m.def_function[insert_central_lines_rfft_2d_weight_grad](
+            "insert_central_lines_rfft_2d_weight_grad",
             docstring="2D-line insertion weight gradients (CPU).",
         )
-        m.def_function[insert_central_line_rfft_2d_weight_grad_gpu](
-            "insert_central_line_rfft_2d_weight_grad_gpu",
+        m.def_function[insert_central_lines_rfft_2d_weight_grad_gpu](
+            "insert_central_lines_rfft_2d_weight_grad_gpu",
             docstring="2D-line insertion weight gradients (GPU).",
         )
         _ = m.add_type[DeviceSession]("DeviceSession").def_py_init[
@@ -221,27 +221,27 @@ def PyInit_fourier_slice_kernels() abi("C") -> PythonObject:
         ]()
         m.def_function[extract_central_slices_rfft_3d_pose_grad](
             "extract_central_slices_rfft_3d_pose_grad",
-            docstring="Forward-projection rotation/shift gradients (CPU).",
+            docstring="Slice-extraction rotation/shift gradients (CPU).",
         )
         m.def_function[extract_central_slices_rfft_3d_pose_grad_gpu](
             "extract_central_slices_rfft_3d_pose_grad_gpu",
-            docstring="Forward-projection rotation/shift gradients (GPU).",
+            docstring="Slice-extraction rotation/shift gradients (GPU).",
         )
         m.def_function[insert_central_slices_rfft_3d_pose_grad](
             "insert_central_slices_rfft_3d_pose_grad",
-            docstring="Backprojection rotation/shift gradients (CPU).",
+            docstring="Slice-insertion rotation/shift gradients (CPU).",
         )
         m.def_function[insert_central_slices_rfft_3d_pose_grad_gpu](
             "insert_central_slices_rfft_3d_pose_grad_gpu",
-            docstring="Backprojection rotation/shift gradients (GPU).",
+            docstring="Slice-insertion rotation/shift gradients (GPU).",
         )
         m.def_function[insert_central_slices_rfft_3d_weight_grad](
             "insert_central_slices_rfft_3d_weight_grad",
-            docstring="Backprojection weight gradients (CPU).",
+            docstring="Slice-insertion weight gradients (CPU).",
         )
         m.def_function[insert_central_slices_rfft_3d_weight_grad_gpu](
             "insert_central_slices_rfft_3d_weight_grad_gpu",
-            docstring="Backprojection weight gradients (GPU).",
+            docstring="Slice-insertion weight gradients (GPU).",
         )
         return m.finalize()
     except e:
@@ -254,24 +254,20 @@ def PyInit_fourier_slice_kernels() abi("C") -> PythonObject:
 
 
 def extract_central_slices_rfft_3d(
-    rec_obj: PythonObject,
-    rot_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    proj_obj: PythonObject,
-    params_obj: PythonObject,
+    bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Forward project on the CPU; writes `proj_obj` (pre-zeroed by the caller).
+    """Extract central slices on the CPU; writes `proj` (pre-zeroed by the caller).
+
+    bufs   : (rec, rot, shifts_2d, shifts_3d, proj) viewed as real.
+    params_obj : a `KernelParams` (read by field name; see `_validation.py`).
     """
-    var rec = _ptr(rec_obj)
-    var rot = _ptr(rot_obj)
-    var shifts_2d = _ptr(shifts_2d_obj)
-    var shifts_3d = _ptr(shifts_3d_obj)
-    var proj = _ptr(proj_obj)
-    var p = _forward_params(
-        rec_obj, rot_obj, shifts_2d_obj, shifts_3d_obj, proj_obj, params_obj
-    )
-    var bv = Int(py=rec_obj.shape[0])
+    var rec = _ptr(bufs[0])
+    var rot = _ptr(bufs[1])
+    var shifts_2d = _ptr(bufs[2])
+    var shifts_3d = _ptr(bufs[3])
+    var proj = _ptr(bufs[4])
+    var p = _extract_slice_3d_params(bufs, params_obj)
+    var bv = Int(py=bufs[0].shape[0])
 
     @parameter
     def worker[interp: Int](vp: Int):
@@ -279,7 +275,7 @@ def extract_central_slices_rfft_3d(
         var i_bp = vp % p.bp
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                _project_pixel[interp](
+                _extract_slice_3d_pixel[interp](
                     rec, rot, shifts_2d, shifts_3d, proj, i_bv, i_bp, y, x, p
                 )
 
@@ -295,7 +291,7 @@ def extract_central_slices_rfft_3d(
 def insert_central_slices_rfft_3d(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Scatter on the CPU; writes vol (and wvol if weighted), pre-zeroed by caller.
+    """Insert central slices on the CPU; writes vol (and wvol if weighted), pre-zeroed by caller.
 
     bufs   : (slices, weights, rot, shifts_2d, vol, wvol) viewed as real.
     params_obj : a `KernelParams` (read by field name; see `_validation.py`).
@@ -307,7 +303,7 @@ def insert_central_slices_rfft_3d(
     var shifts_3d = _ptr(bufs[4])
     var vol = _ptr(bufs[5])
     var wvol = _ptr(bufs[6])
-    var p = _scatter_params(bufs, params_obj)
+    var p = _insert_slice_3d_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
 
     @parameter
@@ -316,7 +312,7 @@ def insert_central_slices_rfft_3d(
         var i_bp = vp % p.bp
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                _scatter_pixel[interp](
+                _insert_slice_3d_pixel[interp](
                     inp,
                     weights,
                     rot,
@@ -345,23 +341,19 @@ def insert_central_slices_rfft_3d(
 # ===========================================================================
 
 
-def extract_central_line_rfft_3d(
-    rec_obj: PythonObject,
-    direction_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    line_obj: PythonObject,
-    params_obj: PythonObject,
+def extract_central_lines_rfft_3d(
+    bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Forward project 1D central lines on the CPU; writes `line_obj` (pre-zeroed).
+    """Extract 1D central lines on the CPU; writes `line` (pre-zeroed).
+
+    bufs   : (rec, direction, shifts_3d, line) viewed as real.
     """
-    var rec = _ptr(rec_obj)
-    var direction = _ptr(direction_obj)
-    var shifts_3d = _ptr(shifts_3d_obj)
-    var line = _ptr(line_obj)
-    var p = _forward_line_params(
-        rec_obj, direction_obj, shifts_3d_obj, line_obj, params_obj
-    )
-    var bv = Int(py=rec_obj.shape[0])
+    var rec = _ptr(bufs[0])
+    var direction = _ptr(bufs[1])
+    var shifts_3d = _ptr(bufs[2])
+    var line = _ptr(bufs[3])
+    var p = _extract_line_3d_params(bufs, params_obj)
+    var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
     @parameter
@@ -369,7 +361,7 @@ def extract_central_line_rfft_3d(
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
         for x in range(lsh):
-            _project_line_pixel[interp](
+            _extract_line_3d_pixel[interp](
                 rec, direction, shifts_3d, line, i_bv, i_bp, x, p
             )
 
@@ -382,10 +374,10 @@ def extract_central_line_rfft_3d(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_3d(
+def insert_central_lines_rfft_3d(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Scatter 1D central lines into a 3D volume on the CPU (pre-zeroed by caller).
+    """Insert 1D central lines into a 3D volume on the CPU (pre-zeroed by caller).
 
     bufs : (lines, weights, direction, shifts_3d, vol, wvol) viewed as real.
     """
@@ -395,7 +387,7 @@ def insert_central_line_rfft_3d(
     var shifts_3d = _ptr(bufs[3])
     var vol = _ptr(bufs[4])
     var wvol = _ptr(bufs[5])
-    var p = _scatter_line_params(bufs, params_obj)
+    var p = _insert_line_3d_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -404,7 +396,7 @@ def insert_central_line_rfft_3d(
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
         for x in range(lsh):
-            _scatter_line_pixel[interp](
+            _insert_line_3d_pixel[interp](
                 inp, weights, direction, shifts_3d, vol, wvol, i_bv, i_bp, x, p
             )
 
@@ -422,23 +414,19 @@ def insert_central_line_rfft_3d(
 # ===========================================================================
 
 
-def extract_central_line_rfft_2d(
-    img_obj: PythonObject,
-    direction_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    line_obj: PythonObject,
-    params_obj: PythonObject,
+def extract_central_lines_rfft_2d(
+    bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Forward project 1D central lines from 2D images on the CPU (pre-zeroed line).
+    """Extract 1D central lines from 2D images on the CPU (pre-zeroed line).
+
+    bufs   : (img, direction, shifts_2d, line) viewed as real.
     """
-    var img = _ptr(img_obj)
-    var direction = _ptr(direction_obj)
-    var shifts_2d = _ptr(shifts_2d_obj)
-    var line = _ptr(line_obj)
-    var p = _forward_line2d_params(
-        img_obj, direction_obj, shifts_2d_obj, line_obj, params_obj
-    )
-    var bv = Int(py=img_obj.shape[0])
+    var img = _ptr(bufs[0])
+    var direction = _ptr(bufs[1])
+    var shifts_2d = _ptr(bufs[2])
+    var line = _ptr(bufs[3])
+    var p = _extract_line_2d_params(bufs, params_obj)
+    var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
     @parameter
@@ -446,7 +434,7 @@ def extract_central_line_rfft_2d(
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
         for x in range(lsh):
-            _project_line2d_pixel[interp](
+            _extract_line_2d_pixel[interp](
                 img, direction, shifts_2d, line, i_bv, i_bp, x, p
             )
 
@@ -457,10 +445,10 @@ def extract_central_line_rfft_2d(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_2d(
+def insert_central_lines_rfft_2d(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Scatter 1D central lines into a 2D image on the CPU (pre-zeroed by caller).
+    """Insert 1D central lines into a 2D image on the CPU (pre-zeroed by caller).
 
     bufs : (lines, weights, direction, shifts_2d, vol, wvol) viewed as real.
     """
@@ -470,7 +458,7 @@ def insert_central_line_rfft_2d(
     var shifts_2d = _ptr(bufs[3])
     var vol = _ptr(bufs[4])
     var wvol = _ptr(bufs[5])
-    var p = _scatter_line2d_params(bufs, params_obj)
+    var p = _insert_line_2d_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -479,7 +467,7 @@ def insert_central_line_rfft_2d(
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
         for x in range(lsh):
-            _scatter_line2d_pixel[interp](
+            _insert_line_2d_pixel[interp](
                 inp, weights, direction, shifts_2d, vol, wvol, i_bv, i_bp, x, p
             )
 
@@ -495,10 +483,10 @@ def insert_central_line_rfft_2d(
 # ===========================================================================
 
 
-def extract_central_line_rfft_2d_pose_grad(
+def extract_central_lines_rfft_2d_pose_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Forward 2D-line direction gradients on the CPU.
+    """2D-line-extraction direction gradients on the CPU.
 
     bufs : (img, direction, shifts_2d, grad_line, grad_dir, grad_shift);
     grad_* pre-zeroed by caller.
@@ -509,7 +497,7 @@ def extract_central_line_rfft_2d_pose_grad(
     var grad_line = _ptr(bufs[3])
     var grad_dir = _ptr(bufs[4])
     var grad_shift = _ptr(bufs[5])
-    var p = _line2d_grad_params(bufs, params_obj, 0)
+    var p = _line_2d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -517,9 +505,9 @@ def extract_central_line_rfft_2d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
-        var dbase, sbase = _line2d_pose_grad_offsets(i_bv, i_bp, p)
+        var dbase, sbase = _line_2d_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            var contrib = _forward_line2d_pose_grad_pixel[interp](
+            var contrib = _extract_line_2d_pose_grad_pixel[interp](
                 img, direction, shifts_2d, grad_line, i_bv, i_bp, x, p
             )
             _grad_add(grad_dir, dbase + 0, contrib[0], True)
@@ -535,7 +523,7 @@ def extract_central_line_rfft_2d_pose_grad(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_2d_pose_grad(
+def insert_central_lines_rfft_2d_pose_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
     """2D-line insertion direction gradients on the CPU.
@@ -549,7 +537,7 @@ def insert_central_line_rfft_2d_pose_grad(
     var lines = _ptr(bufs[3])
     var grad_dir = _ptr(bufs[4])
     var grad_shift = _ptr(bufs[5])
-    var p = _line2d_grad_params(bufs, params_obj, 0)
+    var p = _line_2d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -557,9 +545,9 @@ def insert_central_line_rfft_2d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
-        var dbase, sbase = _line2d_pose_grad_offsets(i_bv, i_bp, p)
+        var dbase, sbase = _line_2d_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            var contrib = _backproject_line2d_pose_grad_pixel[interp](
+            var contrib = _insert_line_2d_pose_grad_pixel[interp](
                 grad_img, direction, shifts_2d, lines, i_bv, i_bp, x, p
             )
             _grad_add(grad_dir, dbase + 0, contrib[0], True)
@@ -575,7 +563,7 @@ def insert_central_line_rfft_2d_pose_grad(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_2d_weight_grad(
+def insert_central_lines_rfft_2d_weight_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
     """2D-line insertion weight gradients on the CPU.
@@ -585,7 +573,7 @@ def insert_central_line_rfft_2d_weight_grad(
     var gwimg = _ptr(bufs[0])
     var direction = _ptr(bufs[1])
     var grad_weight = _ptr(bufs[2])
-    var p = _line2d_grad_params(bufs, params_obj, 1)
+    var p = _line_2d_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -594,7 +582,7 @@ def insert_central_line_rfft_2d_weight_grad(
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
         for x in range(lsh):
-            _weight_line2d_grad_pixel[interp](
+            _insert_line_2d_weight_grad_pixel[interp](
                 gwimg, direction, grad_weight, i_bv, i_bp, x, p
             )
 
@@ -610,10 +598,10 @@ def insert_central_line_rfft_2d_weight_grad(
 # ===========================================================================
 
 
-def extract_central_line_rfft_3d_pose_grad(
+def extract_central_lines_rfft_3d_pose_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Forward-line direction/3D-shift gradients on the CPU.
+    """Line-extraction direction/3D-shift gradients on the CPU.
 
     bufs : (rec, direction, shifts_3d, grad_line, grad_dir, grad_shift_3d);
     grad_* pre-zeroed by the caller.
@@ -624,7 +612,7 @@ def extract_central_line_rfft_3d_pose_grad(
     var grad_line = _ptr(bufs[3])
     var grad_dir = _ptr(bufs[4])
     var grad_shift_3d = _ptr(bufs[5])
-    var p = _line_grad_params(bufs, params_obj, 0)
+    var p = _line_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -632,9 +620,9 @@ def extract_central_line_rfft_3d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
-        var dbase, s3base = _line_pose_grad_offsets(i_bv, i_bp, p)
+        var dbase, s3base = _line_3d_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            var contrib = _forward_line_pose_grad_pixel[interp](
+            var contrib = _extract_line_3d_pose_grad_pixel[interp](
                 rec, direction, shifts_3d, grad_line, i_bv, i_bp, x, p
             )
             _grad_add(grad_dir, dbase + 0, contrib[0], True)
@@ -652,7 +640,7 @@ def extract_central_line_rfft_3d_pose_grad(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_3d_pose_grad(
+def insert_central_lines_rfft_3d_pose_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
     """Line-insertion direction/3D-shift gradients on the CPU.
@@ -666,7 +654,7 @@ def insert_central_line_rfft_3d_pose_grad(
     var lines = _ptr(bufs[3])
     var grad_dir = _ptr(bufs[4])
     var grad_shift_3d = _ptr(bufs[5])
-    var p = _line_grad_params(bufs, params_obj, 0)
+    var p = _line_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -674,9 +662,9 @@ def insert_central_line_rfft_3d_pose_grad(
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
-        var dbase, s3base = _line_pose_grad_offsets(i_bv, i_bp, p)
+        var dbase, s3base = _line_3d_pose_grad_offsets(i_bv, i_bp, p)
         for x in range(lsh):
-            var contrib = _backproject_line_pose_grad_pixel[interp](
+            var contrib = _insert_line_3d_pose_grad_pixel[interp](
                 grad_rec, direction, shifts_3d, lines, i_bv, i_bp, x, p
             )
             _grad_add(grad_dir, dbase + 0, contrib[0], True)
@@ -694,7 +682,7 @@ def insert_central_line_rfft_3d_pose_grad(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_3d_weight_grad(
+def insert_central_lines_rfft_3d_weight_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
     """Line-insertion weight gradients on the CPU.
@@ -704,7 +692,7 @@ def insert_central_line_rfft_3d_weight_grad(
     var gwvol = _ptr(bufs[0])
     var direction = _ptr(bufs[1])
     var grad_weight = _ptr(bufs[2])
-    var p = _line_grad_params(bufs, params_obj, 1)
+    var p = _line_3d_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
     var lsh = p.proj_sidelength_half()
 
@@ -713,7 +701,7 @@ def insert_central_line_rfft_3d_weight_grad(
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
         for x in range(lsh):
-            _weight_line_grad_pixel[interp](
+            _insert_line_3d_weight_grad_pixel[interp](
                 gwvol, direction, grad_weight, i_bv, i_bp, x, p
             )
 
@@ -727,7 +715,7 @@ def insert_central_line_rfft_3d_weight_grad(
 def extract_central_slices_rfft_3d_pose_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Forward-projection rotation/shift gradients on the CPU.
+    """Slice-extraction rotation/shift gradients on the CPU.
 
     bufs : (rec, rot, shifts_2d, grad_proj, grad_rot, grad_shift); grad_* pre-zeroed.
     """
@@ -739,17 +727,17 @@ def extract_central_slices_rfft_3d_pose_grad(
     var grad_rot = _ptr(bufs[5])
     var grad_shift = _ptr(bufs[6])
     var grad_shift_3d = _ptr(bufs[7])
-    var p = _pose_grad_params(bufs, params_obj, 0)
+    var p = _slice_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
 
     @parameter
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
-        var rbase, sbase, s3base = _pose_grad_offsets(i_bv, i_bp, p)
+        var rbase, sbase, s3base = _slice_3d_pose_grad_offsets(i_bv, i_bp, p)
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                var contrib = _forward_pose_grad_pixel[interp](
+                var contrib = _extract_slice_3d_pose_grad_pixel[interp](
                     rec,
                     rot,
                     shifts_2d,
@@ -791,7 +779,7 @@ def extract_central_slices_rfft_3d_pose_grad(
 def insert_central_slices_rfft_3d_pose_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Backprojection rotation/shift gradients on the CPU.
+    """Slice-insertion rotation/shift gradients on the CPU.
 
     bufs : (grad_rec, rot, shifts_2d, proj, grad_rot, grad_shift); grad_* pre-zeroed.
     """
@@ -803,17 +791,17 @@ def insert_central_slices_rfft_3d_pose_grad(
     var grad_rot = _ptr(bufs[5])
     var grad_shift = _ptr(bufs[6])
     var grad_shift_3d = _ptr(bufs[7])
-    var p = _pose_grad_params(bufs, params_obj, 0)
+    var p = _slice_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
 
     @parameter
     def worker[interp: Int](vp: Int):
         var i_bv = vp // p.bp
         var i_bp = vp % p.bp
-        var rbase, sbase, s3base = _pose_grad_offsets(i_bv, i_bp, p)
+        var rbase, sbase, s3base = _slice_3d_pose_grad_offsets(i_bv, i_bp, p)
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                var contrib = _backproject_pose_grad_pixel[interp](
+                var contrib = _insert_slice_3d_pose_grad_pixel[interp](
                     grad_rec,
                     rot,
                     shifts_2d,
@@ -855,14 +843,14 @@ def insert_central_slices_rfft_3d_pose_grad(
 def insert_central_slices_rfft_3d_weight_grad(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> PythonObject:
-    """Backprojection weight gradients on the CPU.
+    """Slice-insertion weight gradients on the CPU.
 
     bufs : (grad_weight_vol, rot, shifts_2d, grad_weight); grad_weight pre-zeroed.
     """
     var gwvol = _ptr(bufs[0])
     var rot = _ptr(bufs[1])
     var grad_weight = _ptr(bufs[4])
-    var p = _pose_grad_params(bufs, params_obj, 1)
+    var p = _slice_3d_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
 
     @parameter
@@ -871,7 +859,7 @@ def insert_central_slices_rfft_3d_weight_grad(
         var i_bp = vp % p.bp
         for y in range(p.proj_sidelength):
             for x in range(p.proj_sidelength_half()):
-                _weight_grad_pixel[interp](
+                _insert_slice_3d_weight_grad_pixel[interp](
                     gwvol, rot, grad_weight, i_bv, i_bp, y, x, p
                 )
 
@@ -930,32 +918,26 @@ def _session_ctx(session_obj: PythonObject) raises -> DeviceContext:
 
 def extract_central_slices_rfft_3d_gpu(
     session_obj: PythonObject,
-    rec_obj: PythonObject,
-    rot_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    proj_obj: PythonObject,
+    bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Forward project on the GPU, reading/writing torch device memory directly.
+    """Extract central slices on the GPU, reading/writing torch device memory directly.
 
     `addrs_obj` carries the raw device virtual addresses of, in order,
-    (rec, rot, shifts_2d, shifts_3d, proj), then the foreign (torch) GPU stream
+    bufs = (rec, rot, shifts_2d, shifts_3d, proj), then the foreign (torch) GPU stream
     address as the trailing element (0 to enqueue on the context's own stream;
-    see `_launch_project`). The tensor objects are used only for their shapes.
+    see `_launch_extract_slice_3d`). The tensor objects are used only for their shapes.
     `proj` is pre-zeroed on the device by the caller (radius-cut pixels stay 0,
     matching the CPU path). We sync the context only on the own-stream path.
     """
-    var p = _forward_params(
-        rec_obj, rot_obj, shifts_2d_obj, shifts_3d_obj, proj_obj, params_obj
-    )
-    var bv = Int(py=rec_obj.shape[0])
+    var p = _extract_slice_3d_params(bufs, params_obj)
+    var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[5])  # trailing element after 5 buffers
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ProjectBuffers(
+    var buffers = ExtractSlice3DBuffers(
         rec=_dptr(addrs_obj[0]),
         rot=_dptr(addrs_obj[1]),
         shifts_2d=_dptr(addrs_obj[2]),
@@ -965,11 +947,11 @@ def extract_central_slices_rfft_3d_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_project[CUBIC](
+        _launch_extract_slice_3d[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_project[LINEAR](
+        _launch_extract_slice_3d[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -983,20 +965,20 @@ def insert_central_slices_rfft_3d_gpu(
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Scatter on the GPU, reading/writing torch device memory directly.
+    """Insert central slices on the GPU, reading/writing torch device memory directly.
 
     `addrs_obj` holds device VAs for bufs = (slices, weights, rot, shifts_2d,
     shifts_3d, vol, wvol) then the foreign stream address as the trailing
     element (0 for the own-stream path; see `extract_central_slices_rfft_3d_gpu`).
     `vol`/`wvol` are pre-zeroed on the device by the caller (atomic accumulate).
     """
-    var p = _scatter_params(bufs, params_obj)
+    var p = _insert_slice_3d_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[7])  # trailing element after 7 buffers
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ScatterBuffers(
+    var buffers = InsertSlice3DBuffers(
         inp=_dptr(addrs_obj[0]),
         weights=_dptr(addrs_obj[1]),
         rot=_dptr(addrs_obj[2]),
@@ -1008,11 +990,11 @@ def insert_central_slices_rfft_3d_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_scatter[CUBIC](
+        _launch_insert_slice_3d[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_scatter[LINEAR](
+        _launch_insert_slice_3d[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1025,30 +1007,25 @@ def insert_central_slices_rfft_3d_gpu(
 # ===========================================================================
 
 
-def extract_central_line_rfft_3d_gpu(
+def extract_central_lines_rfft_3d_gpu(
     session_obj: PythonObject,
-    rec_obj: PythonObject,
-    direction_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    line_obj: PythonObject,
+    bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Forward project 1D central lines on the GPU, reading/writing torch memory.
+    """Extract 1D central lines on the GPU, reading/writing torch memory.
 
-    `addrs_obj` carries device VAs of (rec, direction, shifts_3d, line) then the
+    `addrs_obj` carries device VAs of bufs = (rec, direction, shifts_3d, line) then the
     foreign stream address as the trailing element (0 for the own-stream path).
     `line` is pre-zeroed on the device by the caller (radius-cut pixels stay 0).
     """
-    var p = _forward_line_params(
-        rec_obj, direction_obj, shifts_3d_obj, line_obj, params_obj
-    )
-    var bv = Int(py=rec_obj.shape[0])
+    var p = _extract_line_3d_params(bufs, params_obj)
+    var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[4])  # trailing element after 4 buffers
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ProjectLineBuffers(
+    var buffers = ExtractLine3DBuffers(
         rec=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         shifts_3d=_dptr(addrs_obj[2]),
@@ -1057,11 +1034,11 @@ def extract_central_line_rfft_3d_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_project_line[CUBIC](
+        _launch_extract_line_3d[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_project_line[LINEAR](
+        _launch_extract_line_3d[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1069,25 +1046,25 @@ def extract_central_line_rfft_3d_gpu(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_3d_gpu(
+def insert_central_lines_rfft_3d_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Scatter 1D central lines into a 3D volume on the GPU, in place.
+    """Insert 1D central lines into a 3D volume on the GPU, in place.
 
     `addrs_obj` holds device VAs for bufs = (lines, weights, direction, shifts_3d,
     vol, wvol) then the foreign stream address as the trailing element (index 6; 0
     for the own-stream path). `vol`/`wvol` are pre-zeroed on the device by caller.
     """
-    var p = _scatter_line_params(bufs, params_obj)
+    var p = _insert_line_3d_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[6])  # trailing element after 6 buffers
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ScatterLineBuffers(
+    var buffers = InsertLine3DBuffers(
         inp=_dptr(addrs_obj[0]),
         weights=_dptr(addrs_obj[1]),
         direction=_dptr(addrs_obj[2]),
@@ -1098,11 +1075,11 @@ def insert_central_line_rfft_3d_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_scatter_line[CUBIC](
+        _launch_insert_line_3d[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_scatter_line[LINEAR](
+        _launch_insert_line_3d[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1110,40 +1087,35 @@ def insert_central_line_rfft_3d_gpu(
     return PythonObject(0)
 
 
-def extract_central_line_rfft_2d_gpu(
+def extract_central_lines_rfft_2d_gpu(
     session_obj: PythonObject,
-    img_obj: PythonObject,
-    direction_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    line_obj: PythonObject,
+    bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Forward project 1D central lines from 2D images on the GPU (zero-copy).
+    """Extract 1D central lines from 2D images on the GPU (zero-copy).
 
-    `addrs_obj` holds device VAs of (img, direction, shifts_2d, line) then the
+    `addrs_obj` holds device VAs of bufs = (img, direction, shifts_2d, line) then the
     foreign stream address (index 4). `line` is pre-zeroed by caller.
     """
-    var p = _forward_line2d_params(
-        img_obj, direction_obj, shifts_2d_obj, line_obj, params_obj
-    )
-    var bv = Int(py=img_obj.shape[0])
+    var p = _extract_line_2d_params(bufs, params_obj)
+    var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[4])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ProjectLine2DBuffers(
+    var buffers = ExtractLine2DBuffers(
         img=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         shifts_2d=_dptr(addrs_obj[2]),
         line=_dptr(addrs_obj[3]),
     )
     if p.interp == CUBIC:
-        _launch_project_line2d[CUBIC](
+        _launch_extract_line_2d[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_project_line2d[LINEAR](
+        _launch_extract_line_2d[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1151,24 +1123,24 @@ def extract_central_line_rfft_2d_gpu(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_2d_gpu(
+def insert_central_lines_rfft_2d_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Scatter 1D central lines into a 2D image on the GPU (zero-copy).
+    """Insert 1D central lines into a 2D image on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for bufs = (lines, weights, direction, shifts_2d,
     vol, wvol) then the foreign stream address (index 6). `vol`/`wvol` pre-zeroed.
     """
-    var p = _scatter_line2d_params(bufs, params_obj)
+    var p = _insert_line_2d_params(bufs, params_obj)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[6])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ScatterLine2DBuffers(
+    var buffers = InsertLine2DBuffers(
         inp=_dptr(addrs_obj[0]),
         weights=_dptr(addrs_obj[1]),
         direction=_dptr(addrs_obj[2]),
@@ -1177,11 +1149,11 @@ def insert_central_line_rfft_2d_gpu(
         wvol=_dptr(addrs_obj[5]),
     )
     if p.interp == CUBIC:
-        _launch_scatter_line2d[CUBIC](
+        _launch_insert_line_2d[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_scatter_line2d[LINEAR](
+        _launch_insert_line_2d[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1189,24 +1161,24 @@ def insert_central_line_rfft_2d_gpu(
     return PythonObject(0)
 
 
-def extract_central_line_rfft_2d_pose_grad_gpu(
+def extract_central_lines_rfft_2d_pose_grad_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Forward 2D-line direction gradients on the GPU (zero-copy).
+    """2D-line-extraction direction gradients on the GPU (zero-copy).
 
     `addrs_obj`: (img, direction, shifts_2d, grad_line, grad_dir, grad_shift) then
     the foreign stream address (index 6). `grad_*` pre-zeroed by the caller.
     """
-    var p = _line2d_grad_params(bufs, params_obj, 0)
+    var p = _line_2d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[6])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ForwardLine2DGradBuffers(
+    var buffers = ExtractLine2DPoseGradBuffers(
         img=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         shifts_2d=_dptr(addrs_obj[2]),
@@ -1215,11 +1187,11 @@ def extract_central_line_rfft_2d_pose_grad_gpu(
         grad_shift=_dptr(addrs_obj[5]),
     )
     if p.interp == CUBIC:
-        _launch_forward_line2d_pose_grad[CUBIC](
+        _launch_extract_line_2d_pose_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_forward_line2d_pose_grad[LINEAR](
+        _launch_extract_line_2d_pose_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1227,7 +1199,7 @@ def extract_central_line_rfft_2d_pose_grad_gpu(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_2d_pose_grad_gpu(
+def insert_central_lines_rfft_2d_pose_grad_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
@@ -1238,13 +1210,13 @@ def insert_central_line_rfft_2d_pose_grad_gpu(
     `addrs_obj`: (grad_img, direction, shifts_2d, lines, grad_dir, grad_shift) then
     the foreign stream address (index 6). `grad_*` pre-zeroed by the caller.
     """
-    var p = _line2d_grad_params(bufs, params_obj, 0)
+    var p = _line_2d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[6])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = BackprojectLine2DGradBuffers(
+    var buffers = InsertLine2DPoseGradBuffers(
         grad_img=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         shifts_2d=_dptr(addrs_obj[2]),
@@ -1253,11 +1225,11 @@ def insert_central_line_rfft_2d_pose_grad_gpu(
         grad_shift=_dptr(addrs_obj[5]),
     )
     if p.interp == CUBIC:
-        _launch_backproject_line2d_pose_grad[CUBIC](
+        _launch_insert_line_2d_pose_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_backproject_line2d_pose_grad[LINEAR](
+        _launch_insert_line_2d_pose_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1265,7 +1237,7 @@ def insert_central_line_rfft_2d_pose_grad_gpu(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_2d_weight_grad_gpu(
+def insert_central_lines_rfft_2d_weight_grad_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
@@ -1276,23 +1248,23 @@ def insert_central_line_rfft_2d_weight_grad_gpu(
     `addrs_obj`: (gwimg, direction, grad_weight) then the foreign stream address
     (index 3). `grad_weight` is pre-zeroed by the caller.
     """
-    var p = _line2d_grad_params(bufs, params_obj, 1)
+    var p = _line_2d_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[3])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = WeightLine2DGradBuffers(
+    var buffers = InsertLine2DWeightGradBuffers(
         gwimg=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         grad_weight=_dptr(addrs_obj[2]),
     )
     if p.interp == CUBIC:
-        _launch_weight_line2d_grad[CUBIC](
+        _launch_insert_line_2d_weight_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_weight_line2d_grad[LINEAR](
+        _launch_insert_line_2d_weight_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1300,25 +1272,25 @@ def insert_central_line_rfft_2d_weight_grad_gpu(
     return PythonObject(0)
 
 
-def extract_central_line_rfft_3d_pose_grad_gpu(
+def extract_central_lines_rfft_3d_pose_grad_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Forward-line direction/3D-shift gradients on the GPU (zero-copy).
+    """Line-extraction direction/3D-shift gradients on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for bufs = (rec, direction, shifts_3d, grad_line,
     grad_dir, grad_shift_3d) then the foreign stream address (index 6). The two
     grad_* outputs are pre-zeroed on the device by the caller.
     """
-    var p = _line_grad_params(bufs, params_obj, 0)
+    var p = _line_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[6])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ForwardLineGradBuffers(
+    var buffers = ExtractLine3DPoseGradBuffers(
         rec=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         shifts_3d=_dptr(addrs_obj[2]),
@@ -1327,11 +1299,11 @@ def extract_central_line_rfft_3d_pose_grad_gpu(
         grad_shift_3d=_dptr(addrs_obj[5]),
     )
     if p.interp == CUBIC:
-        _launch_forward_line_pose_grad[CUBIC](
+        _launch_extract_line_3d_pose_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_forward_line_pose_grad[LINEAR](
+        _launch_extract_line_3d_pose_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1339,7 +1311,7 @@ def extract_central_line_rfft_3d_pose_grad_gpu(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_3d_pose_grad_gpu(
+def insert_central_lines_rfft_3d_pose_grad_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
@@ -1351,13 +1323,13 @@ def insert_central_line_rfft_3d_pose_grad_gpu(
     lines, grad_dir, grad_shift_3d) then the foreign stream address (index 6). The
     two grad_* outputs are pre-zeroed on the device by the caller.
     """
-    var p = _line_grad_params(bufs, params_obj, 0)
+    var p = _line_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[6])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = BackprojectLineGradBuffers(
+    var buffers = InsertLine3DPoseGradBuffers(
         grad_rec=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         shifts_3d=_dptr(addrs_obj[2]),
@@ -1366,11 +1338,11 @@ def insert_central_line_rfft_3d_pose_grad_gpu(
         grad_shift_3d=_dptr(addrs_obj[5]),
     )
     if p.interp == CUBIC:
-        _launch_backproject_line_pose_grad[CUBIC](
+        _launch_insert_line_3d_pose_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_backproject_line_pose_grad[LINEAR](
+        _launch_insert_line_3d_pose_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1378,7 +1350,7 @@ def insert_central_line_rfft_3d_pose_grad_gpu(
     return PythonObject(0)
 
 
-def insert_central_line_rfft_3d_weight_grad_gpu(
+def insert_central_lines_rfft_3d_weight_grad_gpu(
     session_obj: PythonObject,
     bufs: PythonObject,
     params_obj: PythonObject,
@@ -1389,23 +1361,23 @@ def insert_central_line_rfft_3d_weight_grad_gpu(
     `addrs_obj` holds device VAs for bufs = (gwvol, direction, grad_weight) then
     the foreign stream address (index 3). `grad_weight` is pre-zeroed by caller.
     """
-    var p = _line_grad_params(bufs, params_obj, 1)
+    var p = _line_3d_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[3])
 
     var ctx = _session_ctx(session_obj)
-    var buffers = WeightLineGradBuffers(
+    var buffers = InsertLine3DWeightGradBuffers(
         gwvol=_dptr(addrs_obj[0]),
         direction=_dptr(addrs_obj[1]),
         grad_weight=_dptr(addrs_obj[2]),
     )
     if p.interp == CUBIC:
-        _launch_weight_line_grad[CUBIC](
+        _launch_insert_line_3d_weight_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_weight_line_grad[LINEAR](
+        _launch_insert_line_3d_weight_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1419,20 +1391,20 @@ def extract_central_slices_rfft_3d_pose_grad_gpu(
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Forward-projection rotation/shift gradients on the GPU (zero-copy).
+    """Slice-extraction rotation/shift gradients on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for bufs = (rec, rot, shifts_2d, shifts_3d,
     grad_proj, grad_rot, grad_shift, grad_shift_3d) then the foreign stream
     address as the trailing element (0 for the own-stream path). The three
     grad_* outputs are pre-zeroed on the device by the caller (atomic accumulate).
     """
-    var p = _pose_grad_params(bufs, params_obj, 0)
+    var p = _slice_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[8])  # trailing element after 8 buffers
 
     var ctx = _session_ctx(session_obj)
-    var buffers = ForwardGradBuffers(
+    var buffers = ExtractSlice3DPoseGradBuffers(
         rec=_dptr(addrs_obj[0]),
         rot=_dptr(addrs_obj[1]),
         shifts_2d=_dptr(addrs_obj[2]),
@@ -1445,11 +1417,11 @@ def extract_central_slices_rfft_3d_pose_grad_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_forward_pose_grad[CUBIC](
+        _launch_extract_slice_3d_pose_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_forward_pose_grad[LINEAR](
+        _launch_extract_slice_3d_pose_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1463,7 +1435,7 @@ def insert_central_slices_rfft_3d_pose_grad_gpu(
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Backprojection rotation/shift gradients on the GPU (zero-copy).
+    """Slice-insertion rotation/shift gradients on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for bufs = (grad_rec, rot, shifts_2d,
     shifts_3d, proj, grad_rot, grad_shift, grad_shift_3d) then the foreign
@@ -1471,13 +1443,13 @@ def insert_central_slices_rfft_3d_pose_grad_gpu(
     three grad_* outputs are pre-zeroed on the device by the caller (atomic
     accumulate).
     """
-    var p = _pose_grad_params(bufs, params_obj, 0)
+    var p = _slice_3d_grad_params(bufs, params_obj, 0)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
     var stream_addr = Int(py=addrs_obj[8])  # trailing element after 8 buffers
 
     var ctx = _session_ctx(session_obj)
-    var buffers = BackprojectGradBuffers(
+    var buffers = InsertSlice3DPoseGradBuffers(
         grad_rec=_dptr(addrs_obj[0]),
         rot=_dptr(addrs_obj[1]),
         shifts_2d=_dptr(addrs_obj[2]),
@@ -1490,11 +1462,11 @@ def insert_central_slices_rfft_3d_pose_grad_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_backproject_pose_grad[CUBIC](
+        _launch_insert_slice_3d_pose_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_backproject_pose_grad[LINEAR](
+        _launch_insert_slice_3d_pose_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1508,7 +1480,7 @@ def insert_central_slices_rfft_3d_weight_grad_gpu(
     params_obj: PythonObject,
     addrs_obj: PythonObject,
 ) raises -> PythonObject:
-    """Backprojection weight gradients on the GPU (zero-copy).
+    """Slice-insertion weight gradients on the GPU (zero-copy).
 
     `addrs_obj` holds device VAs for the used buffers gwvol=bufs[0], rot=bufs[1]
     and grad_weight=bufs[4] (at addr indices 0, 1, 4 to match the buffer order;
@@ -1516,7 +1488,7 @@ def insert_central_slices_rfft_3d_weight_grad_gpu(
     address as the trailing element (index 5; 0 for the own-stream path).
     `grad_weight` is pre-zeroed on the device by the caller.
     """
-    var p = _pose_grad_params(bufs, params_obj, 1)
+    var p = _slice_3d_grad_params(bufs, params_obj, 1)
     var bv = Int(py=bufs[0].shape[0])
     var total = bv * p.bp * p.proj_sidelength * p.proj_sidelength_half()
     var stream_addr = Int(
@@ -1524,7 +1496,7 @@ def insert_central_slices_rfft_3d_weight_grad_gpu(
     )  # trailing element after 5 addr slots
 
     var ctx = _session_ctx(session_obj)
-    var buffers = WeightGradBuffers(
+    var buffers = InsertSlice3DWeightGradBuffers(
         gwvol=_dptr(addrs_obj[0]),
         rot=_dptr(addrs_obj[1]),
         grad_weight=_dptr(addrs_obj[4]),
@@ -1532,11 +1504,11 @@ def insert_central_slices_rfft_3d_weight_grad_gpu(
     if (
         p.interp == CUBIC
     ):  # runtime interp code -> pick the comptime specialisation once
-        _launch_weight_grad[CUBIC](
+        _launch_insert_slice_3d_weight_grad[CUBIC](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     else:
-        _launch_weight_grad[LINEAR](
+        _launch_insert_slice_3d_weight_grad[LINEAR](
             ctx, buffers=buffers, total=total, p=p, stream_addr=stream_addr
         )
     if stream_addr == 0:
@@ -1550,39 +1522,17 @@ def insert_central_slices_rfft_3d_weight_grad_gpu(
 
 
 @always_inline
-def _forward_params(
-    rec_obj: PythonObject,
-    rot_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    proj_obj: PythonObject,
-    params_obj: PythonObject,
+def _extract_slice_3d_params(
+    bufs: PythonObject, params_obj: PythonObject
 ) raises -> FourierSliceParams:
-    return _forward_params_for_sidelength(
-        Int(py=rec_obj.shape[2]),
-        rot_obj,
-        shifts_2d_obj,
-        shifts_3d_obj,
-        proj_obj,
-        params_obj,
-    )
-
-
-@always_inline
-def _forward_params_for_sidelength(
-    sidelength: Int,
-    rot_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    proj_obj: PythonObject,
-    params_obj: PythonObject,
-) raises -> FourierSliceParams:
+    """Params for the slice extraction kernel; bufs = (rec, rot, shifts_2d, shifts_3d, proj).
+    """
     return FourierSliceParams(
-        bp=Int(py=rot_obj.shape[1]),
-        sidelength=sidelength,
-        proj_sidelength=Int(py=proj_obj.shape[2]),
-        bv_rot=Int(py=rot_obj.shape[0]),
-        bv_shift_2d=Int(py=shifts_2d_obj.shape[0]),
+        bp=Int(py=bufs[1].shape[1]),
+        sidelength=Int(py=bufs[0].shape[2]),
+        proj_sidelength=Int(py=bufs[4].shape[2]),
+        bv_rot=Int(py=bufs[1].shape[0]),
+        bv_shift_2d=Int(py=bufs[2].shape[0]),
         oversampling=Float32(py=params_obj.oversampling),
         radius_cutoff_sq=Float32(py=params_obj.radius_cutoff_sq),
         has_shifts_2d=Int(py=params_obj.has_shifts_2d),
@@ -1592,12 +1542,12 @@ def _forward_params_for_sidelength(
         skip_redundant=Int(py=params_obj.skip_redundant),
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
-        bv_shift_3d=Int(py=shifts_3d_obj.shape[0]),
+        bv_shift_3d=Int(py=bufs[3].shape[0]),
     )
 
 
 @always_inline
-def _pose_grad_params(
+def _slice_3d_grad_params(
     bufs: PythonObject, params_obj: PythonObject, friedel_double: Int
 ) raises -> FourierSliceParams:
     """Params for the pose/weight gradient kernels.
@@ -1626,7 +1576,7 @@ def _pose_grad_params(
 
 
 @always_inline
-def _line2d_grad_params(
+def _line_2d_grad_params(
     bufs: PythonObject, params_obj: PythonObject, weight_grad: Int
 ) raises -> FourierSliceParams:
     """Params for the 2D line pose/weight gradient kernels.
@@ -1676,22 +1626,18 @@ def _line2d_grad_params(
 
 
 @always_inline
-def _forward_line2d_params(
-    img_obj: PythonObject,
-    direction_obj: PythonObject,
-    shifts_2d_obj: PythonObject,
-    line_obj: PythonObject,
-    params_obj: PythonObject,
+def _extract_line_2d_params(
+    bufs: PythonObject, params_obj: PythonObject
 ) raises -> FourierSliceParams:
-    """Params for the forward 2D line kernel; `img_obj` real-view (bv, h, w, 2).
+    """Params for the 2D line extraction kernel; bufs = (img, direction, shifts_2d, line).
     """
-    var line_half = Int(py=line_obj.shape[2])
+    var line_half = Int(py=bufs[3].shape[2])
     return FourierSliceParams(
-        bp=Int(py=direction_obj.shape[1]),
-        sidelength=Int(py=img_obj.shape[1]),
+        bp=Int(py=bufs[1].shape[1]),
+        sidelength=Int(py=bufs[0].shape[1]),
         proj_sidelength=2 * (line_half - 1),
-        bv_rot=Int(py=direction_obj.shape[0]),
-        bv_shift_2d=Int(py=shifts_2d_obj.shape[0]),
+        bv_rot=Int(py=bufs[1].shape[0]),
+        bv_shift_2d=Int(py=bufs[2].shape[0]),
         oversampling=Float32(py=params_obj.oversampling),
         radius_cutoff_sq=Float32(py=params_obj.radius_cutoff_sq),
         has_shifts_2d=Int(py=params_obj.has_shifts_2d),
@@ -1706,7 +1652,7 @@ def _forward_line2d_params(
 
 
 @always_inline
-def _scatter_line2d_params(
+def _insert_line_2d_params(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> FourierSliceParams:
     """Params for the 2D line scatter; bufs = (lines, weights, direction, shifts_2d, vol, wvol).
@@ -1732,25 +1678,21 @@ def _scatter_line2d_params(
 
 
 @always_inline
-def _forward_line_params(
-    rec_obj: PythonObject,
-    direction_obj: PythonObject,
-    shifts_3d_obj: PythonObject,
-    line_obj: PythonObject,
-    params_obj: PythonObject,
+def _extract_line_3d_params(
+    bufs: PythonObject, params_obj: PythonObject
 ) raises -> FourierSliceParams:
-    """Params for the forward line kernel; `line_obj` is real-view (bv, bp, w, 2).
+    """Params for the line extraction kernel; bufs = (rec, direction, shifts_3d, line).
 
     Directions are `(bv_dir, bp, 3)`; `bv_rot` carries the direction broadcast
     batch `bv_dir`.
     """
-    var line_half = Int(py=line_obj.shape[2])
+    var line_half = Int(py=bufs[3].shape[2])
     return FourierSliceParams(
-        bp=Int(py=direction_obj.shape[1]),
-        sidelength=Int(py=rec_obj.shape[2]),
+        bp=Int(py=bufs[1].shape[1]),
+        sidelength=Int(py=bufs[0].shape[2]),
         proj_sidelength=2
         * (line_half - 1),  # even box whose rfft half-width is line_half
-        bv_rot=Int(py=direction_obj.shape[0]),
+        bv_rot=Int(py=bufs[1].shape[0]),
         bv_shift_2d=1,  # unused (a line has no image plane)
         oversampling=Float32(py=params_obj.oversampling),
         radius_cutoff_sq=Float32(py=params_obj.radius_cutoff_sq),
@@ -1761,12 +1703,12 @@ def _forward_line_params(
         skip_redundant=0,
         ewald_curvature=0.0,  # unused for a 1D line
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
-        bv_shift_3d=Int(py=shifts_3d_obj.shape[0]),
+        bv_shift_3d=Int(py=bufs[2].shape[0]),
     )
 
 
 @always_inline
-def _scatter_line_params(
+def _insert_line_3d_params(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> FourierSliceParams:
     """Params for the line scatter kernel; bufs = (lines, weights, direction, shifts_3d, vol, wvol).
@@ -1792,7 +1734,7 @@ def _scatter_line_params(
 
 
 @always_inline
-def _line_grad_params(
+def _line_3d_grad_params(
     bufs: PythonObject, params_obj: PythonObject, weight_grad: Int
 ) raises -> FourierSliceParams:
     """Params for the line pose/weight gradient kernels.
@@ -1842,7 +1784,7 @@ def _line_grad_params(
 
 
 @always_inline
-def _scatter_params(
+def _insert_slice_3d_params(
     bufs: PythonObject, params_obj: PythonObject
 ) raises -> FourierSliceParams:
     return FourierSliceParams(

@@ -19,15 +19,15 @@ from _common import (
     _load_c2,
     _rfft_half,
     _rotated_coord,
-    _shift_phase,
+    _slice_3d_shift_phase,
     _store_c2,
 )
-from _gather import _interp3d
-from _scatter import _splat
+from _gather import _interp_3d
+from _scatter import _splat_3d
 
 
 @always_inline
-def _project_pixel[
+def _extract_slice_3d_pixel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -59,10 +59,10 @@ def _project_pixel[
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var val = _interp3d[interp](rec_b, k[0], k[1], k[2])
+    var val = _interp_3d[interp](rec_b, k[0], k[1], k[2])
 
     if p.has_shifts_2d != 0 or p.has_shifts_3d != 0:
-        var phase = _shift_phase(
+        var phase = _slice_3d_shift_phase(
             p, shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2]
         )
         val = _cmul(val, C2(cos(phase), sin(phase)))
@@ -77,7 +77,7 @@ def _project_pixel[
 
 
 @always_inline
-def _scatter_pixel[
+def _insert_slice_3d_pixel[
     interp: Int
 ](
     inp: Float32Ptr,
@@ -98,7 +98,7 @@ def _scatter_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return
-    # backprojection skips the redundant half of the x=0 line (mirror handles it)
+    # insertion skips the redundant half of the x=0 line (mirror handles it)
     if p.skip_redundant != 0 and x == 0 and y >= p.proj_sidelength // 2:
         return
 
@@ -121,7 +121,7 @@ def _scatter_pixel[
     )
     if p.has_shifts_2d != 0 or p.has_shifts_3d != 0:
         # conjugate combined phase factor (adjoint of the forward shift)
-        var phase = _shift_phase(
+        var phase = _slice_3d_shift_phase(
             p, shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2]
         )
         var cr = cos(phase)
@@ -150,4 +150,4 @@ def _scatter_pixel[
         wvol + i_bv * p.sidelength * p.sidelength * half,
         row_major(p.sidelength, p.sidelength, half),
     )
-    _splat[interp](vol_b, wvol_b, p, k[0], k[1], k[2], vre, vim, wval)
+    _splat_3d[interp](vol_b, wvol_b, p, k[0], k[1], k[2], vre, vim, wval)

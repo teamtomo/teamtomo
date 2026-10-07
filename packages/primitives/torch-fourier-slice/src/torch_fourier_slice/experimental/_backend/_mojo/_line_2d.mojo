@@ -1,9 +1,9 @@
 """Per-pixel ops for 2D->1D central-line extraction / insertion.
 
-The exact dimensional analogue of `_line.mojo` one dimension lower: sample a 2D
+The exact dimensional analogue of `_line_3d.mojo` one dimension lower: sample a 2D
 rfft image `[h, w, 2]` (DC at origin) along a direction `u = (u_y, u_x)` on the
 circle, `k = s_x * u`, producing a 1D rfft half-line. Reuses the 2D image gather
-(`_interp2d`) and scatter (`_splat2d`); only the coordinate setup and the 1D I/O
+(`_interp_2d`) and scatter (`_splat_2d`); only the coordinate setup and the 1D I/O
 differ. No 2D shift and no in-plane gauge (a bare line has neither).
 
 Line pixel index into the stack is `x`; the sample coordinate is `(ky, kx)`.
@@ -18,18 +18,18 @@ from _common import (
     Float32Ptr,
     FourierSliceParams,
     _cmul,
-    _line2d_shift_phase,
-    _line_k_2d,
+    _line_2d_shift_phase,
+    _line_2d_k,
     _load_c2_line,
     _rfft_half,
     _store_c2_line,
 )
-from _gather import _interp2d
-from _scatter import _splat2d
+from _gather import _interp_2d
+from _scatter import _splat_2d
 
 
 @always_inline
-def _project_line2d_pixel[
+def _extract_line_2d_pixel[
     interp: Int
 ](
     img: Float32Ptr,
@@ -48,7 +48,7 @@ def _project_line2d_pixel[
 
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k_2d(direction, (db * p.bp + i_bp) * 2, sx)
+    var k = _line_2d_k(direction, (db * p.bp + i_bp) * 2, sx)
 
     # per-image 3D view of the rfft image [h, w, 2] (zero-copy over `img`)
     var half = _rfft_half(p.sidelength)
@@ -56,10 +56,10 @@ def _project_line2d_pixel[
         img + i_bv * p.sidelength * half * 2,
         row_major(p.sidelength, half, 2),
     )
-    var val = _interp2d[interp](img_b, k[0], k[1])
+    var val = _interp_2d[interp](img_b, k[0], k[1])
 
     if p.has_shifts_2d != 0:
-        var phase = _line2d_shift_phase(p, shifts_2d, i_bv, i_bp, k[0], k[1])
+        var phase = _line_2d_shift_phase(p, shifts_2d, i_bv, i_bp, k[0], k[1])
         val = _cmul(val, C2(cos(phase), sin(phase)))
 
     # per-image 3D view of the line block [bp, w, 2]
@@ -72,7 +72,7 @@ def _project_line2d_pixel[
 
 
 @always_inline
-def _scatter_line2d_pixel[
+def _insert_line_2d_pixel[
     interp: Int
 ](
     inp: Float32Ptr,
@@ -104,11 +104,11 @@ def _scatter_line2d_pixel[
 
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
-    var k = _line_k_2d(direction, (db * p.bp + i_bp) * 2, sx)
+    var k = _line_2d_k(direction, (db * p.bp + i_bp) * 2, sx)
 
     if p.has_shifts_2d != 0:
         # conjugate phase factor (adjoint of the forward line shift)
-        var phase = _line2d_shift_phase(p, shifts_2d, i_bv, i_bp, k[0], k[1])
+        var phase = _line_2d_shift_phase(p, shifts_2d, i_bv, i_bp, k[0], k[1])
         var cr = cos(phase)
         var ci = sin(phase)
         var nre = vre * cr + vim * ci
@@ -129,4 +129,4 @@ def _scatter_line2d_pixel[
         wvol + i_bv * p.sidelength * half,
         row_major(p.sidelength, half),
     )
-    _splat2d[interp](vol_b, wvol_b, p, k[0], k[1], vre, vim, wval)
+    _splat_2d[interp](vol_b, wvol_b, p, k[0], k[1], vre, vim, wval)

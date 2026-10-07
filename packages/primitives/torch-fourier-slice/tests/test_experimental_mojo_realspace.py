@@ -15,10 +15,10 @@ from scipy.spatial.transform import Rotation
 
 from torch_fourier_slice.experimental import (
     backproject_2d_to_3d,
-    backproject_2d_to_3d_multivolume,
+    backproject_2d_to_3d_multichannel,
     mojo_kernels_available,
     project_3d_to_2d,
-    project_3d_to_2d_multivolume,
+    project_3d_to_2d_multichannel,
 )
 from torch_fourier_slice.experimental._gridding import (
     _kernel_transform,
@@ -39,7 +39,7 @@ def _blob(sidelength: int, sigma: float = 4.0) -> torch.Tensor:
 
 
 def _rotations(n: int, seed: int = 7) -> torch.Tensor:
-    """Random zyx rotation matrices."""
+    """Random rotation matrices."""
     xyz = torch.tensor(
         Rotation.random(n, random_state=seed).as_matrix(), dtype=torch.float32
     )
@@ -153,18 +153,18 @@ def test_project_backproject_round_trip():
 
 
 def test_rank_forms_agree():
-    """The multivolume forms reproduce the single-volume ones, volume by volume."""
+    """The multichannel forms reproduce the single-volume ones, volume by volume."""
     d, bv, bp = 32, 3, 5
     volumes = torch.stack([_blob(d, sigma=2.0 + i) for i in range(bv)])
     rotations = _rotations(bp)
 
-    stacked = project_3d_to_2d_multivolume(volumes, rotations)
+    stacked = project_3d_to_2d_multichannel(volumes, rotations)
     assert stacked.shape == (bp, bv, d, d)  # pose-major
     for i in range(bv):
         single = project_3d_to_2d(volumes[i], rotations)
         assert torch.allclose(stacked[:, i], single, atol=1e-4)
 
-    volumes_out = backproject_2d_to_3d_multivolume(stacked, rotations)
+    volumes_out = backproject_2d_to_3d_multichannel(stacked, rotations)
     assert volumes_out.shape == (bv, d, d, d)
     for i in range(bv):
         single = backproject_2d_to_3d(stacked[:, i], rotations)
@@ -174,9 +174,9 @@ def test_rank_forms_agree():
 def test_rank_errors():
     """Passing the wrong rank names the function that does handle it."""
     rotations = _rotations(2)
-    with pytest.raises(ValueError, match="project_3d_to_2d_multivolume"):
+    with pytest.raises(ValueError, match="project_3d_to_2d_multichannel"):
         project_3d_to_2d(torch.randn(2, 8, 8, 8), rotations)
-    with pytest.raises(ValueError, match="backproject_2d_to_3d_multivolume"):
+    with pytest.raises(ValueError, match="backproject_2d_to_3d_multichannel"):
         backproject_2d_to_3d(torch.randn(2, 3, 8, 8), rotations)
     with pytest.raises(ValueError, match="pad_factor"):
         project_3d_to_2d(torch.randn(8, 8, 8), rotations, pad_factor=0.5)

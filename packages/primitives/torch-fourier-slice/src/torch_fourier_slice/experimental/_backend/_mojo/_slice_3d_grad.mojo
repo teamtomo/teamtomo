@@ -1,14 +1,14 @@
 """Per-pixel backward ops for gradients w.r.t. rotations, shifts_2d and weights.
 
 These complement the volume/projection gradients (which are the plain
-scatter / forward-projection adjoints). For one output pixel they compute:
+insertion / extraction adjoints). For one output pixel they compute:
 
 - a 3x3 rotation-matrix gradient, via the chain rule through the rotated sample
   coordinate using the analytical spatial gradient of the interpolated field;
 - a 2-vector shift gradient, via the derivative of the phase ramp;
-- (backprojection only) a real weight gradient, the adjoint of the weight splat.
+- (insertion only) a real weight gradient, the adjoint of the weight splat.
 
-Accumulators are per pose. `_pose_grad_terms` is the pure (no side effects) core:
+Accumulators are per pose. `_slice_3d_pose_grad_terms` is the pure (no side effects) core:
 it returns one pixel's contribution as a `SIMD[DType.float32, 16]`
 `[rot(9), shift_2d(2), shift_3d(3)]` (padded from 14 to the next power of two --
 SIMD widths must be one -- lanes 14-15 unused) rather than adding it in directly,
@@ -35,9 +35,9 @@ from _common import (
     _fourier_coord,
     _rfft_half,
     _rotated_coord,
-    _shift_phase,
+    _slice_3d_shift_phase,
 )
-from _gather_grad import _interp3d_with_grad
+from _gather_grad import _interp_3d_with_grad
 
 
 @always_inline
@@ -47,7 +47,7 @@ def _redot(a: C2, b: C2) -> Float32:
 
 
 @always_inline
-def _phase_factor(
+def _slice_3d_phase_factor(
     shifts_2d: Float32Ptr,
     shifts_3d: Float32Ptr,
     i_bv: Int,
@@ -63,14 +63,14 @@ def _phase_factor(
     """
     if p.has_shifts_2d == 0 and p.has_shifts_3d == 0:
         return C2(1.0, 0.0)
-    var phase = _shift_phase(
+    var phase = _slice_3d_shift_phase(
         p, shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, kz, ky, kx
     )
     return C2(cos(phase), sin(phase))
 
 
 @always_inline
-def _pose_grad_terms(
+def _slice_3d_pose_grad_terms(
     coord_y: Float32,
     coord_x: Float32,
     sx: Float32,
@@ -140,7 +140,7 @@ def _pose_grad_terms(
 
 
 @always_inline
-def _couple_shift3d(
+def _couple_shift_3d(
     shifts_3d: Float32Ptr,
     i_bv: Int,
     i_bp: Int,
@@ -168,7 +168,7 @@ def _couple_shift3d(
 
 
 @always_inline
-def _forward_pose_grad_pixel[
+def _extract_slice_3d_pose_grad_pixel[
     interp: Int
 ](
     rec: Float32Ptr,
@@ -182,9 +182,9 @@ def _forward_pose_grad_pixel[
     x: Int,
     p: FourierSliceParams,
 ) -> SIMD[DType.float32, 16]:
-    """Rotation/shift grad contribution for the forward projection (volume = rec).
+    """Rotation/shift grad contribution for the extraction (volume = rec).
 
-    Pure -- see `_pose_grad_terms`. Zero for a pixel outside the radius cutoff.
+    Pure -- see `_slice_3d_pose_grad_terms`. Zero for a pixel outside the radius cutoff.
     """
     var coord_y = _fourier_coord(y, p.proj_sidelength)
     var coord_x = Float32(x)
@@ -200,7 +200,7 @@ def _forward_pose_grad_pixel[
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad[interp](rec_b, k[0], k[1], k[2], 0)
+    var vg = _interp_3d_with_grad[interp](rec_b, k[0], k[1], k[2], 0)
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
@@ -208,7 +208,7 @@ def _forward_pose_grad_pixel[
     # 3D shift couples into the rotation grad: the sampled field carries the
     # phase exp(i*scale3d*k.t3d), so augment each spatial grad by d/dk of it.
     if p.has_shifts_3d != 0:
-        _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
+        _couple_shift_3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var off = (
         (
             ((i_bv * p.bp + i_bp) * p.proj_sidelength + y)
@@ -217,14 +217,14 @@ def _forward_pose_grad_pixel[
         )
     ) * 2
     var gp = C2(grad_proj[off], grad_proj[off + 1])
-    var pf = _phase_factor(
+    var pf = _slice_3d_phase_factor(
         shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2], p
     )
     # rotation cotangent: grad of interp = grad_proj * conj(phase); shift uses the
     # raw grad_proj against the forward value modulated by the phase.
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
-    return _pose_grad_terms(
+    return _slice_3d_pose_grad_terms(
         coord_y,
         coord_x,
         sx,
@@ -244,7 +244,7 @@ def _forward_pose_grad_pixel[
 
 
 @always_inline
-def _backproject_pose_grad_pixel[
+def _insert_slice_3d_pose_grad_pixel[
     interp: Int
 ](
     grad_rec: Float32Ptr,
@@ -258,9 +258,9 @@ def _backproject_pose_grad_pixel[
     x: Int,
     p: FourierSliceParams,
 ) -> SIMD[DType.float32, 16]:
-    """Rotation/shift grad contribution for the backprojection (volume = grad_data_rec).
+    """Rotation/shift grad contribution for the insertion (volume = grad_data_rec).
 
-    Pure -- see `_pose_grad_terms`. Zero outside the radius cutoff or on the
+    Pure -- see `_slice_3d_pose_grad_terms`. Zero outside the radius cutoff or on the
     redundant x=0 half the scatter skipped (so it carries no grad).
     """
     var coord_y = _fourier_coord(y, p.proj_sidelength)
@@ -279,14 +279,14 @@ def _backproject_pose_grad_pixel[
         grad_rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var vg = _interp3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2], 1)
+    var vg = _interp_3d_with_grad[interp](grad_rec_b, k[0], k[1], k[2], 1)
     var val = C2(vg[0], vg[1])
     var gz = C2(vg[2], vg[3])
     var gy = C2(vg[4], vg[5])
     var gx = C2(vg[6], vg[7])
     # 3D shift couples into the rotation grad (same augmentation as the forward).
     if p.has_shifts_3d != 0:
-        _couple_shift3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
+        _couple_shift_3d(shifts_3d, i_bv, i_bp, val, p, gz, gy, gx)
     var off = (
         (
             ((i_bv * p.bp + i_bp) * p.proj_sidelength + y)
@@ -295,13 +295,13 @@ def _backproject_pose_grad_pixel[
         )
     ) * 2
     var pv = C2(proj[off], proj[off + 1])
-    var pf = _phase_factor(
+    var pf = _slice_3d_phase_factor(
         shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2], p
     )
-    # backprojection applies the conjugate phase to the projection value; both the
+    # insertion applies the conjugate phase to the projection value; both the
     # rotation and shift terms pair that against the gathered grad_rec field.
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
-    return _pose_grad_terms(
+    return _slice_3d_pose_grad_terms(
         coord_y,
         coord_x,
         sx,
@@ -321,12 +321,12 @@ def _backproject_pose_grad_pixel[
 
 
 # ---------------------------------------------------------------------------
-# Weight gradient (backprojection): adjoint of the real weight splat
+# Weight gradient (insertion): adjoint of the real weight splat
 # ---------------------------------------------------------------------------
 
 
 @always_inline
-def _gather_weight_grad(
+def _gather_weight_grad_3d(
     gwvol: Float32Ptr,
     i_bv: Int,
     sidelength: Int,
@@ -337,7 +337,7 @@ def _gather_weight_grad(
 ) -> Float32:
     """Read the (real) weight-volume grad at the cell(s) the weight splat wrote.
 
-    Transpose of `_accumulate_weight`: same index/Friedel logic, summing reads.
+    Transpose of `_accumulate_weight_3d`: same index/Friedel logic, summing reads.
     """
     var sidelength_half = _rfft_half(sidelength)
     var z = z_in
@@ -379,13 +379,13 @@ def _gather_weight_grad(
 def _g(
     gwvol: Float32Ptr, i_bv: Int, p: FourierSliceParams, z: Int, y: Int, x: Int
 ) -> Float32:
-    return _gather_weight_grad(
+    return _gather_weight_grad_3d(
         gwvol, i_bv, p.sidelength, z, y, x, p.friedel_double
     )
 
 
 @always_inline
-def _weight_grad_pixel[
+def _insert_slice_3d_weight_grad_pixel[
     interp: Int
 ](
     gwvol: Float32Ptr,
@@ -431,7 +431,7 @@ def _weight_grad_pixel[
                 var wzy = wz * _cubic_kernel(fy - Float32(oy))
                 for ox in range(-1, 3):
                     var w = wzy * _cubic_kernel(fx - Float32(ox))
-                    acc += w * _gather_weight_grad(
+                    acc += w * _gather_weight_grad_3d(
                         gwvol,
                         i_bv,
                         p.sidelength,

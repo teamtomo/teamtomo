@@ -1,4 +1,4 @@
-"""Input validation and host-buffer preparation shared by the projectors.
+"""Input validation and host-buffer preparation shared by the Fourier-slice operators.
 
 Naming follows the kernels: ``bv`` is the batch of volumes, ``bp`` the batch of
 projections; a volume's spatial axes are ``(d, h, w)`` with ``sidelength`` the
@@ -92,7 +92,7 @@ def prep_rotations(
     return rot, bv_rot, bp
 
 
-def prep_directions(
+def prep_directions_3d(
     directions: torch.Tensor, bv: int, device: torch.device | str = "cpu"
 ) -> tuple[torch.Tensor, int, int]:
     """Normalise line directions to float32 ``(bv_dir, bp, 3)`` on ``device``.
@@ -198,64 +198,3 @@ def prep_shifts_3d(
     if s.shape[1] != bp:
         raise ValueError("shifts_3d pose count must match rotations")
     return s.to(device=device, dtype=torch.float32).contiguous(), 1
-
-
-def prep_poses(
-    bv: int,
-    sidelength: int,
-    rotations: torch.Tensor,
-    shifts_2d: torch.Tensor | None,
-    output_shape: tuple[int, int] | None,
-    oversampling: float,
-    fourier_radius_cutoff: float | None,
-    interpolation: str,
-    ewald_curvature: float = 0.0,
-    shifts_3d: torch.Tensor | None = None,
-    device: torch.device | str = "cpu",
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, tuple]:
-    """Validate poses and build (rot, shifts, shifts_3d, output, params) buffers.
-
-    All buffers land on ``device``: the CPU for the CPU kernel, or the compute
-    GPU for the zero-copy GPU kernel. ``proj_r`` is the zeroed output the kernel
-    writes into (radius-cut pixels stay 0, so pre-zeroing is load-bearing).
-    """
-    rot, _bv_rot, bp = prep_rotations(rotations, bv, device)
-    shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, device)
-    shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, device)
-
-    if output_shape is None:
-        proj_sidelength = sidelength
-    else:
-        if len(output_shape) != 2 or output_shape[0] != output_shape[1]:
-            raise ValueError(f"output_shape {output_shape} must be square")
-        if output_shape[0] % 2 != 0:
-            raise ValueError(f"output side length {output_shape[0]} must be even")
-        proj_sidelength = int(output_shape[0])
-    proj_sidelength_half = proj_sidelength // 2 + 1
-
-    radius = (
-        proj_sidelength / 2.0
-        if fourier_radius_cutoff is None
-        else float(fourier_radius_cutoff)
-    )
-    proj_r = torch.zeros(
-        bv,
-        bp,
-        proj_sidelength,
-        proj_sidelength_half,
-        2,
-        dtype=torch.float32,
-        device=device,
-    )
-    params = KernelParams(
-        oversampling=float(oversampling),
-        radius_cutoff_sq=float(radius * radius),
-        has_shifts_2d=int(has_shifts_2d),
-        has_weights=0,
-        friedel_double=0,
-        skip_redundant=0,
-        interp=interp_code(interpolation),
-        ewald_curvature=float(ewald_curvature),
-        has_shifts_3d=int(has_shifts_3d),
-    )
-    return rot, shifts_2d_t, shifts_3d_t, proj_r, params

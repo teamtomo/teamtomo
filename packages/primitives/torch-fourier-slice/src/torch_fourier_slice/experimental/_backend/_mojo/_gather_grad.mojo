@@ -22,12 +22,12 @@ from _gather import (
 
 
 @always_inline
-def _pack(val: C2, gz: C2, gy: C2, gx: C2) -> C8:
+def _pack_3d(val: C2, gz: C2, gy: C2, gx: C2) -> C8:
     return C8(val[0], val[1], gz[0], gz[1], gy[0], gy[1], gx[0], gx[1])
 
 
 @always_inline
-def _smp[
+def _smp_3d[
     L: TensorLayout
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -44,7 +44,7 @@ def _smp[
 
 
 @always_inline
-def _interp3d_linear_with_grad[
+def _interp_3d_linear_with_grad[
     L: TensorLayout
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -64,14 +64,14 @@ def _interp3d_linear_with_grad[
     var fz = kz - kz_floor
     var fy = ky - ky_floor
     var fx = kx - kx_floor
-    var p000 = _smp(rec, z, y, x, drop)
-    var p001 = _smp(rec, z, y, x + 1, drop)
-    var p010 = _smp(rec, z, y + 1, x, drop)
-    var p011 = _smp(rec, z, y + 1, x + 1, drop)
-    var p100 = _smp(rec, z + 1, y, x, drop)
-    var p101 = _smp(rec, z + 1, y, x + 1, drop)
-    var p110 = _smp(rec, z + 1, y + 1, x, drop)
-    var p111 = _smp(rec, z + 1, y + 1, x + 1, drop)
+    var p000 = _smp_3d(rec, z, y, x, drop)
+    var p001 = _smp_3d(rec, z, y, x + 1, drop)
+    var p010 = _smp_3d(rec, z, y + 1, x, drop)
+    var p011 = _smp_3d(rec, z, y + 1, x + 1, drop)
+    var p100 = _smp_3d(rec, z + 1, y, x, drop)
+    var p101 = _smp_3d(rec, z + 1, y, x + 1, drop)
+    var p110 = _smp_3d(rec, z + 1, y + 1, x, drop)
+    var p111 = _smp_3d(rec, z + 1, y + 1, x + 1, drop)
     var p00 = p000 + (p001 - p000) * fx
     var p01 = p010 + (p011 - p010) * fx
     var p10 = p100 + (p101 - p100) * fx
@@ -87,11 +87,11 @@ def _interp3d_linear_with_grad[
         + fz * (1.0 - fy) * (p101 - p100)
         + fz * fy * (p111 - p110)
     )
-    return _pack(val, gz, gy, gx)
+    return _pack_3d(val, gz, gy, gx)
 
 
 @always_inline
-def _interp3d_cubic_with_grad[
+def _interp_3d_cubic_with_grad[
     L: TensorLayout
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -124,16 +124,16 @@ def _interp3d_cubic_with_grad[
             for ox in range(-1, 3):
                 var wx = _cubic_kernel(fx - Float32(ox))
                 var dwx = _cubic_kernel_derivative(fx - Float32(ox))
-                var s = _smp(rec, z + oz, y + oy, x + ox, drop)
+                var s = _smp_3d(rec, z + oz, y + oy, x + ox, drop)
                 val = val + s * (wz * wy * wx)
                 gz = gz + s * (dwz * wy * wx)
                 gy = gy + s * (wz * dwy * wx)
                 gx = gx + s * (wz * wy * dwx)
-    return _pack(val, gz, gy, gx)
+    return _pack_3d(val, gz, gy, gx)
 
 
 @always_inline
-def _interp3d_with_grad[
+def _interp_3d_with_grad[
     L: TensorLayout, //, interp: Int
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -145,11 +145,11 @@ def _interp3d_with_grad[
     """Interpolate + spatial gradients (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
 
     `drop`: 0 clamps out-of-range voxels (forward gather), 1 drops them (the
-    exact adjoint of the scatter, for the backprojection gradient).
+    exact adjoint of the scatter, for the insertion gradient).
     """
     comptime if interp == CUBIC:
-        return _interp3d_cubic_with_grad(rec, kz, ky, kx, drop)
-    return _interp3d_linear_with_grad(rec, kz, ky, kx, drop)
+        return _interp_3d_cubic_with_grad(rec, kz, ky, kx, drop)
+    return _interp_3d_linear_with_grad(rec, kz, ky, kx, drop)
 
 
 # ===========================================================================
@@ -159,12 +159,12 @@ def _interp3d_with_grad[
 
 
 @always_inline
-def _pack2d(val: C2, gy: C2, gx: C2) -> C6:
+def _pack_2d(val: C2, gy: C2, gx: C2) -> C6:
     return C6(val[0], val[1], gy[0], gy[1], gx[0], gx[1], 0.0, 0.0)
 
 
 @always_inline
-def _smp2d[
+def _smp_2d[
     L: TensorLayout
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -180,7 +180,7 @@ def _smp2d[
 
 
 @always_inline
-def _interp2d_linear_with_grad[
+def _interp_2d_linear_with_grad[
     L: TensorLayout
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -195,20 +195,20 @@ def _interp2d_linear_with_grad[
     var x = Int(kx_floor)
     var fy = ky - ky_floor
     var fx = kx - kx_floor
-    var p00 = _smp2d(img, y, x, drop)
-    var p01 = _smp2d(img, y, x + 1, drop)
-    var p10 = _smp2d(img, y + 1, x, drop)
-    var p11 = _smp2d(img, y + 1, x + 1, drop)
+    var p00 = _smp_2d(img, y, x, drop)
+    var p01 = _smp_2d(img, y, x + 1, drop)
+    var p10 = _smp_2d(img, y + 1, x, drop)
+    var p11 = _smp_2d(img, y + 1, x + 1, drop)
     var p0 = p00 + (p01 - p00) * fx
     var p1 = p10 + (p11 - p10) * fx
     var val = p0 + (p1 - p0) * fy
     var gy = p1 - p0
     var gx = (1.0 - fy) * (p01 - p00) + fy * (p11 - p10)
-    return _pack2d(val, gy, gx)
+    return _pack_2d(val, gy, gx)
 
 
 @always_inline
-def _interp2d_cubic_with_grad[
+def _interp_2d_cubic_with_grad[
     L: TensorLayout
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -232,15 +232,15 @@ def _interp2d_cubic_with_grad[
         for ox in range(-1, 3):
             var wx = _cubic_kernel(fx - Float32(ox))
             var dwx = _cubic_kernel_derivative(fx - Float32(ox))
-            var s = _smp2d(img, y + oy, x + ox, drop)
+            var s = _smp_2d(img, y + oy, x + ox, drop)
             val = val + s * (wy * wx)
             gy = gy + s * (dwy * wx)
             gx = gx + s * (wy * dwx)
-    return _pack2d(val, gy, gx)
+    return _pack_2d(val, gy, gx)
 
 
 @always_inline
-def _interp2d_with_grad[
+def _interp_2d_with_grad[
     L: TensorLayout, //, interp: Int
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -254,5 +254,5 @@ def _interp2d_with_grad[
     adjoint of the scatter, for the insertion gradient).
     """
     comptime if interp == CUBIC:
-        return _interp2d_cubic_with_grad(img, ky, kx, drop)
-    return _interp2d_linear_with_grad(img, ky, kx, drop)
+        return _interp_2d_cubic_with_grad(img, ky, kx, drop)
+    return _interp_2d_linear_with_grad(img, ky, kx, drop)

@@ -78,7 +78,7 @@ def _sample_rfft_3d_drop[
     """Sample with Friedel symmetry but *drop* (zero) out-of-range voxels.
 
     The read-side mirror of `_accumulate_3d`: where the splat discards a corner,
-    this returns 0. Used by the backprojection gradient gather so it is the exact
+    this returns 0. Used by the insertion gradient gather so it is the exact
     adjoint of the scatter (which drops, where the forward gather clamps).
     """
     comptime assert rec.flat_rank == 4, "volume view must be 4D [d, h, w, 2]"
@@ -108,7 +108,7 @@ def _sample_rfft_3d_drop[
 
 
 @always_inline
-def _interp3d_linear[
+def _interp_3d_linear[
     L: TensorLayout
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -144,7 +144,7 @@ def _interp3d_linear[
 
 
 @always_inline
-def _interp3d_cubic[
+def _interp_3d_cubic[
     L: TensorLayout
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -176,7 +176,7 @@ def _interp3d_cubic[
 
 
 @always_inline
-def _interp3d[
+def _interp_3d[
     L: TensorLayout, //, interp: Int
 ](
     rec: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -187,8 +187,8 @@ def _interp3d[
     """Interpolate the rfft volume (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
     """
     comptime if interp == CUBIC:
-        return _interp3d_cubic(rec, kz, ky, kx)
-    return _interp3d_linear(rec, kz, ky, kx)
+        return _interp_3d_cubic(rec, kz, ky, kx)
+    return _interp_3d_linear(rec, kz, ky, kx)
 
 
 # ===========================================================================
@@ -266,7 +266,7 @@ def _sample_rfft_2d_drop[
 
 
 @always_inline
-def _interp2d_linear[
+def _interp_2d_linear[
     L: TensorLayout
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -290,7 +290,7 @@ def _interp2d_linear[
 
 
 @always_inline
-def _interp2d_cubic[
+def _interp_2d_cubic[
     L: TensorLayout
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -314,7 +314,7 @@ def _interp2d_cubic[
 
 
 @always_inline
-def _interp2d[
+def _interp_2d[
     L: TensorLayout, //, interp: Int
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
@@ -324,5 +324,5 @@ def _interp2d[
     """Interpolate the rfft image (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
     """
     comptime if interp == CUBIC:
-        return _interp2d_cubic(img, ky, kx)
-    return _interp2d_linear(img, ky, kx)
+        return _interp_2d_cubic(img, ky, kx)
+    return _interp_2d_linear(img, ky, kx)

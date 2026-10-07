@@ -100,16 +100,10 @@ def simulate_ribosome() -> torch.Tensor:
 
 
 def random_rotations(n: int, seed: int = 0) -> torch.Tensor:
-    """``(n, 3, 3)`` uniformly random rotation matrices in the kernels' convention.
-
-    The experimental API multiplies **zyx**-ordered coordinate vectors, while
-    ``scipy`` hands back matrices for xyz-ordered ones. Reversing both the rows
-    and the columns re-expresses the same physical rotation in zyx.
-    """
-    xyz = torch.tensor(
+    """``(n, 3, 3)`` uniformly random (xyz) rotation matrices."""
+    return torch.tensor(
         Rotation.random(n, random_state=seed).as_matrix(), dtype=torch.float32
     )
-    return torch.flip(xyz, dims=(-2, -1)).contiguous()
 
 
 def add_noise(images: torch.Tensor, snr: float, seed: int = 0) -> torch.Tensor:

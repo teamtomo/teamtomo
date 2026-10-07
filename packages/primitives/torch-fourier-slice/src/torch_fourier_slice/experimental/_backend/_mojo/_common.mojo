@@ -1,4 +1,4 @@
-"""Shared types, constants, and small helpers for the projector kernels.
+"""Shared types, constants, and small helpers for the Fourier-slice kernels.
 
 Naming: volume spatial axes are (d, h, w) with sample coordinates (z, y, x);
 the cube edge is `sidelength` (= h, = d) and `sidelength_half = w` is the rfft
@@ -52,7 +52,7 @@ comptime CUBIC = 1
 # *slower* at coarsen=2 -- too little work per pixel to amortise against. So only
 # the two 3D kernels (slice + 3D line, both tricubic at CUBIC) coarsen, gated on
 # the comptime `interp` each is already specialised on; the 2D-line kernel always
-# uses `SCATTER_COARSEN_LINEAR` directly (see `_launch_scatter_line2d`). Mirrors the
+# uses `SCATTER_COARSEN_LINEAR` directly (see `_launch_insert_line_2d`). Mirrors the
 # tuning the sibling torch-projectors CUDA backprojection kernel documents for its
 # own coarsening knob.
 comptime SCATTER_BLOCK = 256
@@ -80,7 +80,7 @@ def _rfft_half(sidelength: Int) -> Int:
 
 @fieldwise_init
 struct FourierSliceParams(Copyable, Movable):
-    """Shapes and scalar parameters for one projection / scatter call.
+    """Shapes and scalar parameters for one extraction / insertion call.
 
     Volumes are cubic, so the real-space depth/height/width all equal
     `sidelength`; the rfft widths and the shift phase scale are *derived* from
@@ -229,7 +229,7 @@ struct DeviceParams(Copyable, DevicePassable, Movable):
 
 
 @fieldwise_init
-struct ProjectBuffers(Copyable, Movable):
+struct ExtractSlice3DBuffers(Copyable, Movable):
     var rec: Float32Ptr
     var rot: Float32Ptr
     var shifts_2d: Float32Ptr
@@ -238,7 +238,7 @@ struct ProjectBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ScatterBuffers(Copyable, Movable):
+struct InsertSlice3DBuffers(Copyable, Movable):
     var inp: Float32Ptr
     var weights: Float32Ptr
     var rot: Float32Ptr
@@ -249,7 +249,7 @@ struct ScatterBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ProjectLineBuffers(Copyable, Movable):
+struct ExtractLine3DBuffers(Copyable, Movable):
     """Forward central-*line* extraction (3D volume -> 1D lines).
 
     Poses are per-node *directions* `(bv_dir, bp, 3)` (zyx unit vectors), not
@@ -264,7 +264,7 @@ struct ProjectLineBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ScatterLineBuffers(Copyable, Movable):
+struct InsertLine3DBuffers(Copyable, Movable):
     """Central-*line* insertion (1D lines -> 3D volume + weights). Directions in.
     """
 
@@ -277,7 +277,7 @@ struct ScatterLineBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ForwardGradBuffers(Copyable, Movable):
+struct ExtractSlice3DPoseGradBuffers(Copyable, Movable):
     var rec: Float32Ptr
     var rot: Float32Ptr
     var shifts_2d: Float32Ptr
@@ -289,7 +289,7 @@ struct ForwardGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ProjectLine2DBuffers(Copyable, Movable):
+struct ExtractLine2DBuffers(Copyable, Movable):
     """Forward 2D->1D central-line extraction (2D image -> 1D lines).
 
     Poses are per-node directions `(bv_dir, bp, 2)`; `shifts_2d` is an optional yx
@@ -303,7 +303,7 @@ struct ProjectLine2DBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ScatterLine2DBuffers(Copyable, Movable):
+struct InsertLine2DBuffers(Copyable, Movable):
     """2D->1D central-line insertion (1D lines -> 2D image + weights)."""
 
     var inp: Float32Ptr
@@ -315,7 +315,7 @@ struct ScatterLine2DBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ForwardLine2DGradBuffers(Copyable, Movable):
+struct ExtractLine2DPoseGradBuffers(Copyable, Movable):
     """Forward 2D->1D line pose grad: direction + 2D-shift grads."""
 
     var img: Float32Ptr
@@ -327,7 +327,7 @@ struct ForwardLine2DGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct BackprojectLine2DGradBuffers(Copyable, Movable):
+struct InsertLine2DPoseGradBuffers(Copyable, Movable):
     """2D->1D line insertion pose grad: direction + 2D-shift grads."""
 
     var grad_img: Float32Ptr
@@ -339,7 +339,7 @@ struct BackprojectLine2DGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct WeightLine2DGradBuffers(Copyable, Movable):
+struct InsertLine2DWeightGradBuffers(Copyable, Movable):
     """2D->1D line insertion weight grad: adjoint of the real weight splat."""
 
     var gwimg: Float32Ptr
@@ -348,7 +348,7 @@ struct WeightLine2DGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct ForwardLineGradBuffers(Copyable, Movable):
+struct ExtractLine3DPoseGradBuffers(Copyable, Movable):
     """Forward line pose grad: direction + 3D-shift grads (no 2D shift)."""
 
     var rec: Float32Ptr
@@ -360,7 +360,7 @@ struct ForwardLineGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct BackprojectLineGradBuffers(Copyable, Movable):
+struct InsertLine3DPoseGradBuffers(Copyable, Movable):
     """Line insertion pose grad: direction + 3D-shift grads (no 2D shift)."""
 
     var grad_rec: Float32Ptr
@@ -372,7 +372,7 @@ struct BackprojectLineGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct WeightLineGradBuffers(Copyable, Movable):
+struct InsertLine3DWeightGradBuffers(Copyable, Movable):
     """Line insertion weight grad: adjoint of the real weight splat."""
 
     var gwvol: Float32Ptr
@@ -381,7 +381,7 @@ struct WeightLineGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct BackprojectGradBuffers(Copyable, Movable):
+struct InsertSlice3DPoseGradBuffers(Copyable, Movable):
     var grad_rec: Float32Ptr
     var rot: Float32Ptr
     var shifts_2d: Float32Ptr
@@ -393,7 +393,7 @@ struct BackprojectGradBuffers(Copyable, Movable):
 
 
 @fieldwise_init
-struct WeightGradBuffers(Copyable, Movable):
+struct InsertSlice3DWeightGradBuffers(Copyable, Movable):
     var gwvol: Float32Ptr
     var rot: Float32Ptr
     var grad_weight: Float32Ptr
@@ -411,7 +411,7 @@ def _dptr(addr: PythonObject) raises -> Float32Ptr:
 
     The GPU entry points read/write the memory backing torch device tensors
     directly (no host round-trip). Python passes each buffer's device VA -- the
-    CUDA ``data_ptr()`` or the Metal ``gpuAddress`` (see ``experimental/_gpu.py``,
+    CUDA ``data_ptr()`` or the Metal ``gpuAddress`` (see ``_backend/_device.py``,
     since torch's MPS ``data_ptr()`` is an ``MTLBuffer`` object pointer, not a
     VA) -- and this rebuilds a device pointer the kernels can dereference.
     """
@@ -529,7 +529,7 @@ def _warp_pose_uniform(vp: Int) -> Bool:
 
 
 @always_inline
-def _pose_grad_offsets(
+def _slice_3d_pose_grad_offsets(
     i_bv: Int, i_bp: Int, p: FourierSliceParams
 ) -> Tuple[Int, Int, Int]:
     """Base offsets into `grad_rot` (9-wide), `grad_shift` (2-wide) and
@@ -546,22 +546,22 @@ def _pose_grad_offsets(
 
 
 @always_inline
-def _line_pose_grad_offsets(
+def _line_3d_pose_grad_offsets(
     i_bv: Int, i_bp: Int, p: FourierSliceParams
 ) -> Tuple[Int, Int]:
     """Base offsets into `grad_dir` (3-wide) and `grad_shift_3d` (3-wide) for a
-    3D-line pixel's pose (see `_pose_grad_offsets`)."""
+    3D-line pixel's pose (see `_slice_3d_pose_grad_offsets`)."""
     var db = 0 if p.bv_rot == 1 else i_bv
     var sb3 = 0 if p.bv_shift_3d == 1 else i_bv
     return ((db * p.bp + i_bp) * 3, (sb3 * p.bp + i_bp) * 3)
 
 
 @always_inline
-def _line2d_pose_grad_offsets(
+def _line_2d_pose_grad_offsets(
     i_bv: Int, i_bp: Int, p: FourierSliceParams
 ) -> Tuple[Int, Int]:
     """Base offsets into `grad_dir` (2-wide) and `grad_shift` (2-wide) for a
-    2D-line pixel's pose (see `_pose_grad_offsets`)."""
+    2D-line pixel's pose (see `_slice_3d_pose_grad_offsets`)."""
     var db = 0 if p.bv_rot == 1 else i_bv
     var sb = 0 if p.bv_shift_2d == 1 else i_bv
     return ((db * p.bp + i_bp) * 2, (sb * p.bp + i_bp) * 2)
@@ -609,7 +609,7 @@ def _ewald_sz(p: FourierSliceParams, sx: Float32, sy: Float32) -> Float32:
 
 
 @always_inline
-def _shift_phase(
+def _slice_3d_shift_phase(
     p: FourierSliceParams,
     shifts_2d: Float32Ptr,
     shifts_3d: Float32Ptr,
@@ -644,7 +644,7 @@ def _shift_phase(
 
 
 @always_inline
-def _line_k(
+def _line_3d_k(
     direction: Float32Ptr, base: Int, sx: Float32
 ) -> SIMD[DType.float32, 4]:
     """3D sample coordinate `k = s_x * u` for a line pixel.
@@ -666,7 +666,7 @@ def _line_k(
 
 
 @always_inline
-def _line_k_2d(
+def _line_2d_k(
     direction: Float32Ptr, base: Int, sx: Float32
 ) -> SIMD[DType.float32, 2]:
     """2D sample coordinate `k = s_x * u` for a 2D->1D line pixel.
@@ -683,7 +683,7 @@ def _line_k_2d(
 
 
 @always_inline
-def _line2d_shift_phase(
+def _line_2d_shift_phase(
     p: FourierSliceParams,
     shifts_2d: Float32Ptr,
     i_bv: Int,
@@ -707,7 +707,7 @@ def _line2d_shift_phase(
 
 
 @always_inline
-def _line_shift_phase(
+def _line_3d_shift_phase(
     p: FourierSliceParams,
     shifts_3d: Float32Ptr,
     i_bv: Int,
@@ -719,7 +719,7 @@ def _line_shift_phase(
     """Shift phase for a central *line*: the 3D (zyx, volume-frame) ramp only.
 
     A bare line has no image plane, so the 2D projection-plane shift is dropped
-    (see the slice kernel's `_shift_phase`). The 3D shift `t` is applied in the
+    (see the slice kernel's `_slice_3d_shift_phase`). The 3D shift `t` is applied in the
     volume frame before rotation, so its ramp uses the rotated sample coordinate
     `k = s*u`; for a line this collapses to the design's per-node scalar slope
     `s*(u . t)`.
