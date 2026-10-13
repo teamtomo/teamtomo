@@ -1,13 +1,4 @@
-"""Regression tests for the memory cost of the backward pass.
-
-Sampling n points used to broadcast the image to `(n, c, *image_shape)` before
-calling `grid_sample`. That is free in the forward pass (a stride-0 view) but
-makes the backward pass materialise a dense `(n, c, *image_shape)` input
-gradient before the broadcast sums it away, so peak memory and runtime scale
-with `n * image_elems` instead of with `n`.
-
-See https://github.com/teamtomo/teamtomo/issues/117
-"""
+"""Sampling should not repeat the image per sample point (#117)."""
 
 import pytest
 import torch
@@ -53,8 +44,6 @@ def test_image_is_not_broadcast_over_samples(
 
     sample_fn(image=image, coordinates=coordinates)
 
-    # a batch size of n_samples here is the bug: it costs n_samples x image
-    # in the backward pass
     assert grid_sample_batch_sizes == [1]
 
 
@@ -72,8 +61,7 @@ def test_gradients_flow_to_image_and_coordinates(
     """Sampling is differentiable with respect to both image and coordinates."""
     image = torch.rand(image_shape, dtype=torch.float64, requires_grad=True)
     coordinate_shape = (7,) + ((coordinate_ndim,) if coordinate_ndim else ())
-    # stay off exact voxel centres: the interpolant is only piecewise linear,
-    # so its derivative is undefined on the grid lines
+    # avoid integer coordinates, the gradient is undefined there
     coordinates = (
         torch.rand(coordinate_shape, dtype=torch.float64) * (image_shape[-1] - 3) + 1.1
     )
