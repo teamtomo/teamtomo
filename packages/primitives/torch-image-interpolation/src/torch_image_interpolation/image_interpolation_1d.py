@@ -58,8 +58,7 @@ def sample_image_1d(
         image = einops.rearrange(image, "c w complex -> (complex c) w")
 
     # For grid_sample to work with 1D, we need to add a dummy height dimension
-    # and treat it as a 2D image with height=2
-    #
+    # and treat it as a 2D image with height=2.
     # Sample all points against one image copy (W = n_samples). Repeating the
     # image per sample OOMs on dense grids.
     image = einops.repeat(image, "c w -> 1 c h w", h=2)
