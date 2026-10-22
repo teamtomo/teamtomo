@@ -5631,6 +5631,7 @@ dependencies = [
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils" },
+    { name = "torch-cubic-spline-grids" },
     { name = "torch-fourier-filter" },
     { name = "torch-grid-utils" },
 ]
@@ -5640,6 +5641,7 @@ io = [
     { name = "alnfile" },
     { name = "etomofiles" },
     { name = "mrcfile" },
+    { name = "warpxmlfile" },
 ]
 
 [package.dev-dependencies]
@@ -5655,6 +5657,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "warpxmlfile" },
 ]
 test = [
     { name = "alnfile" },
@@ -5662,6 +5665,7 @@ test = [
     { name = "mrcfile" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "warpxmlfile" },
 ]
 
 [package.metadata]
@@ -5673,8 +5677,10 @@ requires-dist = [
     { name = "numpy" },
     { name = "torch" },
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
+    { name = "torch-cubic-spline-grids", editable = "packages/primitives/torch-cubic-spline-grids" },
     { name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "warpxmlfile", marker = "extra == 'io'" },
 ]
 provides-extras = ["io"]
 
@@ -5691,6 +5697,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "warpxmlfile" },
 ]
 test = [
     { name = "alnfile" },
@@ -5698,6 +5705,7 @@ test = [
     { name = "mrcfile" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "warpxmlfile" },
 ]
 
 [[package]]
@@ -6049,6 +6057,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/20/28/e6f1a6f655d620846bd9df527390ecc26b3805a0c5989048c210e22c5ca9/virtualenv-20.35.4.tar.gz", hash = "sha256:643d3914d73d3eeb0c552cbb12d7e82adf0e504dbf86a3182f8771a153a1971c", size = 6028799, upload-time = "2025-10-29T06:57:40.511Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/79/0c/c05523fa3181fdf0c9c52a6ba91a23fbf3246cc095f26f6516f9c60e6771/virtualenv-20.35.4-py3-none-any.whl", hash = "sha256:c21c9cede36c9753eeade68ba7d523529f228a403463376cf821eaae2b650f1b", size = 6005095, upload-time = "2025-10-29T06:57:37.598Z" },
+]
+
+[[package]]
+name = "warpxmlfile"
+version = "0.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e8/df/30ac4b2110e3726b7c3d850905fc62c25015bd6c77115e4e6b99bcaa1879/warpxmlfile-0.0.1.tar.gz", hash = "sha256:b107bd54beb8f6a194a775fb499bacc1f9a6e528c62a5721d48d63eb2bab3563", size = 161940, upload-time = "2026-10-22T17:49:47.143Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/fa/92e1707dd0c2847ecf5d39b72913af03fb1d6bf62bac58c2e23324124894/warpxmlfile-0.0.1-py3-none-any.whl", hash = "sha256:74143887c6efef8152add863a67b45bd16d9884dc3705f960f47625ef9d7b904", size = 23763, upload-time = "2026-10-22T17:49:45.65Z" },
 ]
 
 [[package]]

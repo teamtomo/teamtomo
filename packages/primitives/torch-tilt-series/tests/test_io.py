@@ -116,14 +116,28 @@ def test_from_warp_xml_drops_unused_tilts(tmp_path):
     assert tilt_series.sample_translations.shape == (2, 2)
 
 
-def test_from_warp_xml_warns_on_local_grid_unless_callable_given(tmp_path):
+def test_from_warp_xml_applies_local_grids_by_default(tmp_path):
     pytest.importorskip("warpxmlfile")
+    pytest.importorskip("torch_cubic_spline_grids")
     path = tmp_path / "TS_1.xml"
-    path.write_text(_warp_xml(grid_x_value="1.5"))
+    path.write_text(
+        _warp_xml(grid_x_value="1.5")
+    )  # 1x1xT grid: a constant +1.5 A shift in x
 
-    with pytest.warns(UserWarning, match="GridMovementX"):
-        from_warp_xml(path)
-
-    shifts = torch.zeros(1, 3, 2)
-    tilt_series = from_warp_xml(path, local_shifts_2d=lambda projected: shifts)
+    tilt_series = from_warp_xml(path)
     assert tilt_series.local_shifts_2d is not None
+    plain = from_warp_xml(path, apply_local_shifts=False)
+    assert plain.local_shifts_2d is None
+
+    point = torch.zeros(1, 3)  # the tomogram centre projects to the image centre
+    shifted = tilt_series.project_points(point)
+    unshifted = plain.project_points(point)
+    # Warp subtracts the movement: x moves by -1.5 A, y is unchanged; (y, x) output
+    assert torch.allclose(
+        shifted - unshifted, torch.tensor([[[0.0, -1.5]] * 3]), atol=1e-5
+    )
+
+    custom = from_warp_xml(
+        path, local_shifts_2d=lambda projected: torch.zeros_like(projected)
+    )
+    assert torch.allclose(custom.project_points(point), unshifted)
