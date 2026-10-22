@@ -53,6 +53,7 @@ dependencies = [
     "torch-affine-utils",
     "torch-grid-utils",
     "torch-fourier-filter",
+    "torch-cubic-spline-grids",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
@@ -95,6 +96,7 @@ dev = [
 torch-affine-utils = { workspace = true }
 torch-grid-utils = { workspace = true }
 torch-fourier-filter = { workspace = true }
+torch-cubic-spline-grids = { workspace = true }
 
 # https://docs.astral.sh/ruff
 [tool.ruff]
