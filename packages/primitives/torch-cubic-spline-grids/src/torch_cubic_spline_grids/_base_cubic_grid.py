@@ -72,6 +72,37 @@ class CubicSplineGrid(torch.nn.Module):
         grid.data = data
         return grid
 
+    @classmethod
+    def from_interpolating_data(cls, data: torch.Tensor) -> Self:
+        """Instantiate a grid whose spline passes through `data` at the grid points.
+
+        Same input as `from_grid_data`, but the values are *interpolated*: the
+        control points are solved for so that evaluating the grid at the grid
+        points (i / (n - 1) along each axis) returns `data`. Because the spline
+        is linear in its control points, this is one linear solve.
+
+        Parameters
+        ----------
+        data: torch.Tensor
+            (c, *grid_dimensions) or (*grid_dimensions) array of values at each
+            grid point.
+        """
+        grid = cls.from_grid_data(data)
+        data = grid.data  # (c, *resolution), coerced to multichannel
+        n_channels, resolution = grid.n_channels, grid.resolution
+        n = int(torch.tensor(resolution).prod())
+        axes = [torch.linspace(0, 1, r) for r in resolution]
+        grid_points = torch.stack(torch.meshgrid(*axes, indexing='ij'), dim=-1)
+        grid_points = grid_points.reshape(n, cls.ndim)
+        with torch.no_grad():
+            # column j of A: the spline at every grid point when control point j is 1
+            one_hot = torch.eye(n).reshape(n, *resolution)
+            A = cls.from_grid_data(one_hot)(grid_points)  # (n, n)
+            values = data.reshape(n_channels, n).T  # (n, c)
+            control_points = torch.linalg.solve(A, values).T  # (c, n)
+        grid.data = control_points.reshape(n_channels, *resolution)
+        return grid
+
     @property
     def data(self) -> torch.Tensor:
         return self._data.detach()
