@@ -1,8 +1,9 @@
 """Load TiltSeries instances and their raw tilt images.
 
 Alignment metadata is loaded from external alignment formats (current
-support: etomo, via etomofiles, and aretomo, via alnfile); raw tilt image
-pixel data is loaded from the MRC stack a TiltSeries points to, via mrcfile.
+support: etomo, via etomofiles; aretomo, via alnfile; and Warp/M tilt-series
+XML, via warpxmlfile); raw tilt image pixel data is loaded from the MRC stack a
+TiltSeries points to, via mrcfile.
 """
 
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from torch_tilt_series.tilt_series import TiltSeries, _writable
+from torch_tilt_series.tilt_series import LocalShiftFn, TiltSeries, _writable
 
 
 def from_aretomo_output(
@@ -115,6 +116,134 @@ def from_etomo_directory(
         pixel_spacing=pixel_spacing,
         device=device,
     )
+
+
+def from_warp_xml(
+    xml_path: Path | str,
+    pixel_spacing: float | None = None,
+    image_path: Path | str | None = None,
+    apply_local_shifts: bool = True,
+    local_shifts_2d: LocalShiftFn | None = None,
+    device: torch.device | str = "cpu",
+) -> TiltSeries:
+    """Initialize TiltSeries from a Warp / M tilt-series XML file.
+
+    Reads the global alignment: `Angles`, `AxisAngle`, `AxisOffsetX/Y`
+    (Angstroms) and `UseTilt`. The alignment is in Angstroms and is used as
+    is; `pixel_spacing` only describes the images at `image_path`. It
+    defaults to the CTF `PixelSize` of the XML (the raw-frame pixel) - pass
+    it explicitly when `image_path` is a binned tilt stack. Warp's tomogram z axis
+    points the opposite way to this package's sample z axis, so
+    `levelled2tomo` is set to a z flip: points given in Warp tomogram
+    coordinates (Angstroms, relative to the tomogram centre) project to
+    Warp image coordinates (Angstroms, relative to the image centre).
+
+    Warp's per-tilt local deformation grids (`GridMovementX/Y`, cubic
+    B-splines through the node values) are applied by default: each tilt
+    becomes a `CubicBSplineGrid2d` passing through its nodes, evaluated at the
+    projected position (normalised by `ImageDimensionsAngstrom`, clamped to
+    the image) and subtracted, as Warp does. Set `apply_local_shifts=False`
+    to keep the global model only, or pass `local_shifts_2d` to supply your
+    own callable instead. The 4-D `GridVolumeWarp` of M has no equivalent in
+    `TiltSeries` and is ignored.
+    """
+    import warpxmlfile
+
+    xml_path = Path(xml_path)
+    xml = warpxmlfile.read(xml_path)
+
+    tilt_angles = np.asarray(xml.angles)
+    tilt_axis_angle = np.asarray(xml.axis_angle)
+    offset_x = np.asarray(xml.axis_offset_x)
+    offset_y = np.asarray(xml.axis_offset_y)
+    use_tilt = np.asarray(xml.use_tilt)
+    if pixel_spacing is None:
+        if xml.ctf is None or "PixelSize" not in xml.ctf:
+            raise ValueError(f"{xml_path} has no CTF PixelSize; pass pixel_spacing")
+        pixel_spacing = float(xml.ctf["PixelSize"])
+
+    # Offsets are added after the in-plane rotation, in Angstroms, as (y, x).
+    sample_translations = np.stack([offset_y, offset_x], axis=-1)
+
+    # Drop tilts Warp excluded, as the etomo loader does for excluded views.
+    # Valid tilt indices into the raw (unfiltered) tilt stack, 0-indexed.
+    idx_valid = np.flatnonzero(use_tilt)
+
+    if local_shifts_2d is None and apply_local_shifts:
+        grid_x, grid_y = xml.grids.get("GridMovementX"), xml.grids.get("GridMovementY")
+        if grid_x is not None and grid_y is not None:
+            if np.any(grid_x.values) or np.any(grid_y.values):
+                local_shifts_2d = _warp_local_shifts_2d(
+                    grid_x.values,
+                    grid_y.values,
+                    idx_valid,
+                    xml.image_dimensions_angstrom,
+                    device,
+                )
+
+    # Warp tomogram z -> sample z: z flip (zyxw).
+    z_flip = torch.diag(torch.tensor([-1.0, 1.0, 1.0, 1.0]))
+    return TiltSeries(
+        tilt_angles=tilt_angles[idx_valid],
+        tilt_axis_angle=tilt_axis_angle[idx_valid],
+        sample_translations=sample_translations[idx_valid],
+        levelled2tomo=z_flip,
+        local_shifts_2d=local_shifts_2d,
+        image_path=image_path,
+        image_indices=idx_valid,
+        pixel_spacing=pixel_spacing,
+        device=device,
+    )
+
+
+def _warp_local_shifts_2d(
+    grid_x: np.ndarray,
+    grid_y: np.ndarray,
+    tilt_indices: np.ndarray,
+    image_dimensions_angstrom: tuple[float, ...] | None,
+    device: torch.device | str,
+) -> LocalShiftFn:
+    """Warp `GridMovementX/Y` node values -> a `local_shifts_2d` callable.
+
+    `grid_x`/`grid_y` are `(n_tilts_in_file, h, w)` node values in Angstroms,
+    one lattice per tilt over the image (x along `w`, y along `h`); Warp
+    evaluates them as interpolating cubic B-splines at the projected position
+    and subtracts the result. `tilt_indices` selects and orders the tilts kept
+    in the `TiltSeries`. A grid of ones (`1x1`) is a constant per tilt.
+    """
+    from torch_cubic_spline_grids import CubicBSplineGrid2d
+
+    if image_dimensions_angstrom is None:
+        raise ValueError(
+            "the XML has no ImageDimensionsAngstrom; cannot place its local "
+            "deformation grids - pass apply_local_shifts=False"
+        )
+    width, height = (
+        float(image_dimensions_angstrom[0]),
+        float(image_dimensions_angstrom[1]),
+    )
+    grids = []
+    for t in tilt_indices:
+        nodes = torch.as_tensor(np.stack([grid_x[t], grid_y[t]]), dtype=torch.float32)
+        if nodes.shape[-2:] == (1, 1):  # a constant: no spline needed
+            nodes = nodes.expand(2, 2, 2)
+        grid = CubicBSplineGrid2d.from_interpolating_data(nodes).to(device)
+        grid.requires_grad_(False)  # loaded data; call .requires_grad_(True) to refine
+        grids.append(grid)
+
+    def local_shifts_2d(projected_yx: torch.Tensor) -> torch.Tensor:
+        # projected_yx: (n_points, n_tilts, 2) in Angstroms relative to the image centre
+        u = ((projected_yx[..., 1] + width / 2) / width).clamp(0, 1)  # x -> [0, 1]
+        v = ((projected_yx[..., 0] + height / 2) / height).clamp(0, 1)  # y -> [0, 1]
+        shifts = torch.empty_like(projected_yx)
+        for t, grid in enumerate(grids):
+            movement_xy = grid(torch.stack([v[:, t], u[:, t]], dim=-1))  # (n_points, 2)
+            shifts[:, t, 0] = -movement_xy[:, 1]
+            shifts[:, t, 1] = -movement_xy[:, 0]
+        return shifts
+
+    local_shifts_2d.grids = grids  # type: ignore[attr-defined]  # one CubicBSplineGrid2d per tilt
+    return local_shifts_2d
 
 
 def load_tilt_series_images(

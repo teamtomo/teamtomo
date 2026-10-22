@@ -12,6 +12,7 @@ __email__ = "martenchaillet@gmail.com, davidetorre99@gmail.com"
 from torch_tilt_series.io import (
     from_aretomo_output,
     from_etomo_directory,
+    from_warp_xml,
     load_tilt_series_images,
 )
 from torch_tilt_series.preprocessing import preprocess_tilt_series_images
@@ -23,6 +24,9 @@ TiltSeries.from_aretomo_output = classmethod(  # type: ignore[attr-defined]
 )
 TiltSeries.from_etomo_directory = classmethod(  # type: ignore[attr-defined]
     lambda cls, *args, **kwargs: from_etomo_directory(*args, **kwargs)
+)
+TiltSeries.from_warp_xml = classmethod(  # type: ignore[attr-defined]
+    lambda cls, *args, **kwargs: from_warp_xml(*args, **kwargs)
 )
 
 __all__ = [
