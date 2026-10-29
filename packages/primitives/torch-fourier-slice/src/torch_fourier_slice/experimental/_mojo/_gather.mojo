@@ -25,61 +25,11 @@ def _sample_rfft_3d[
     y_in: Int,
     x_in: Int,
 ) -> C2:
-    """Sample a complex voxel with Friedel symmetry; clamp out-of-range indices.
-
-    Negative kx (x < 0) is folded onto positive kx with conjugation; remaining
-    axes are clamped to their valid range and wrapped into the rfft layout.
-    """
-    comptime assert rec.flat_rank == 4, "volume view must be 4D [d, h, w, 2]"
-    var sidelength = Int(rec.dim[0]())
-    var sidelength_half = Int(rec.dim[2]())
-    var z = z_in
-    var y = y_in
-    var x = x_in
-    var need_conj = False
-    if x < 0:
-        x = -x
-        y = -y
-        z = -z
-        need_conj = True
-    if x > sidelength_half - 1:
-        x = sidelength_half - 1
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi:
-        y = hi
-    elif y < lo:
-        y = lo
-    if z > hi:
-        z = hi
-    elif z < lo:
-        z = lo
-    if y < 0:
-        y = sidelength + y
-    if z < 0:
-        z = sidelength + z
-    if y > sidelength - 1:
-        y = sidelength - 1
-    if z > sidelength - 1:
-        z = sidelength - 1
-    var v = _load_c2(rec, z, y, x)
-    return C2(v[0], -v[1]) if need_conj else v
-
-
-@always_inline
-def _sample_rfft_3d_drop[
-    L: TensorLayout
-](
-    rec: TileTensor[DType.float32, L, MutAnyOrigin],
-    z_in: Int,
-    y_in: Int,
-    x_in: Int,
-) -> C2:
-    """Sample with Friedel symmetry but *drop* (zero) out-of-range voxels.
-
-    The read-side mirror of `_accumulate_3d`: where the splat discards a corner,
-    this returns 0. Used by the backprojection gradient gather so it is the exact
-    adjoint of the scatter (which drops, where the forward gather clamps).
+    """Sample a complex voxel with Friedel symmetry; out-of-range voxels read as 0.
+    Negative kx (x < 0) is folded onto positive kx with conjugation. Zero-padding
+    beyond the grid is the exact read-side mirror of `_accumulate_3d` (which
+    discards such corners), so every gather is the exact adjoint of the scatter;
+    it also matches the canonical layer's zero-padding.
     """
     comptime assert rec.flat_rank == 4, "volume view must be 4D [d, h, w, 2]"
     var sidelength = Int(rec.dim[0]())
@@ -203,44 +153,9 @@ def _interp3d[
 def _sample_rfft_2d[
     L: TensorLayout
 ](img: TileTensor[DType.float32, L, MutAnyOrigin], y_in: Int, x_in: Int,) -> C2:
-    """Sample a complex pixel of a 2D rfft with Friedel symmetry; clamp/wrap.
-
-    Negative kx (x < 0) folds onto positive kx with conjugation; y is clamped to
-    the valid frequency range and wrapped into the rfft row layout.
-    """
-    comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
-    var sidelength = Int(img.dim[0]())
-    var sidelength_half = Int(img.dim[1]())
-    var y = y_in
-    var x = x_in
-    var need_conj = False
-    if x < 0:
-        x = -x
-        y = -y
-        need_conj = True
-    if x > sidelength_half - 1:
-        x = sidelength_half - 1
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi:
-        y = hi
-    elif y < lo:
-        y = lo
-    if y < 0:
-        y = sidelength + y
-    if y > sidelength - 1:
-        y = sidelength - 1
-    var v = _load_c2_line(img, y, x)
-    return C2(v[0], -v[1]) if need_conj else v
-
-
-@always_inline
-def _sample_rfft_2d_drop[
-    L: TensorLayout
-](img: TileTensor[DType.float32, L, MutAnyOrigin], y_in: Int, x_in: Int,) -> C2:
-    """Sample a 2D rfft with Friedel symmetry but *drop* (zero) out-of-range pixels.
-
-    The read-side mirror of `_accumulate_2d`; the exact adjoint of the 2D scatter.
+    """Sample a 2D rfft pixel with Friedel symmetry; out-of-range pixels read as 0.
+    The 2D analogue of `_sample_rfft_3d`: the exact read-side mirror of the
+    2D scatter, so gather and scatter are exact adjoints.
     """
     comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
     var sidelength = Int(img.dim[0]())

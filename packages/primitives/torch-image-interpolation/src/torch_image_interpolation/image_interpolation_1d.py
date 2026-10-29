@@ -47,7 +47,6 @@ def sample_image_1d(
     # set up for sampling with torch.nn.functional.grid_sample
     # coordinates: (..., ) -> (n, )
     coordinates, ps = einops.pack([coordinates], pattern="*")
-    n_samples = coordinates.shape[0]
     w = image.shape[-1]
 
     # handle complex input
@@ -59,18 +58,17 @@ def sample_image_1d(
         image = einops.rearrange(image, "c w complex -> (complex c) w")
 
     # For grid_sample to work with 1D, we need to add a dummy height dimension
-    # and treat it as a 2D image with height=2
-    image = einops.repeat(image, "c w -> c h w", h=2)
-
-    # Create batch of images, one per sample
-    image = einops.repeat(image, "c h w -> b c h w", b=n_samples)
+    # and treat it as a 2D image with height=2.
+    # Sample all points against one image copy (W = n_samples). Repeating the
+    # image per sample OOMs on dense grids.
+    image = einops.repeat(image, "c w -> 1 c h w", h=2)
 
     # Create grid coordinates
     # We need to add a dummy y coordinate (set to 0) to make it work with grid_sample
     dummy_y = torch.zeros_like(coordinates)
     coords_2d = einops.rearrange(
-        [dummy_y, coordinates], "yx b -> b 1 1 yx"
-    )  # (b, 1, 1, 2)
+        [dummy_y, coordinates], "yx b -> 1 1 b yx"
+    )  # (1, 1, b, 2)
 
     # Take the samples
     # We need to convert the coordinates to grid_sample format
@@ -92,11 +90,11 @@ def sample_image_1d(
     # Reconstruct complex valued samples if required
     if input_image_is_complex is True:
         samples = einops.rearrange(
-            samples, "b (complex c) 1 1 -> b c complex", complex=2
+            samples, "1 (complex c) 1 b -> b c complex", complex=2
         )
         samples = utils.view_as_complex(samples.contiguous())  # (b, c)
     else:
-        samples = einops.rearrange(samples, "b c 1 1 -> b c")
+        samples = einops.rearrange(samples, "1 c 1 b -> b c")
 
     # Set samples from outside of image to zero explicitly
     inside = torch.logical_and(coordinates >= 0, coordinates <= w - 1)

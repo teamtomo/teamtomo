@@ -34,7 +34,8 @@ class BondedScatteringFactorTable:
 
     Every environment must provide the same number of ``(a_i, b_i)`` Gaussian
     terms in ``parameters_a`` and ``parameters_b``. Use :attr:`n_terms`
-    to query that count.
+    to query that count. Keys must match ``annotate_bonding_environments``,
+    which lists bonded neighbours by atomic number, e.g. ``"C(HCCN)"``.
     """
 
     parameters_a: Mapping[str, Sequence[float]]
@@ -234,7 +235,11 @@ def resolve_scattering_parameters(
         detail = "; ".join(unsupported[:3])
         if len(unsupported) > 3:
             detail += f"; and {len(unsupported) - 3} more"
-        message = f"unsupported bonded scattering parameters ({detail})"
+        message = (
+            f"unsupported bonded scattering parameters for "
+            f"{len(unsupported)}/{n_atoms} atoms "
+            f"({len(unsupported) / n_atoms:.1%}; {detail})"
+        )
         if bonded_fallback == "error":
             raise ValueError(message)
         warnings.warn(f"{message}; using elemental fallback", UserWarning, stacklevel=2)

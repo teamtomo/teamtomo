@@ -413,5 +413,4 @@ slices = torch.fft.fftshift(slices, dim=-2)             # back to teamtomo layou
 ```
 
 Within the Nyquist band the two are identical (bit-exact for non-interpolating
-rotations); they differ only in how out-of-Nyquist corner samples are handled
-(the canonical kernel zero-pads, these kernels clamp to the edge voxel).
+rotations); both zero-pad out-of-range samples, so results agree to interpolation precision.

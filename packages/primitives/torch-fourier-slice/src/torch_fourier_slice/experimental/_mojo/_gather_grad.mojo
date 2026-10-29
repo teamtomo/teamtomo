@@ -15,32 +15,13 @@ from layout import TensorLayout, TileTensor
 from _common import C2, C6, C8, CUBIC, _cubic_kernel, _cubic_kernel_derivative
 from _gather import (
     _sample_rfft_2d,
-    _sample_rfft_2d_drop,
     _sample_rfft_3d,
-    _sample_rfft_3d_drop,
 )
 
 
 @always_inline
 def _pack(val: C2, gz: C2, gy: C2, gx: C2) -> C8:
     return C8(val[0], val[1], gz[0], gz[1], gy[0], gy[1], gx[0], gx[1])
-
-
-@always_inline
-def _smp[
-    L: TensorLayout
-](
-    rec: TileTensor[DType.float32, L, MutAnyOrigin],
-    z: Int,
-    y: Int,
-    x: Int,
-    drop: Int,
-) -> C2:
-    """Sample, clamping (drop=0, forward gather) or dropping (drop=1, scatter adjoint).
-    """
-    if drop != 0:
-        return _sample_rfft_3d_drop(rec, z, y, x)
-    return _sample_rfft_3d(rec, z, y, x)
 
 
 @always_inline
@@ -51,7 +32,6 @@ def _interp3d_linear_with_grad[
     kz: Float32,
     ky: Float32,
     kx: Float32,
-    drop: Int,
 ) -> C8:
     """Trilinear value + analytical (d/dkz, d/dky, d/dkx) at the sample point.
     """
@@ -64,14 +44,14 @@ def _interp3d_linear_with_grad[
     var fz = kz - kz_floor
     var fy = ky - ky_floor
     var fx = kx - kx_floor
-    var p000 = _smp(rec, z, y, x, drop)
-    var p001 = _smp(rec, z, y, x + 1, drop)
-    var p010 = _smp(rec, z, y + 1, x, drop)
-    var p011 = _smp(rec, z, y + 1, x + 1, drop)
-    var p100 = _smp(rec, z + 1, y, x, drop)
-    var p101 = _smp(rec, z + 1, y, x + 1, drop)
-    var p110 = _smp(rec, z + 1, y + 1, x, drop)
-    var p111 = _smp(rec, z + 1, y + 1, x + 1, drop)
+    var p000 = _sample_rfft_3d(rec, z, y, x)
+    var p001 = _sample_rfft_3d(rec, z, y, x + 1)
+    var p010 = _sample_rfft_3d(rec, z, y + 1, x)
+    var p011 = _sample_rfft_3d(rec, z, y + 1, x + 1)
+    var p100 = _sample_rfft_3d(rec, z + 1, y, x)
+    var p101 = _sample_rfft_3d(rec, z + 1, y, x + 1)
+    var p110 = _sample_rfft_3d(rec, z + 1, y + 1, x)
+    var p111 = _sample_rfft_3d(rec, z + 1, y + 1, x + 1)
     var p00 = p000 + (p001 - p000) * fx
     var p01 = p010 + (p011 - p010) * fx
     var p10 = p100 + (p101 - p100) * fx
@@ -98,7 +78,6 @@ def _interp3d_cubic_with_grad[
     kz: Float32,
     ky: Float32,
     kx: Float32,
-    drop: Int,
 ) -> C8:
     """Tricubic value + analytical (d/dkz, d/dky, d/dkx) over the 4x4x4 stencil.
     """
@@ -124,7 +103,7 @@ def _interp3d_cubic_with_grad[
             for ox in range(-1, 3):
                 var wx = _cubic_kernel(fx - Float32(ox))
                 var dwx = _cubic_kernel_derivative(fx - Float32(ox))
-                var s = _smp(rec, z + oz, y + oy, x + ox, drop)
+                var s = _sample_rfft_3d(rec, z + oz, y + oy, x + ox)
                 val = val + s * (wz * wy * wx)
                 gz = gz + s * (dwz * wy * wx)
                 gy = gy + s * (wz * dwy * wx)
@@ -140,16 +119,13 @@ def _interp3d_with_grad[
     kz: Float32,
     ky: Float32,
     kx: Float32,
-    drop: Int,
 ) -> C8:
     """Interpolate + spatial gradients (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
 
-    `drop`: 0 clamps out-of-range voxels (forward gather), 1 drops them (the
-    exact adjoint of the scatter, for the backprojection gradient).
     """
     comptime if interp == CUBIC:
-        return _interp3d_cubic_with_grad(rec, kz, ky, kx, drop)
-    return _interp3d_linear_with_grad(rec, kz, ky, kx, drop)
+        return _interp3d_cubic_with_grad(rec, kz, ky, kx)
+    return _interp3d_linear_with_grad(rec, kz, ky, kx)
 
 
 # ===========================================================================
@@ -164,29 +140,12 @@ def _pack2d(val: C2, gy: C2, gx: C2) -> C6:
 
 
 @always_inline
-def _smp2d[
-    L: TensorLayout
-](
-    img: TileTensor[DType.float32, L, MutAnyOrigin],
-    y: Int,
-    x: Int,
-    drop: Int,
-) -> C2:
-    """Sample 2D, clamping (drop=0, forward) or dropping (drop=1, scatter adjoint).
-    """
-    if drop != 0:
-        return _sample_rfft_2d_drop(img, y, x)
-    return _sample_rfft_2d(img, y, x)
-
-
-@always_inline
 def _interp2d_linear_with_grad[
     L: TensorLayout
 ](
     img: TileTensor[DType.float32, L, MutAnyOrigin],
     ky: Float32,
     kx: Float32,
-    drop: Int,
 ) -> C6:
     """Bilinear value + analytical (d/dky, d/dkx) at the sample point."""
     var ky_floor = floor(ky)
@@ -195,10 +154,10 @@ def _interp2d_linear_with_grad[
     var x = Int(kx_floor)
     var fy = ky - ky_floor
     var fx = kx - kx_floor
-    var p00 = _smp2d(img, y, x, drop)
-    var p01 = _smp2d(img, y, x + 1, drop)
-    var p10 = _smp2d(img, y + 1, x, drop)
-    var p11 = _smp2d(img, y + 1, x + 1, drop)
+    var p00 = _sample_rfft_2d(img, y, x)
+    var p01 = _sample_rfft_2d(img, y, x + 1)
+    var p10 = _sample_rfft_2d(img, y + 1, x)
+    var p11 = _sample_rfft_2d(img, y + 1, x + 1)
     var p0 = p00 + (p01 - p00) * fx
     var p1 = p10 + (p11 - p10) * fx
     var val = p0 + (p1 - p0) * fy
@@ -214,7 +173,6 @@ def _interp2d_cubic_with_grad[
     img: TileTensor[DType.float32, L, MutAnyOrigin],
     ky: Float32,
     kx: Float32,
-    drop: Int,
 ) -> C6:
     """Bicubic value + analytical (d/dky, d/dkx) over the 4x4 stencil."""
     var ky_floor = floor(ky)
@@ -232,7 +190,7 @@ def _interp2d_cubic_with_grad[
         for ox in range(-1, 3):
             var wx = _cubic_kernel(fx - Float32(ox))
             var dwx = _cubic_kernel_derivative(fx - Float32(ox))
-            var s = _smp2d(img, y + oy, x + ox, drop)
+            var s = _sample_rfft_2d(img, y + oy, x + ox)
             val = val + s * (wy * wx)
             gy = gy + s * (dwy * wx)
             gx = gx + s * (wy * dwx)
@@ -246,13 +204,10 @@ def _interp2d_with_grad[
     img: TileTensor[DType.float32, L, MutAnyOrigin],
     ky: Float32,
     kx: Float32,
-    drop: Int,
 ) -> C6:
     """Interpolate + spatial gradients (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
 
-    `drop`: 0 clamps out-of-range pixels (forward gather), 1 drops them (the exact
-    adjoint of the scatter, for the insertion gradient).
     """
     comptime if interp == CUBIC:
-        return _interp2d_cubic_with_grad(img, ky, kx, drop)
-    return _interp2d_linear_with_grad(img, ky, kx, drop)
+        return _interp2d_cubic_with_grad(img, ky, kx)
+    return _interp2d_linear_with_grad(img, ky, kx)
