@@ -24,6 +24,7 @@ def _intensity_to_micrograph(
     intensity: torch.Tensor,
     config: MicrographSimulationConfig,
     *,
+    draw_index: int | None = None,
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     """Shared intensity → counts path (envelopes, dose, fluence, Poisson, DQE)."""
@@ -57,7 +58,9 @@ def _intensity_to_micrograph(
     if config.return_expected_counts or not config.poisson.apply:
         counts = expected
     else:
-        counts = poisson_sample(expected, config.poisson, generator=generator)
+        counts = poisson_sample(
+            expected, config.poisson, draw_index=draw_index, generator=generator
+        )
 
     if config.dqe.apply and not config.dqe.apply_before_noise:
         counts = apply_dqe(counts, config.dqe)
@@ -69,6 +72,7 @@ def simulate_micrograph(
     exit_wave: torch.Tensor,
     config: MicrographSimulationConfig,
     *,
+    draw_index: int | None = None,
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     """Form a 2D micrograph from a complex exit wave.
@@ -79,8 +83,11 @@ def simulate_micrograph(
         Complex tensor with shape ``(..., H, W)``.
     config : MicrographSimulationConfig
         Optics, fluence, noise, and detector options.
+    draw_index : int or None
+        Which draw this is (e.g. the frame or tilt number); required when
+        ``config.poisson.seed`` is set. See :func:`poisson_sample`.
     generator : torch.Generator or None
-        Optional RNG passed to Poisson sampling.
+        Optional RNG for Poisson sampling. See :func:`poisson_sample`.
 
     Returns
     -------
@@ -100,7 +107,9 @@ def simulate_micrograph(
         pixel_size=config.pixel_size,
     )
     intensity = exit_wave_to_intensity(wave)
-    return _intensity_to_micrograph(intensity, config, generator=generator)
+    return _intensity_to_micrograph(
+        intensity, config, draw_index=draw_index, generator=generator
+    )
 
 
 def simulate_micrograph_from_intensity(
@@ -108,6 +117,7 @@ def simulate_micrograph_from_intensity(
     config: MicrographSimulationConfig,
     *,
     skip_ctf: bool = True,
+    draw_index: int | None = None,
     generator: torch.Generator | None = None,
 ) -> torch.Tensor:
     """Form a micrograph when intensity is already available.
@@ -120,8 +130,11 @@ def simulate_micrograph_from_intensity(
         Simulation options. CTF is skipped by default.
     skip_ctf : bool
         When ``True`` (default), CTF settings are ignored.
+    draw_index : int or None
+        Which draw this is (e.g. the frame or tilt number); required when
+        ``config.poisson.seed`` is set. See :func:`poisson_sample`.
     generator : torch.Generator or None
-        Optional RNG for Poisson sampling.
+        Optional RNG for Poisson sampling. See :func:`poisson_sample`.
 
     Returns
     -------
@@ -137,4 +150,6 @@ def simulate_micrograph_from_intensity(
         )
         raise ValueError(msg)
 
-    return _intensity_to_micrograph(intensity, config, generator=generator)
+    return _intensity_to_micrograph(
+        intensity, config, draw_index=draw_index, generator=generator
+    )

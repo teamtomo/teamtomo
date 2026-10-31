@@ -126,24 +126,19 @@ class FluenceConfig(BaseModelTeamTomo):
 class PoissonConfig(BaseModelTeamTomo):
     """Poisson shot-noise sampling options.
 
-    By default, sampling draws fresh randomness from the global RNG on every
-    call, so repeated calls with the same config (e.g. one config reused
-    across the frames of a tilt series) yield independent noise. Set
-    ``deterministic=True`` with a ``seed`` to instead get reproducible
-    (but then identical-per-call, unless the caller threads its own
-    persistent ``torch.Generator`` through each call) sampling.
+    Every draw uses its own freshly seeded generator, so repeated calls with
+    the same config (e.g. one config reused across the frames of a tilt
+    series) yield independent noise on any device.
+
+    Without a ``seed``, each draw's seed comes from torch's global RNG, so
+    ``torch.manual_seed`` makes a whole run reproducible. With a ``seed``,
+    each call must also pass a ``draw_index`` (e.g. the frame or tilt
+    number): the same seed and index always give the same noise, and
+    different indices give independent noise.
     """
 
     apply: bool = True
-    deterministic: bool = False
     seed: int | None = None
-
-    @model_validator(mode="after")
-    def _validate_seed(self) -> Self:
-        if self.deterministic and self.seed is None:
-            msg = "poisson.seed must be set when poisson.deterministic is True."
-            raise ValueError(msg)
-        return self
 
 
 class DqeConfig(BaseModelTeamTomo):
