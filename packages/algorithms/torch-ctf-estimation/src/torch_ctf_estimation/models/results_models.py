@@ -62,13 +62,19 @@ class CTF(BaseModel):
 
 
 class LinearDefocusModel(BaseModel):
-    """Linear (tilt) defocus: defocus_0 + gradient_magnitude * direction in (x,y)."""
+    """Linear (tilt) defocus: defocus_0 + gradient_magnitude * projected position.
+
+    The projected position is ``(row - 0.5) * cos(angle) + (col - 0.5) * sin(angle)``,
+    with row and column normalised to [0, 1], so the angle is measured from the row
+    axis towards the column axis. The angle is reported in [0, 180) and the magnitude
+    carries the sign of the gradient along that direction.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     defocus_0: float
-    defocus_gradient_magnitude: float
-    defocus_gradient_angle: float  # degrees
+    defocus_gradient_magnitude: float  # µm per normalised unit; may be negative
+    defocus_gradient_angle: float  # degrees, in [0, 180)
     # When t>1, optional 1D spline grid data for serialization
     defocus_0_spline_data: torch.Tensor | None = None
     gradient_magnitude_spline_data: torch.Tensor | None = None

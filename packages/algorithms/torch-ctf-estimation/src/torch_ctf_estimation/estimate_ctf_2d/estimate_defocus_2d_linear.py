@@ -23,6 +23,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _astig_angle_to_m90_p90,
     _check_astig_grad_and_reset,
     _clamp_optional_bounds,
+    _fold_gradient_direction,
     _get_astig_clamped,
     _principal_defocus,
     _reset_astigmatism,
@@ -300,18 +301,17 @@ def _linear_final_scalars(
             + params.grad_angle_v_spline_1d.data**2
             + 1e-8
         )
-        _grad_angle_deg = (
+        _grad_angle_deg, _grad_mag = _fold_gradient_direction(
             torch.atan2(
                 params.grad_angle_v_spline_1d.data / _gn,
                 params.grad_angle_u_spline_1d.data / _gn,
             )
-            * (180.0 / math.pi)
-            + 180.0
+            * (180.0 / math.pi),
+            params.grad_mag_spline_1d.data,
         )
-        _grad_angle_deg = _grad_angle_deg % 180.0
         final_grad_angle = float(_grad_angle_deg.mean().cpu().item())
         final_defocus_0 = float(params.defocus_0_spline_1d.data.mean().cpu().item())
-        final_grad_mag = float(params.grad_mag_spline_1d.data.mean().cpu().item())
+        final_grad_mag = float(_grad_mag.mean().cpu().item())
         mean_defocus = float(
             params.defocus_0_spline_1d.data.detach().cpu().mean().item()
         )
@@ -322,25 +322,21 @@ def _linear_final_scalars(
         _gn = torch.sqrt(
             params.grad_angle_u.detach() ** 2 + params.grad_angle_v.detach() ** 2 + 1e-8
         )
-        final_grad_angle = float(
-            (
-                torch.atan2(
-                    params.grad_angle_v.detach() / _gn,
-                    params.grad_angle_u.detach() / _gn,
-                )
-                .cpu()
-                .item()
-                * (180.0 / math.pi)
-                + 180.0
+        final_grad_angle, final_grad_mag = _fold_gradient_direction(
+            torch.atan2(
+                params.grad_angle_v.detach() / _gn,
+                params.grad_angle_u.detach() / _gn,
             )
-            % 180.0
+            .cpu()
+            .item()
+            * (180.0 / math.pi),
+            float(params.grad_mag_param.detach().cpu().item()),
         )
         if params.defocus_0_param is not None:
             final_defocus_0 = float(params.defocus_0_param.detach().cpu().item())
         else:
             assert params.defocus_0_fixed is not None
             final_defocus_0 = float(params.defocus_0_fixed)
-        final_grad_mag = float(params.grad_mag_param.detach().cpu().item())
         if params.defocus_0_param is not None:
             mean_defocus = float(params.defocus_0_param.detach().cpu().item())
         else:

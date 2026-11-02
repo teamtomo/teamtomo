@@ -2,7 +2,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, overload
 
 import torch
 from torch_fourier_filter.bandpass import bandpass_filter
@@ -26,6 +26,40 @@ def _principal_defocus(mean_defocus: float, astigmatism: float) -> tuple[float, 
     half the difference between the principal defocuses.
     """
     return mean_defocus + astigmatism, mean_defocus - astigmatism
+
+
+@overload
+def _fold_gradient_direction(
+    angle_deg: float, magnitude: float
+) -> tuple[float, float]: ...
+
+
+@overload
+def _fold_gradient_direction(
+    angle_deg: torch.Tensor, magnitude: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]: ...
+
+
+def _fold_gradient_direction(
+    angle_deg: float | torch.Tensor,
+    magnitude: float | torch.Tensor,
+) -> tuple[float, float] | tuple[torch.Tensor, torch.Tensor]:
+    """Fold a linear defocus gradient direction into [0, 180), keeping the field.
+
+    A direction and the opposite direction with a negated magnitude describe the same
+    gradient, so whenever the angle is moved by 180 degrees the magnitude changes sign.
+    Works element-wise on tensors.
+    """
+    if isinstance(angle_deg, torch.Tensor):
+        angle = torch.remainder(angle_deg, 360.0)
+        flip = angle >= 180.0
+        return torch.where(flip, angle - 180.0, angle), torch.where(
+            flip, -magnitude, magnitude
+        )
+    angle = angle_deg % 360.0
+    if angle >= 180.0:
+        return angle - 180.0, -magnitude
+    return angle, magnitude
 
 
 def _clamp_optional_bounds(

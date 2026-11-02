@@ -9,6 +9,7 @@ from torch_cubic_spline_grids import CubicCatmullRomGrid3d
 
 from torch_ctf_estimation.estimate_ctf_1d import estimate_ctf_1d
 from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
+    _fold_gradient_direction,
     _principal_defocus,
 )
 from torch_ctf_estimation.models import (
@@ -148,8 +149,9 @@ def defocus_field_from_1d_fits(
                 stacklevel=2,
             )
         else:
-            angle_rad = math.atan2(v, u)
-            angle_deg = (angle_rad * 180.0 / math.pi + 180.0) % 180.0
+            angle_deg, grad_mag = _fold_gradient_direction(
+                math.degrees(math.atan2(v, u)), grad_mag
+            )
             if math.isnan(angle_deg):
                 angle_deg = 0.0
                 warnings.warn(
