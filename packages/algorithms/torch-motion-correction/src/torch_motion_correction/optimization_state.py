@@ -52,8 +52,16 @@ class OptimizationTracker:
 
     Parameters
     ----------
-    optimization_checkpoints : list[OptimizationState]
-        List of optimization checkpoints recorded during the optimization process.
+    sample_every_n_steps : int
+        Frequency of sampling checkpoints during optimization.
+    total_steps : int
+        Total number of optimization steps.
+
+    Attributes
+    ----------
+    checkpoints : list[OptimizationState]
+        Optimization checkpoints recorded during the optimization process.
+        Starts empty.
     sample_every_n_steps : int
         Frequency of sampling checkpoints during optimization.
     total_steps : int
@@ -86,7 +94,7 @@ class OptimizationTracker:
 
         Parameters
         ----------
-        step: int
+        step : int
             The optimization step number.
 
         Returns
@@ -104,12 +112,12 @@ class OptimizationTracker:
 
         Parameters
         ----------
-        deformation_field: torch.Tensor
+        deformation_field : torch.Tensor
             The deformation field at this checkpoint with shape (2, nt, nh, nw) where
             2 corresponds to (y, x) shifts.
-        loss: float
+        loss : float
             The loss value at this checkpoint.
-        step: int
+        step : int
             The optimization step number at this checkpoint.
         """
         self.checkpoints.append(OptimizationState(deformation_field, loss, step))
@@ -135,7 +143,7 @@ class OptimizationTracker:
 
         Parameters
         ----------
-        filepath: str
+        filepath : str
             The path to the JSON file to save the optimization trajectory to.
         """
         import json

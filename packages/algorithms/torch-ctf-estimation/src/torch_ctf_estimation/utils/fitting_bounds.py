@@ -42,8 +42,8 @@ def resolve_phase_shift_fitting(
     """
     Resolve phase-shift optimisation mode, value, and effective bounds.
 
-    When bounds are equal (e.g. ``(45.0, 45.0)``), phase is fixed at that value
-    and ``optimize_phase_shift`` is forced to False.
+    When bounds are equal (e.g. `(45.0, 45.0)`), phase is fixed at that value
+    and `optimize_phase_shift` is forced to False.
 
     Returns
     -------

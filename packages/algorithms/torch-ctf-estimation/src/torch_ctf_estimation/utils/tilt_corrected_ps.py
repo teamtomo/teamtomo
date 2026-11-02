@@ -1,17 +1,17 @@
 """Tilt-corrected mean power spectrum (CTFFIND5-style, Elferich et al., eLife 2024).
 
 Per-tile 2D rFFT power is **resampled isotropically in spatial frequency** so Thon rings
-line up at a reference defocus: with ``m = sqrt(|Δf_local/Δf_average|)`` (thin-sample
-phase: χ ∝ Δf q²), use ``k_in = k_out * sqrt(|Δf_average/Δf_local|)`` when reading the
+line up at a reference defocus: with `m = sqrt(|Δf_local/Δf_average|)` (thin-sample
+phase: χ ∝ Δf q²), use `k_in = k_out * sqrt(|Δf_average/Δf_local|)` when reading the
 patch spectrum onto the common output grid (same convention as plotting each patch 1D
-profile vs ``q * m``). Bilinear interpolation uses
-:func:`torch_image_interpolation.sample_image_2d`.
+profile vs `q * m`). Bilinear interpolation uses
+`torch_image_interpolation.sample_image_2d`.
 
-``effective_pixel_spacing_tilt_magnification`` gives ``Δx' = Δx / m``, i.e. the pixel
-that would assign physical frequency ``m * q_bin`` to FFT bin ``j`` at spacing ``Δx``.
+`effective_pixel_spacing_tilt_magnification` gives `Δx' = Δx / m`, i.e. the pixel
+that would assign physical frequency `m * q_bin` to FFT bin `j` at spacing `Δx`.
 
 The 1D API averages tilt-corrected 2D spectra, then applies equiphase or rotational
-averaging once on the mean 2D spectrum (defocus reference ``Δf_average``).
+averaging once on the mean 2D spectrum (defocus reference `Δf_average`).
 """
 
 from __future__ import annotations
@@ -57,20 +57,20 @@ def effective_pixel_spacing_tilt_magnification(
     defocus_average_um: float,
     eps: float = 1e-12,
 ) -> float:
-    """Effective sample spacing (Å) for CTF at reference defocus: ``Δx' = Δx / m``.
+    """Effective sample spacing (Å) for CTF at reference defocus: `Δx' = Δx / m`.
 
-    With ``m = sqrt(|Δf_local/Δf_avg|)`` (stabilised near zero), using
-    ``Δx' = Δx / m`` matches **multiply pixel size by ``1/m``**: the physical
-    frequency at FFT bin ``j`` is ``fftfreq(j)/Δx' = m * fftfreq(j)/Δx``.
+    With `m = sqrt(|Δf_local/Δf_avg|)` (stabilised near zero), using
+    `Δx' = Δx / m` matches **multiply pixel size by `1/m`**: the physical
+    frequency at FFT bin `j` is `fftfreq(j)/Δx' = m * fftfreq(j)/Δx`.
 
     Parameters
     ----------
     base_pixel_spacing_angstroms
-        True spacing used to form the patch and compute ``rfft``.
+        True spacing used to form the patch and compute `rfft`.
     defocus_local_um, defocus_average_um
         Local and reference defocus (µm); ratio stabilised near zero.
     eps
-        Floor on ``|Δf_avg|`` for division.
+        Floor on `|Δf_avg|` for division.
     """
     d_avg = defocus_average_um
     d_loc = defocus_local_um
@@ -143,11 +143,11 @@ def warp_rfft_power_isotropic(
     """
     Resample rFFT power so output spatial frequency f reads input at f * scale_factor.
 
-    With magnification ``m = sqrt(Δf_local/Δf_average)``, map to reference defocus using
-    ``scale_factor = sqrt(|Δf_average/Δf_local|)`` (positive; defocus ratio stabilised
-    in the caller when |Δf| is tiny). Frequency rescaling is ``k_in = s * k_out`` with
-    scalar ``s``. Interpolation: bilinear via ``sample_image_2d`` (y, x) in pixel index
-    coordinates ``[0, N-1]``.
+    With magnification `m = sqrt(Δf_local/Δf_average)`, map to reference defocus using
+    `scale_factor = sqrt(|Δf_average/Δf_local|)` (positive; defocus ratio stabilised
+    in the caller when |Δf| is tiny). Frequency rescaling is `k_in = s * k_out` with
+    scalar `s`. Interpolation: bilinear via `sample_image_2d` (y, x) in pixel index
+    coordinates `[0, N-1]`.
     """
     device = power_rfft.device
     dtype = power_rfft.dtype

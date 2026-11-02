@@ -34,33 +34,33 @@ def projection_align(
     """Projection-based alignment via Fourier-slice 2-D projections.
 
     For each candidate orientation of the mobile, a 2-D projection is
-    computed using :func:`torch_fourier_slice.project_3d_to_2d` and compared
+    computed using `torch_fourier_slice.project_3d_to_2d` and compared
     against the reference projection at the same viewing direction via 2-D
     normalised cross-correlation.  The orientation with the highest 2-D NCC
     score provides the rotation, and the CC-map peak position provides the
     in-plane translation.
 
-    .. note::
-        Only the in-plane translation components (y and x) are recovered.
-        The depth shift (along the projection axis z) is set to zero and
-        should be refined with :func:`gradient_refine`.
+    Only the in-plane translation components (y and x) are recovered.
+    The depth shift (along the projection axis z) is set to zero and
+    should be refined with `gradient_refine`.
 
     Parameters
     ----------
     reference : torch.Tensor
-        ``(d, h, w)`` reference volume.  Must be cubic (``d == h == w``).
+        `(d, h, w)` reference volume.  Must be cubic (`d == h == w`).
     mobile : torch.Tensor
-        ``(d, h, w)`` mobile volume at the same voxel size.
+        `(d, h, w)` mobile volume at the same voxel size.
     config : ProjectionAlignmentConfig or None
-        Alignment parameters.
+        Alignment parameters. Defaults are used when `None`.
     mask : torch.Tensor or None
-        Optional ``(d, h, w)`` soft mask applied before projection.
+        Optional `(d, h, w)` soft mask applied before projection.
 
     Returns
     -------
     AlignmentResult
-        Best rotation matrix (3 x 3, zyx), translation ``[0, dy, dx]`` in
-        pixels, and peak 2-D NCC score.
+        Best rotation matrix (3 x 3, zyx), translation `[0, dy, dx]` in
+        pixels, and peak 2-D cross-correlation score (see
+        `AlignmentResult.score`).
     """
     if config is None:
         config = ProjectionAlignmentConfig()

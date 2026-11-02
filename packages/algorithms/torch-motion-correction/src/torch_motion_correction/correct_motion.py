@@ -22,26 +22,26 @@ def correct_motion(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) array of images to motion correct. May reside on different device than
         specified compute 'device' (e.g. large super-res movie stored on CPU).
-    deformation_field: DeformationField
+    deformation_field : DeformationField
         Spatiotemporal deformation field with shape (2, nt, nh, nw) in Angstroms.
-        The ``grid_type`` attribute of the
-        :class:`~torch_motion_correction.types.DeformationField` controls the
+        The `grid_type` attribute of the
+        `DeformationField` controls the
         interpolation method.
-    pixel_spacing: float
+    pixel_spacing : float
         Pixel spacing in Angstroms
-    grad: bool
+    grad : bool
         Whether to enable gradients. Default is False.
-    device: torch.device, optional
+    device : torch.device, optional
         Device for computation. Default is None, which uses the device of the input
         image.
 
     Returns
     -------
     corrected_frames: torch.Tensor
-        (t, h, w) corrected images, on the same device as the input ``image``.
+        (t, h, w) corrected images, on the same device as the input `image`.
     """
     if device is None:
         device = image.device
@@ -91,13 +91,13 @@ def _correct_frame(
 
     Parameters
     ----------
-    frame: torch.Tensor
+    frame : torch.Tensor
         (h, w) frame to correct
-    pixel_spacing: float
+    pixel_spacing : float
         Pixel spacing in Angstroms
-    frame_deformation_grid: torch.Tensor
+    frame_deformation_grid : torch.Tensor
         (yx, h, w) deformation grid
-    pixel_grid: torch.Tensor
+    pixel_grid : torch.Tensor
         (h, w, 2) yx pixel coordinate grid.
 
     Returns
@@ -136,13 +136,13 @@ def get_pixel_shifts(
 
     Parameters
     ----------
-    frame: torch.Tensor
+    frame : torch.Tensor
         (h, w) frame to correct
-    pixel_spacing: float
+    pixel_spacing : float
         Pixel spacing in Angstroms
-    frame_deformation_grid: torch.Tensor
+    frame_deformation_grid : torch.Tensor
         (yx, h, w) deformation grid
-    pixel_grid: torch.Tensor
+    pixel_grid : torch.Tensor
         (h, w, 2) pixel grid
 
     Returns
@@ -193,18 +193,18 @@ def correct_motion_two_grids(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) array of images to motion correct
-    new_deformation_field: DeformationField
+    new_deformation_field : DeformationField
         Optimizable deformation field with gradients. Created via
-        :meth:`DeformationField.initialize_optimization_grids`.
-    base_deformation_field: DeformationField
+        `DeformationField.initialize_optimization_grids`.
+    base_deformation_field : DeformationField
         Frozen base deformation field.
-    pixel_spacing: float
+    pixel_spacing : float
         Pixel spacing in Angstroms
-    grad: bool
+    grad : bool
         Whether to enable gradients. Default is True.
-    device: torch.device, optional
+    device : torch.device, optional
         Device for computation. Default is None, which uses the device of the
         input image.
 
@@ -268,19 +268,19 @@ def _correct_frame_two_grids(
 
     Parameters
     ----------
-    frame: torch.Tensor
+    frame : torch.Tensor
         (h, w) frame to correct
-    new_field: DeformationField
+    new_field : DeformationField
         Optimizable deformation field with gradients
-    base_field: DeformationField
+    base_field : DeformationField
         Frozen base deformation field
-    frame_t: float
+    frame_t : float
         Timepoint to evaluate at [0, 1]
-    grid_shape: tuple[int, int]
+    grid_shape : tuple[int, int]
         (h, w) shape of the grid to evaluate at
-    pixel_spacing: float
+    pixel_spacing : float
         Pixel spacing in Angstroms
-    pixel_grid: torch.Tensor
+    pixel_grid : torch.Tensor
         (h, w, 2) yx pixel coordinate grid.
 
     Returns
@@ -326,13 +326,13 @@ def correct_motion_slow(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) array of images to motion correct
-    deformation_field: DeformationField
+    deformation_field : DeformationField
         Spatiotemporal deformation field with shape (2, nt, nh, nw) in Angstroms.
-    grad: bool
+    grad : bool
         Whether to enable gradients. Default is False.
-    device: torch.device, optional
+    device : torch.device, optional
         Device for computation. Default is None, which uses the device of the
         input image.
 
@@ -384,13 +384,13 @@ def _correct_frame_slow(
 
     Parameters
     ----------
-    frame: torch.Tensor
+    frame : torch.Tensor
         (h, w) frame to correct
-    deformation_grid: torch.Tensor
+    deformation_grid : torch.Tensor
         (yx, h, w) deformation grid
-    t: float
+    t : float
         Timepoint to evaluate at [0, 1]
-    pixel_grid: torch.Tensor
+    pixel_grid : torch.Tensor
         (h, w, 2) yx pixel coordinate grid.
 
     Returns
@@ -436,24 +436,24 @@ def correct_motion_fast(
     """Fast motion correction for single-patch deformation fields using FFT.
 
     Requires a single-patch deformation field (final two spatial dimensions are
-    both 1) and applies FFT-based whole-frame shifts via ``fourier_shift_dft_2d``.
+    both 1) and applies FFT-based whole-frame shifts via `fourier_shift_dft_2d`.
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) array of images to motion correct. May reside on a different
-        device than ``device`` (e.g. large super-res movie stored on CPU).
-    deformation_field: DeformationField
+        device than `device` (e.g. large super-res movie stored on CPU).
+    deformation_field : DeformationField
         Deformation field with shape (2, t, 1, 1) in Angstroms.
-    device: torch.device, optional
+    device : torch.device, optional
         Device for computation
-    verbose: bool
+    verbose : bool
         Whether to print progress information. Default is False.
 
     Returns
     -------
     corrected_frames: torch.Tensor
-        (t, h, w) corrected images, on the same device as the input ``image``.
+        (t, h, w) corrected images, on the same device as the input `image`.
     """
     if device is None:
         device = image.device

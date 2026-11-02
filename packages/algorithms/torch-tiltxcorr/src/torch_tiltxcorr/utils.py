@@ -1,3 +1,5 @@
+"""Image tapering, stretching and cross-correlation helpers."""
+
 import torch
 from torch_affine_utils.transforms_2d import R, S, T
 from torch_affine_utils import homogenise_coordinates
@@ -32,6 +34,12 @@ def apply_stretch_perpendicular_to_tilt_axis(
     tilt_axis_angle: float,
     scale_factor: float,
 ) -> torch.Tensor:
+    """Stretch an image by `scale_factor` perpendicular to the tilt axis.
+
+    The stretch is about the image center (`(h // 2, w // 2)`), along the
+    direction perpendicular to the tilt axis at `tilt_axis_angle` degrees,
+    using bicubic interpolation.
+    """
     # grab image dimensions and calculate center
     h, w = image.shape[-2:]
     device = image.device
@@ -84,8 +92,7 @@ def calculate_cross_correlation(
 def get_shift_from_correlation_image(
     correlation_image: torch.Tensor,
 ) -> torch.Tensor:
-    """
-    Extract shift from 2D correlation image
+    """Extract shift from 2D correlation image.
 
     The shift should be applied to img2 to align with img1.
     Uses Fourier upsampling for sub-voxel accuracy: extracts a region around the
@@ -100,7 +107,8 @@ def get_shift_from_correlation_image(
     Returns
     -------
     torch.Tensor
-        2D shift vector [z, y, x]
+        `(2,)` yx shift vector, in pixels, of the peak relative to the
+        image center.
     """
     # fix these values for now to ensure stable behaviour
     patch_size: int = 16
@@ -162,6 +170,12 @@ def transform_shifts_from_stretched_images(
     tilt_axis_angle: float,
     scale_factor: float,
 ) -> torch.Tensor:
+    """Map a `(2,)` yx shift measured on a stretched image back to the original.
+
+    Applies the same stretch geometry as
+    `apply_stretch_perpendicular_to_tilt_axis` (scaling by `1 / scale_factor`
+    perpendicular to the tilt axis) to the shift vector.
+    """
     device = shift.device
 
     # to homogenous coordinate vector: (2,) -> (3,)

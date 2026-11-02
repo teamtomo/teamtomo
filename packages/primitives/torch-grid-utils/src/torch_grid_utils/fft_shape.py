@@ -5,7 +5,19 @@ from typing import Sequence
 
 
 def rfft_shape(input_shape: Sequence[int]) -> tuple[int, ...]:
-    """Get the output shape of an ``rfft`` on an input with ``input_shape``."""
+    """Get the output shape of an `rfft` on an input with `input_shape`.
+
+    Parameters
+    ----------
+    input_shape : Sequence[int]
+        Shape of the real-valued input. The `rfft` is assumed to be taken over
+        the last dimension.
+
+    Returns
+    -------
+    tuple[int, ...]
+        `input_shape` with the last dimension replaced by `n // 2 + 1`.
+    """
     out = list(input_shape)
     out[-1] = int((out[-1] / 2) + 1)
     return tuple(out)

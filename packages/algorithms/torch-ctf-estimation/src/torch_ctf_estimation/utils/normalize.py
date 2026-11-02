@@ -8,7 +8,7 @@ def normalize_image(image: torch.Tensor) -> torch.Tensor:
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         Image to normalize.
 
     Returns

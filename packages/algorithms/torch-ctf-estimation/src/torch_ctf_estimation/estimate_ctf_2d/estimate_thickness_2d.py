@@ -36,7 +36,7 @@ def _eval_defocus_at_positions(
     defocus: float | CubicCatmullRomGrid3d,
     positions_t: torch.Tensor,
 ) -> torch.Tensor:
-    """Return defocus values at ``positions_t`` for one time frame.
+    """Return defocus values at `positions_t` for one time frame.
 
     Parameters
     ----------
@@ -86,18 +86,18 @@ def estimate_thickness_2d(
     Parameters
     ----------
     patch_power_spectra : torch.Tensor
-        Shape ``(t, gh, gw, ph, pw_rfft)`` — per-patch rfft power spectra.
+        Shape `(t, gh, gw, ph, pw_rfft)` — per-patch rfft power spectra.
     normalised_patch_positions : torch.Tensor
-        Shape ``(t, gh, gw, 3)`` — normalised (t, y, x) positions in [0, 1].
+        Shape `(t, gh, gw, 3)` — normalised (t, y, x) positions in [0, 1].
     thickness_grid_resolution : tuple[int, int, int]
-        ``(nt, nh, nw)`` control-point resolution for the thickness spline.
+        `(nt, nh, nw)` control-point resolution for the thickness spline.
     frequency_fit_range_angstroms : tuple[float, float]
-        ``(low, high)`` spatial frequency cutoffs for fitting in Angstroms.
+        `(low, high)` spatial frequency cutoffs for fitting in Angstroms.
     initial_thickness : float
         Starting thickness in Angstroms for the spline grid.
     defocus : float | CubicCatmullRomGrid3d
         Fixed defocus in micrometers.  Pass a scalar for uniform defocus or a
-        pre-fitted ``CubicCatmullRomGrid3d`` (from a prior 2D defocus fit) for
+        pre-fitted `CubicCatmullRomGrid3d` (from a prior 2D defocus fit) for
         spatially / temporally varying defocus.
     astigmatism : float
         Fixed astigmatism in micrometers. Default 0.0.
@@ -127,8 +127,8 @@ def estimate_thickness_2d(
         If True, include per-iteration thickness model traces and final
         simulated power spectrum in the result. Default False.
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback. Default None (run all
-        ``n_iterations``).
+        Stateful `(loss) -> should_stop` callback. Default None (run all
+        `n_iterations`).
 
     Returns
     -------

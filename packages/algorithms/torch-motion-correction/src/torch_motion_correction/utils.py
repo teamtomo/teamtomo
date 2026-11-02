@@ -58,10 +58,10 @@ def array_to_grid_sample(
 
     Parameters
     ----------
-    array_coordinates: torch.Tensor
+    array_coordinates : torch.Tensor
         `(..., d)` array of d-dimensional coordinates.
         Coordinates are in the range `[0, N-1]` for the `N` elements in each dimension.
-    array_shape: Sequence[int]
+    array_shape : Sequence[int]
         shape of the array being sampled at `array_coordinates`.
     """
     dtype, device = array_coordinates.dtype, array_coordinates.device
@@ -94,13 +94,13 @@ def normalize_image(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) image to be normalized where t is the number of frames,
         h is the height, and w is the width.
-    frac_low: float
+    frac_low : float
         Fractional lower bound of the central box in both height and width. Default is
         0.25 (central 50%).
-    frac_high: float
+    frac_high : float
         Fractional upper bound of the central box in both height and width. Default is
         0.75 (central 50%).
 
@@ -144,7 +144,7 @@ def prepare_patch_filters(
         B-factor and frequency-range parameters.
     mask_smoothing_fraction : float
         Sets the circle-mask smoothing radius as a fraction of the mask radius.
-        ``smoothing_radius = (min(h, w) / 4) * mask_smoothing_fraction``.
+        `smoothing_radius = (min(h, w) / 4) * mask_smoothing_fraction`.
         Use 0.5 for a gentle roll-off (default, matches XC estimator) or 1.0
         for the sharper roll-off used by the optimizer estimator.
     device : torch.device, optional

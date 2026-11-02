@@ -122,16 +122,18 @@ class Gaussian2D(nn.Module):
 
     Parameters
     ----------
-    amplitude : torch.tensor, optional
-        Amplitude of the Gaussian. Default is torch.tensor([1.0]).
-    center_y : torch.tensor, optional
-        Y-coordinate of the center. Default is torch.tensor([0.0]).
-    center_x : torch.tensor, optional
-        X-coordinate of the center. Default is torch.tensor([0.0]).
-    sigma_y : torch.tensor, optional
-        Standard deviation along the y-axis. Default is torch.tensor([1.0]).
-    sigma_x : torch.tensor, optional
-        Standard deviation along the x-axis. Default is torch.tensor([1.0]).
+    amplitude : torch.Tensor | float, optional
+        Amplitude of the Gaussian. Default is 1.0. Parameters may be tensors of
+        any shape (all parameters must share the same shape) to define a batch
+        of Gaussians.
+    center_y : torch.Tensor | float, optional
+        Y-coordinate of the center. Default is 0.0.
+    center_x : torch.Tensor | float, optional
+        X-coordinate of the center. Default is 0.0.
+    sigma_y : torch.Tensor | float, optional
+        Standard deviation along the y-axis. Default is 1.0.
+    sigma_x : torch.Tensor | float, optional
+        Standard deviation along the x-axis. Default is 1.0.
 
     Methods
     -------
@@ -179,12 +181,17 @@ class Gaussian2D(nn.Module):
         """
         Forward pass for 2D Gaussian list.
 
-        Args:
-            grid: Tensor of shape (h,w, 2) containing 2D coordinates in yx order.
+        Parameters
+        ----------
+        grid : torch.Tensor
+            `(h, w, 2)` array of 2D coordinates in yx order (`grid[..., 0]` is y,
+            `grid[..., 1]` is x).
 
         Returns
         -------
-            Tensor of Gaussian values
+        torch.Tensor
+            `(..., h, w)` array of Gaussian values, where `...` is the shape of the
+            Gaussian parameters.
         """
         # Add batch dimension
         grid_x = einops.rearrange(
@@ -216,20 +223,22 @@ class Gaussian3D(nn.Module):
 
     Parameters
     ----------
-    amplitude : torch.tensor, optional
-        Amplitude of the Gaussian. Default is torch.tensor([1.0]).
-    center_z : torch.tensor, optional
-        Z-coordinate of the center. Default is torch.tensor([0.0]).
-    center_y : torch.tensor, optional
-        Y-coordinate of the center. Default is torch.tensor([0.0]).
-    center_x : torch.tensor, optional
-        X-coordinate of the center. Default is torch.tensor([0.0]).
-    sigma_z : torch.tensor, optional
-        Standard deviation along the z-axis. Default is torch.tensor([1.0]).
-    sigma_y : torch.tensor, optional
-        Standard deviation along the y-axis. Default is torch.tensor([1.0]).
-    sigma_x : torch.tensor, optional
-        Standard deviation along the x-axis. Default is torch.tensor([1.0]).
+    amplitude : torch.Tensor | float, optional
+        Amplitude of the Gaussian. Default is 1.0. Parameters may be tensors of
+        any shape (all parameters must share the same shape) to define a batch
+        of Gaussians.
+    center_z : torch.Tensor | float, optional
+        Z-coordinate of the center. Default is 0.0.
+    center_y : torch.Tensor | float, optional
+        Y-coordinate of the center. Default is 0.0.
+    center_x : torch.Tensor | float, optional
+        X-coordinate of the center. Default is 0.0.
+    sigma_z : torch.Tensor | float, optional
+        Standard deviation along the z-axis. Default is 1.0.
+    sigma_y : torch.Tensor | float, optional
+        Standard deviation along the y-axis. Default is 1.0.
+    sigma_x : torch.Tensor | float, optional
+        Standard deviation along the x-axis. Default is 1.0.
 
     Methods
     -------
@@ -288,13 +297,17 @@ class Gaussian3D(nn.Module):
         """
         Forward pass for 3D Gaussian list.
 
-        Args:
-            grid: Tensor of shape (d, h, w, 3) containing 3D coordinates in zyx order
-                 (grid[..., 0] is z, grid[..., 1] is y, grid[..., 2] is x).
+        Parameters
+        ----------
+        grid : torch.Tensor
+            `(d, h, w, 3)` array of 3D coordinates in zyx order (`grid[..., 0]` is
+            z, `grid[..., 1]` is y, `grid[..., 2]` is x).
 
         Returns
         -------
-            Tensor of Gaussian values
+        torch.Tensor
+            `(..., d, h, w)` array of Gaussian values, where `...` is the shape of
+            the Gaussian parameters.
         """
         # Add batch dimension
         grid_x = einops.rearrange(

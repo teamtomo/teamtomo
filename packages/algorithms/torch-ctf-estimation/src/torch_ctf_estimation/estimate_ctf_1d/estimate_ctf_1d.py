@@ -124,8 +124,8 @@ def estimate_ctf_1d(
     equiphase_n_theta : int
         Azimuth samples per shell for equiphase. Default 64.
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback for Adam refinement.
-        Default None (run all ``refine_steps``).
+        Stateful `(loss) -> should_stop` callback for Adam refinement.
+        Default None (run all `refine_steps`).
 
     Returns
     -------

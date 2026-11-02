@@ -19,7 +19,33 @@ def from_aretomo_output(
     image_path: Path | str | None = None,
     device: torch.device | str = "cpu",
 ) -> TiltSeries:
-    """Initialize TiltSeries from an AreTomo .aln file."""
+    """Initialize TiltSeries from an AreTomo .aln file.
+
+    Tilt angles (`tilt` column) and per-tilt tilt axis angles (`rot` column)
+    are taken as-is, in degrees. The `tx`, `ty` shifts (pixels) are reordered
+    to yx and multiplied by `pixel_spacing` to give `sample_translations` in
+    Angstroms. Only the sections listed in the .aln file are kept;
+    `image_indices` is set from its 1-based `sec` column, converted to 0-based.
+
+    Parameters
+    ----------
+    aln_path : Path | str
+        Path to the AreTomo `.aln` alignment file.
+    pixel_spacing : float
+        Pixel size of the raw tilt images, in Angstroms. Used to convert the
+        alignment shifts from pixels to Angstroms and stored on the result.
+    image_path : Path | str | None
+        Path to the raw tilt stack. Defaults to `aln_path` with its suffix
+        replaced by `.mrc`. The file is not opened here.
+    device : torch.device | str
+        Device on which the geometry tensors are stored. Default `"cpu"`.
+
+    Returns
+    -------
+    tilt_series : TiltSeries
+        Tilt series with identity `sample2levelled`/`levelled2tomo` and
+        `x_tilts` of 0.
+    """
     import alnfile
 
     aln_path = Path(aln_path)
@@ -53,7 +79,32 @@ def from_etomo_directory(
     pixel_spacing: float,
     device: torch.device | str = "cpu",
 ) -> TiltSeries:
-    """Initialize TiltSeries from an ETOMO directory."""
+    """Initialize TiltSeries from an ETOMO directory.
+
+    Reads the IMOD alignment files with `etomofiles` and drops excluded views.
+    The IMOD `.xf` transforms (which map images back to the aligned frame) are
+    inverted to this package's forward model, and the shifts are converted from
+    pixels to Angstroms. The global `XAXISTILT` (sign flipped to match this
+    package's `Rx` convention) is added to the per-view x-tilts; if all views
+    then share one value it is stored as a scalar. The raw stack path is
+    resolved relative to `etomo_dir` unless absolute.
+
+    Parameters
+    ----------
+    etomo_dir : Path | str
+        Path to the ETOMO project directory.
+    pixel_spacing : float
+        Pixel size of the raw tilt images, in Angstroms. Used to convert the
+        alignment shifts from pixels to Angstroms and stored on the result.
+    device : torch.device | str
+        Device on which the geometry tensors are stored. Default `"cpu"`.
+
+    Returns
+    -------
+    tilt_series : TiltSeries
+        Tilt series for the non-excluded views, with identity
+        `sample2levelled`/`levelled2tomo`.
+    """
     import etomofiles
 
     etomo_dir = Path(etomo_dir)
@@ -130,6 +181,25 @@ def load_tilt_series_images(
     central-crop normalization and background subtraction used elsewhere in
     teamtomo, and `torch_tilt_series.preprocessing` for a full preprocessing
     pipeline built on top of those.
+
+    Parameters
+    ----------
+    tilt_series : TiltSeries
+        Tilt series whose `image_path` (and optionally `image_indices`)
+        locate the images.
+    device : torch.device | str | None
+        Device for the returned tensor. Defaults to `tilt_series.device`.
+
+    Returns
+    -------
+    images : torch.Tensor
+        `(n_tilts, h, w)` float32 tilt images, ordered to match the tilt
+        series (or the full stack if `image_indices` is None).
+
+    Raises
+    ------
+    ValueError
+        If `tilt_series.image_path` is not set.
     """
     import mrcfile
 

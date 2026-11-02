@@ -1,3 +1,5 @@
+"""Tilt-series cross-correlation alignment with sample tilt estimation."""
+
 import math
 
 import torch
@@ -38,23 +40,51 @@ def tiltxcorr_with_sample_tilt_estimation(
     `torch_tiltxcorr.utils.taper_image_edges` is always applied to each image
     pair before cross-correlating and is not configurable.
 
-    Args:
-        tilt_series: Stack of tilt images (b, h, w)
-        tilt_angles: Nominal stage tilt angles for each image (b,)
-        tilt_axis_angle: Angle of tilt axis in degrees
-        pixel_spacing_angstroms: Pixel spacing in angstroms
-        lowpass_angstroms: Low-pass filter cutoff in angstroms
-        sample_tilt_range: (min, max) range of sample tilt angles to search in degrees
-        max_iter: Maximum iterations for Brent's method optimizer
-        preprocess: If True (default), preprocess `tilt_series` via
-            `torch_tilt_series.preprocess_tilt_series_images` (background
-            plane subtraction, a bandpass filter with `low` fixed at 0.025
-            and `high` from `pixel_spacing_angstroms`/`lowpass_angstroms`
-            above, and central-crop normalization) before finding shifts.
+    Parameters
+    ----------
+    tilt_series : torch.Tensor
+        `(b, h, w)` stack of tilt images, in any order.
+    tilt_angles : torch.Tensor
+        `(b,)` nominal stage tilt angles in degrees, one per image. Used to
+        sort the images and to choose the reference image (the one closest
+        to 0 degrees).
+    tilt_axis_angle : float
+        In-plane angle of the tilt axis in the images, in degrees, as used
+        by `torch_affine_utils.transforms_2d.R`. Images are stretched
+        perpendicular to this axis.
+    pixel_spacing_angstroms : float | None
+        Pixel spacing of `tilt_series`, in Angstroms. Only used together
+        with `lowpass_angstroms` to set the low-pass cutoff.
+    lowpass_angstroms : float | None
+        Low-pass cutoff resolution, in Angstroms. If either this or
+        `pixel_spacing_angstroms` is None, no low-pass is applied (cutoff at
+        Nyquist, 0.5 cycles/pixel). Ignored when `preprocess` is False.
+    sample_tilt_range : tuple[float, float]
+        `(min, max)` bounds, in degrees, of the sample tilt search.
+        Default `(-30.0, 30.0)`.
+    max_iter : int
+        Maximum number of iterations of the bounded Brent optimizer. Each
+        objective evaluation runs a full pairwise cross-correlation pass.
+        Default 10.
+    preprocess : bool
+        If True (default), preprocess `tilt_series` via
+        `torch_tilt_series.preprocess_tilt_series_images` (background plane
+        subtraction, a bandpass filter with `low` and `falloff` fixed at
+        0.025 cycles/pixel and `high` from `pixel_spacing_angstroms` /
+        `lowpass_angstroms` above, and central-crop normalization) before
+        finding shifts.
 
-    Returns:
-        shifts: Optimal shifts for each image (b, 2) yx coords
-        sample_tilt: Optimal sample tilt angle in degrees
+    Returns
+    -------
+    shifts : torch.Tensor
+        `(b, 2)` yx shifts in pixels for the estimated sample tilt, in the
+        input order of `tilt_series`. Each is the shift that, applied to that
+        image, aligns it to the reference image (the one with nominal tilt
+        angle closest to 0 degrees, whose shift is 0).
+    sample_tilt : float
+        Estimated sample tilt in degrees, i.e. the offset added to the
+        nominal tilt angles that maximises the summed peak values of the
+        pairwise cross-correlations.
     """
     sample_tilt_min, sample_tilt_max = sample_tilt_range
 
@@ -116,18 +146,25 @@ def _compute_shifts_with_sample_tilt(
     tilt_axis_angle: float,
     sample_tilt: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Compute shifts for a given sample tilt angle and return total correlation.
+    """Compute shifts for a given sample tilt angle and return total correlation.
 
-    Args:
-        tilt_series: Stack of tilt images (b, h, w), already preprocessed
-        tilt_angles: Nominal tilt angles (b,)
-        tilt_axis_angle: Tilt axis angle in degrees
-        sample_tilt: Sample tilt angle in degrees
+    Parameters
+    ----------
+    tilt_series : torch.Tensor
+        `(b, h, w)` stack of tilt images, already preprocessed.
+    tilt_angles : torch.Tensor
+        `(b,)` nominal tilt angles in degrees.
+    tilt_axis_angle : float
+        Tilt axis angle in degrees.
+    sample_tilt : float
+        Sample tilt angle in degrees, added to the nominal tilt angles.
 
-    Returns:
-        shifts: Computed shifts (b, 2)
-        total_correlation: Sum of all inter-image correlation peaks (as tensor)
+    Returns
+    -------
+    shifts : torch.Tensor
+        `(b, 2)` yx shifts in pixels.
+    total_correlation : torch.Tensor
+        Scalar sum of all inter-image correlation peaks.
     """
     # extract shape
     b = tilt_series.shape[0]

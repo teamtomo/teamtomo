@@ -1,4 +1,4 @@
-"""Utilities for affine transformations of 2d/3d coordinates in PyTorch"""
+"""Utilities for affine transformations of 2d/3d coordinates in PyTorch."""
 
 from importlib.metadata import PackageNotFoundError, version
 

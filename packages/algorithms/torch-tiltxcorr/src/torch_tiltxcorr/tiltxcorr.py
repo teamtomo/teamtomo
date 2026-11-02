@@ -1,3 +1,5 @@
+"""Tilt-series cross-correlation alignment with cosine stretching."""
+
 import math
 
 import numpy as np
@@ -31,12 +33,40 @@ def tiltxcorr(
 
     Parameters
     ----------
+    tilt_series : torch.Tensor
+        `(b, h, w)` stack of tilt images, in any order.
+    tilt_angles : torch.Tensor
+        `(b,)` nominal stage tilt angles in degrees, one per image. Used to
+        sort the images and to choose the reference image (the one closest
+        to 0 degrees).
+    tilt_axis_angle : float
+        In-plane angle of the tilt axis in the images, in degrees, as used
+        by `torch_affine_utils.transforms_2d.R`. Images are stretched
+        perpendicular to this axis.
+    pixel_spacing_angstroms : float | None
+        Pixel spacing of `tilt_series`, in Angstroms. Only used together
+        with `lowpass_angstroms` to set the low-pass cutoff.
+    lowpass_angstroms : float | None
+        Low-pass cutoff resolution, in Angstroms. If either this or
+        `pixel_spacing_angstroms` is None, no low-pass is applied (cutoff at
+        Nyquist, 0.5 cycles/pixel). Ignored when `preprocess` is False.
     preprocess : bool
         If True (default), preprocess `tilt_series` via
         `torch_tilt_series.preprocess_tilt_series_images` (background plane
-        subtraction, a bandpass filter with `low` fixed at 0.025 and `high`
-        from `pixel_spacing_angstroms`/`lowpass_angstroms` below, and
-        central-crop normalization) before finding shifts.
+        subtraction, a bandpass filter with `low` and `falloff` fixed at
+        0.025 cycles/pixel and `high` from `pixel_spacing_angstroms` /
+        `lowpass_angstroms` above, and central-crop normalization) before
+        finding shifts.
+
+    Returns
+    -------
+    shifts : torch.Tensor
+        `(b, 2)` yx shifts in pixels, in the input order of `tilt_series`,
+        on the device of `tilt_series`. Each is the shift that, applied to
+        that image, aligns it to the reference image (the one with tilt angle
+        closest to 0 degrees, whose shift is 0). Shifts between adjacent tilts
+        (sorted by tilt angle) are estimated pairwise and accumulated outwards
+        from the reference along the positive and negative branches.
     """
     # extract shape
     b = tilt_series.shape[0]

@@ -1,3 +1,5 @@
+"""Paired random augmentations for images and masks."""
+
 import random
 from typing import List, Tuple
 

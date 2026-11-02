@@ -1,9 +1,9 @@
-"""Erase masked regions from cryo-EM images"""
+"""Erase masked regions from cryo-EM images."""
 
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("torch-affine-utils")
+    __version__ = version("torch-cryoeraser")
 except PackageNotFoundError:
     __version__ = "uninstalled"
 

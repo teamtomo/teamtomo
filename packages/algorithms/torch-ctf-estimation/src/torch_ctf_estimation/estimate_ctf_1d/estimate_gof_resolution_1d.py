@@ -56,9 +56,9 @@ def interpolate_cc_drop_angstroms(
     cc: torch.Tensor,
     threshold: float,
 ) -> float:
-    """Last spacing (Å) where ``cc`` stays at or above ``threshold``, interpolated.
+    """Last spacing (Å) where `cc` stays at or above `threshold`, interpolated.
 
-    ``spacing_A`` must be decreasing (low frequency → high frequency).
+    `spacing_A` must be decreasing (low frequency → high frequency).
     """
     sp = spacing_A.detach().cpu().reshape(-1).float()
     y = cc.detach().cpu().reshape(-1).float()
@@ -104,7 +104,7 @@ def moving_window_pearson(
     window_s2: float,
     min_bins: int = 8,
 ) -> torch.Tensor:
-    """Pearson r in a moving window of half-width ``window_s2 / 2`` in s²."""
+    """Pearson r in a moving window of half-width `window_s2 / 2` in s²."""
     data = data.reshape(-1).float()
     model = model.reshape(-1).float()
     s2 = spatial_freq.reshape(-1).float() ** 2
@@ -131,7 +131,7 @@ def estimate_gof_resolution_1d(
     window_cycles: float = 1.0,
     cc_threshold: float = 0.5,
 ) -> GofResolution1DResult:
-    """Last spacing where windowed 1D Pearson r vs ``model_1d`` stays ≥ threshold."""
+    """Last spacing where windowed 1D Pearson r vs `model_1d` stays ≥ threshold."""
     residual_1d = residual_1d.reshape(-1)
     spatial_freq = spatial_freq.reshape(-1).to(device=residual_1d.device)
     model_1d = model_1d.reshape(-1).to(device=residual_1d.device)
@@ -280,10 +280,10 @@ def estimate_gof_by_cycles(
     cc_threshold: float = 0.5,
     min_bins: int = 4,
 ) -> GofResolution1DResult:
-    """NCC in intervals between consecutive maxima of ``model_1d`` (CTFFind4).
+    """NCC in intervals between consecutive maxima of `model_1d` (CTFFind4).
 
-    ``cycles_per_window`` > 1 extends each interval (CTFFind5 uses 1.5 with CTF_t).
-    If ``equalize`` is True, each window is rescaled to [0, 1] before NCC so the
+    `cycles_per_window` > 1 extends each interval (CTFFind5 uses 1.5 with CTF_t).
+    If `equalize` is True, each window is rescaled to [0, 1] before NCC so the
     score follows ring phase rather than envelope.
     """
     data_1d = data_1d.reshape(-1).float()

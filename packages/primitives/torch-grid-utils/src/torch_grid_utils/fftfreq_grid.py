@@ -225,7 +225,28 @@ def dft_center(
     fftshift: bool,
     device: torch.device | None = None,
 ) -> torch.LongTensor:
-    """Return the position of the DFT center for a given input shape."""
+    """Return the position of the DFT center for a given input shape.
+
+    Parameters
+    ----------
+    image_shape : tuple[int, ...]
+        Shape of the real-space image, e.g. `(h, w)` or `(d, h, w)`.
+    rfft : bool
+        Whether the DFT is the output of an `rfft` (half transform over the last
+        dimension). If `True`, the center along the last dimension is always 0.
+    fftshift : bool
+        Whether the DFT has been fftshifted. If `False` the center is at index 0
+        in every dimension. If `True` it is at `n // 2` in each (non-`rfft`)
+        dimension of length `n`.
+    device : torch.device | None, optional
+        Device on which to create the output tensor.
+
+    Returns
+    -------
+    torch.LongTensor
+        `(len(image_shape), )` array containing the index of the DFT center,
+        in the same dimension order as `image_shape`.
+    """
     fft_center = torch.zeros(size=(len(image_shape),), device=device)
     image_shape = torch.as_tensor(image_shape, device=device).float()
     if rfft is True:
@@ -378,7 +399,21 @@ def ifftshift_3d(input: torch.Tensor, rfft: bool) -> torch.Tensor:
 def fftfreq_to_spatial_frequency(
     frequencies: torch.Tensor, spacing: float
 ) -> torch.Tensor:
-    """Convert frequencies in cycles per pixel to cycles per unit distance."""
+    """Convert frequencies in cycles per pixel to cycles per unit distance.
+
+    Parameters
+    ----------
+    frequencies : torch.Tensor
+        Frequencies in cycles per pixel (`fftfreq`).
+    spacing : float
+        Pixel spacing, in distance units per pixel (e.g. Å/px).
+
+    Returns
+    -------
+    torch.Tensor
+        `float32` tensor of frequencies in cycles per unit distance
+        (`frequencies / spacing`).
+    """
     # cycles/px * px/distance = cycles/distance
     return torch.as_tensor(frequencies, dtype=torch.float32) * (1 / spacing)
 
@@ -386,6 +421,20 @@ def fftfreq_to_spatial_frequency(
 def spatial_frequency_to_fftfreq(
     frequencies: torch.Tensor, spacing: float
 ) -> torch.Tensor:
-    """Convert frequencies in cycles per unit distance to cycles per pixel."""
+    """Convert frequencies in cycles per unit distance to cycles per pixel.
+
+    Parameters
+    ----------
+    frequencies : torch.Tensor
+        Frequencies in cycles per unit distance (e.g. cycles/Å).
+    spacing : float
+        Pixel spacing, in distance units per pixel (e.g. Å/px).
+
+    Returns
+    -------
+    torch.Tensor
+        `float32` tensor of frequencies in cycles per pixel
+        (`frequencies * spacing`).
+    """
     # cycles/distance * distance/px = cycles/px
     return torch.as_tensor(frequencies, dtype=torch.float32) * spacing

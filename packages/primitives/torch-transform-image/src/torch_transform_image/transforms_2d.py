@@ -17,6 +17,37 @@ def affine_transform_image_2d(
     output_shape: Optional[tuple] = None,
     yx_matrices: bool = False,
 ) -> torch.Tensor:
+    """Resample a 2D image on a grid of pixel coordinates transformed by an affine.
+
+    A grid of output pixel coordinates `[y, x]` is built, made homogeneous
+    (`[y, x, 1]`), left-multiplied by `matrices`, and the input image is sampled
+    at the resulting positions. The matrices therefore map output pixel
+    coordinates to positions in the input image; use `torch.linalg.inv` on a
+    matrix to transform the image itself by that matrix.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        `(h, w)` image or `(c, h, w)` multichannel image.
+    matrices : torch.Tensor
+        `(..., 3, 3)` affine matrices acting on homogeneous pixel coordinates.
+        Batch dimensions must broadcast against the `(h, w)` output grid, e.g. a
+        single `(3, 3)` matrix or a `(b, 1, 1, 3, 3)` batch.
+    interpolation : Literal["nearest", "bilinear", "bicubic"]
+        Interpolation mode used to sample `image`.
+    output_shape : tuple | None, optional
+        `(h, w)` shape of the output grid. Defaults to the shape of `image`.
+    yx_matrices : bool, optional
+        If `True`, `matrices` act on `[y, x, 1]` coordinates (array dimension
+        order). If `False` (the default), they act on `[x, y, 1]` coordinates
+        and are reordered to `yx` internally; the input tensor is not modified.
+
+    Returns
+    -------
+    torch.Tensor
+        `(..., h, w)` transformed image, or `(..., h, w, c)` for a multichannel
+        input, where `...` are the batch dimensions of `matrices`.
+    """
     # grab image dimensions
     if output_shape:
         h, w = output_shape
@@ -50,7 +81,7 @@ def rotate_then_shift_image_2d(
     shift_yx: list[float | int] | tuple[float | int, float | int] = (0, 0),
     interpolation: Literal["nearest", "bilinear", "bicubic"] = "bicubic",
 ) -> torch.Tensor:
-    """This is a wrapper function to easily rotate and shift a 2D image.
+    """Wrapper function to easily rotate and shift a 2D image.
 
     The image is rotated CCW around its center by the specified number
     of degrees and then shifted up/left by the specified number of
@@ -108,7 +139,7 @@ def shift_then_rotate_image_2d(
     shift_yx: list[float | int] | tuple[float | int, float | int] = (0, 0),
     interpolation: Literal["nearest", "bilinear", "bicubic"] = "bicubic",
 ):
-    """This is a wrapper function to easily shift and rotate a 2D image.
+    """Wrapper function to easily shift and rotate a 2D image.
 
     The image is shifted up/left by the specified number of pixels and
     then rotated CCW around its center by the specified number of

@@ -2,7 +2,7 @@
 
 Builds a spherical or circular window mask, a permutation null from random
 window pairs and cosine similarity, then scans a stepped grid and assigns
-p-values against that null (:func:`compute_local_resolution_pvalues`).
+p-values against that null (`compute_local_resolution_pvalues`).
 """
 
 import torch
@@ -28,11 +28,11 @@ def _create_bool_mask(
     Returns
     -------
     mask : torch.Tensor
-        Float tensor of shape ``(window,)*ndim`` with ``1`` inside the sphere/disk
-        and ``0`` outside.
+        Float tensor of shape `(window,)*ndim` with `1` inside the sphere/disk
+        and `0` outside.
     window_size_int : int
-        Integer half-width ``ceil(window_size_float)``; side length is
-        ``2 * window_size_int + 1``.
+        Integer half-width `ceil(window_size_float)`; side length is
+        `2 * window_size_int + 1`.
     """
     ws = torch.as_tensor(window_size_float, dtype=torch.float32, device=device)
     window_size_int = int(torch.ceil(ws).item())
@@ -60,7 +60,7 @@ def _window_offsets_from_mask(
     Parameters
     ----------
     bool_mask
-        Mask from :func:`_create_bool_mask`; non-zero entries are included.
+        Mask from `_create_bool_mask`; non-zero entries are included.
     window_half_width
         Integer half-width of the window grid (subtract from flat indices to get
         offsets relative to the center voxel).
@@ -70,7 +70,7 @@ def _window_offsets_from_mask(
     Returns
     -------
     torch.Tensor
-        Shape ``(M, ndim)``, ``long``, on the same device as ``bool_mask``. Each row
+        Shape `(M, ndim)`, `long`, on the same device as `bool_mask`. Each row
         is an offset to add to a center index when extracting the window.
     """
     coords = torch.nonzero(bool_mask != 0, as_tuple=False)
@@ -135,21 +135,21 @@ def _extract_windows_2d(
 def batched_cosine_similarity(vals1: torch.Tensor, vals2: torch.Tensor) -> torch.Tensor:
     """Cosine similarity between paired row vectors (e.g. masked local windows).
 
-    For each row ``b``, computes dot product over ``i`` divided by the product of
-    L2 norms of ``vals1[b]`` and ``vals2[b]``.
-    Rows with zero norm in either vector yield ``0``. Means are **not** subtracted,
+    For each row `b`, computes dot product over `i` divided by the product of
+    L2 norms of `vals1[b]` and `vals2[b]`.
+    Rows with zero norm in either vector yield `0`. Means are **not** subtracted,
     so this is cosine similarity, not Pearson correlation.
 
     Parameters
     ----------
     vals1, vals2
-        Same shape ``(B, M)``, typically values gathered at ``B`` window centers with
-        ``M`` mask voxels per window.
+        Same shape `(B, M)`, typically values gathered at `B` window centers with
+        `M` mask voxels per window.
 
     Returns
     -------
     torch.Tensor
-        Shape ``(B,)``, same device and dtype as inputs.
+        Shape `(B,)`, same device and dtype as inputs.
     """
     numerator = (vals1 * vals2).sum(dim=1)
     denom1 = (vals1 * vals1).sum(dim=1)
@@ -175,7 +175,7 @@ def build_null_distribution(
 
     Randomly samples window pairs from the half-maps and computes cosine
     similarity to form a null distribution for permutation testing.
-    Window shape is encoded in ``window_offsets`` (built by the caller).
+    Window shape is encoded in `window_offsets` (built by the caller).
 
     Parameters
     ----------
@@ -186,8 +186,8 @@ def build_null_distribution(
     padded_half_map2_list
         One entry per random map: permuted half-map 2 variants.
     window_offsets
-        Relative voxel offsets within the window, shape ``(M, ndim)``, ``long``,
-        on ``device``.
+        Relative voxel offsets within the window, shape `(M, ndim)`, `long`,
+        on `device`.
     n_random_maps
         Number of random permutation maps.
     reference_dist_size
@@ -275,7 +275,7 @@ def run_local_correlation_raw(
     """Compute correlation at each grid position..
 
     Uses only the masked voxels, no p-value conversion. Result is written in-place
-    to ``result_array``.  Window geometry is encoded in ``window_offsets``
+    to `result_array`.  Window geometry is encoded in `window_offsets`
     (built by the caller).
 
     Parameters
@@ -291,12 +291,12 @@ def run_local_correlation_raw(
     step_size
         Step size per dimension.
     window_offsets
-        Relative voxel offsets within the window, shape ``(M, ndim)``, ``long``
+        Relative voxel offsets within the window, shape `(M, ndim)`, `long`
         (equivalent to precomputing mask indices; built from the sphere mask).
     result_array
         Output tensor (modified in-place) for correlation values.
     device
-        Target device (e.g. ``torch.device('cuda:0')`` or ``torch.device('cpu')``).
+        Target device (e.g. `torch.device('cuda:0')` or `torch.device('cpu')`).
     batch_size
         Number of positions to process simultaneously. Tune for GPU memory.
     """
@@ -372,8 +372,8 @@ def run_local_correlation(
     """Compute correlation at each grid position and convert to p-values.
 
     Uses only the masked voxels, then converts to a p-value via the
-    permutation distribution. Result is written in-place to ``result_array``.
-    Window geometry is encoded in ``window_offsets`` (built by the caller).
+    permutation distribution. Result is written in-place to `result_array`.
+    Window geometry is encoded in `window_offsets` (built by the caller).
 
     Parameters
     ----------
@@ -391,12 +391,12 @@ def run_local_correlation(
         Precomputed local correlation (cosine) coefficients from permutation
         testing — the null / reference distribution for p-values.
     window_offsets
-        Relative voxel offsets within the window, shape ``(M, ndim)``, ``long``
+        Relative voxel offsets within the window, shape `(M, ndim)`, `long`
         (equivalent to precomputing mask indices; built from the sphere mask).
     result_array
         Output tensor (modified in-place) for p-values.
     device
-        Target device (e.g. ``torch.device('cuda:0')`` or ``torch.device('cpu')``).
+        Target device (e.g. `torch.device('cuda:0')` or `torch.device('cpu')`).
     batch_size
         Number of positions to process simultaneously. Tune for GPU memory.
     """
@@ -501,7 +501,7 @@ def compute_local_correlation(
     Returns
     -------
     correlation_map : torch.Tensor
-        Map of local correlation values form cosine similarity (``float32``).
+        Map of local correlation values form cosine similarity (`float32`).
     """
     ndim = len(sample1_filtered.shape)
 
@@ -587,7 +587,7 @@ def compute_local_resolution_pvalues(
     Returns
     -------
     pValueMap : torch.Tensor
-        Map of p-values from the permutation test (``float16``).
+        Map of p-values from the permutation test (`float16`).
     """
     ndim = len(sample1_filtered.shape)
 

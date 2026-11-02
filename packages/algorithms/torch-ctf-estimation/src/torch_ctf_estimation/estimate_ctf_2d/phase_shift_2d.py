@@ -100,7 +100,7 @@ def phase_shift_at_positions(
     -------
     phase_shift_t : torch.Tensor
         Phase shift in degrees, shape (...,). When phase_models is None, returns
-        ``fixed_phase_shift_deg`` everywhere if set, otherwise zero.
+        `fixed_phase_shift_deg` everywhere if set, otherwise zero.
     u_t, v_t : torch.Tensor or None
         For grid model, (u,v) on unit circle for penalty; otherwise None.
     """

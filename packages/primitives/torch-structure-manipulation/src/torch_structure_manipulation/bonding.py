@@ -34,11 +34,39 @@ _PROTEIN_BONDING, _RNA_BONDING = _load_templates()
 def annotate_bonding_environments(
     df: pd.DataFrame, include_hydrogens: bool = True
 ) -> pd.DataFrame:
-    """Return a copy with ``bonded_environments`` and per-atom ``molecule_type``.
+    """Return a copy with `bonded_environments` and per-atom `molecule_type`.
 
     The input follows mmdf naming conventions but is not tied to mmdf itself.
     Bonding templates are keyed by residue and atom names; adjacent numeric
     residue IDs are used to add peptide and phosphodiester bonds.
+
+    Each environment key has the form `"<element>(<neighbours>)"`, with the
+    bonded neighbours' element symbols sorted by atomic number, e.g.
+    `"C(HCCN)"`. Single-carbon-bonded oxygens may carry a `", carboxyl"` or
+    `", amide"` suffix. Atoms whose residue has no template get an empty
+    neighbour list, e.g. `"FE()"`.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Atom table with `atom`, `chain`, `element`, `residue` and
+        `residue_id` columns. Residue, atom and element names are compared
+        after stripping and upper-casing.
+    include_hydrogens : bool, optional
+        If True (default), hydrogen neighbours are included in the keys; a
+        hydrogen listed in the residue template is counted even when it is
+        absent from `df`. If False, hydrogen neighbours are omitted.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of `df` with added `bonded_environments` and `molecule_type`
+        (`"protein"`, `"rna"` or `"other"`) columns.
+
+    Raises
+    ------
+    ValueError
+        If a required column is missing.
     """
     missing = sorted(_REQUIRED_COLUMNS.difference(df.columns))
     if missing:
@@ -90,9 +118,22 @@ def annotate_bonding_environments(
 def classify_structure_composition(df: pd.DataFrame) -> str:
     """Summarize residue composition for the whole table.
 
-    Returns an aggregate label such as ``"protein"``, ``"rna"``,
-    ``"rna+protein"``, or ``"other"``. This is descriptive metadata only and
+    Returns an aggregate label such as `"protein"`, `"rna"`,
+    `"rna+protein"`, or `"other"`. This is descriptive metadata only and
     is not a valid per-atom scattering-provider key.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Atom table with a `residue` column of residue names.
+
+    Returns
+    -------
+    str
+        `"rna+protein"` if both protein and nucleic-acid residues are present,
+        otherwise `"protein"`, `"rna"` or `"other"`. Other residues (e.g.
+        ligands or water) do not affect the label when either polymer type is
+        present.
     """
     residues = {str(value).strip().upper() for value in df["residue"]}
     has_protein = bool(residues & PROTEIN_RESIDUES)
@@ -109,8 +150,18 @@ def classify_structure_composition(df: pd.DataFrame) -> str:
 def get_scattering_provider_keys(df: pd.DataFrame) -> list[str]:
     """Return the Peng scattering-provider key for each atom.
 
-    Each value is ``"protein"``, ``"rna"``, or ``"other"`` and matches the
-    ``molecule_type`` column written by :func:`annotate_bonding_environments`.
+    Each value is `"protein"`, `"rna"`, or `"other"` and matches the
+    `molecule_type` column written by `annotate_bonding_environments`.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Atom table with a `residue` column of residue names.
+
+    Returns
+    -------
+    list[str]
+        One provider key per row of `df`.
     """
     return [_molecule_type(str(residue).strip().upper()) for residue in df["residue"]]
 

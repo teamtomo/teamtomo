@@ -1,3 +1,5 @@
+"""Lightning data module for the fiducial segmentation dataset."""
+
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
@@ -19,9 +21,11 @@ class FiducialDataModule(L.LightningDataModule):
         self.dataset_directory = Path(dataset_directory)
 
     def prepare_data(self) -> None:
+        """Ensure the dataset directory exists, downloading data if empty."""
         FiducialSegmentationDataset(self.dataset_directory, train=True, download=True)
 
     def setup(self, stage: str) -> None:
+        """Split the dataset 70/30 into training and validation sets."""
         if stage == "fit":
             full_dataset = FiducialSegmentationDataset(self.dataset_directory)
             n_total = len(full_dataset)
@@ -33,7 +37,9 @@ class FiducialDataModule(L.LightningDataModule):
             self.val.dataset.eval()
 
     def train_dataloader(self) -> DataLoader:
+        """Return the training dataloader (batch size 1)."""
         return DataLoader(self.train, batch_size=1, num_workers=0)
 
     def val_dataloader(self) -> DataLoader:
+        """Return the validation dataloader (batch size 4)."""
         return DataLoader(self.val, batch_size=4, num_workers=0)

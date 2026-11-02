@@ -31,11 +31,11 @@ class DeformationField:
 
     Parameters
     ----------
-    data: torch.Tensor
+    data : torch.Tensor
         Deformation field tensor with shape (2, nt, nh, nw) where the first dimension
         corresponds to (y, x) shifts in Angstroms, nt is the number of timepoints,
         and (nh, nw) is the spatial grid resolution.
-    grid_type: str
+    grid_type : str
         Interpolation type for the deformation field. One of "catmull_rom" or
         "bspline". Default is "catmull_rom".
     """
@@ -107,7 +107,19 @@ class DeformationField:
         return self.data.device
 
     def to(self, device: torch.device | str) -> "DeformationField":
-        """Return a copy of the deformation field on the specified device."""
+        """Return a copy of the deformation field on the specified device.
+
+        Parameters
+        ----------
+        device : torch.device or str
+            Target device, e.g. `"cpu"` or `"cuda:0"`.
+
+        Returns
+        -------
+        DeformationField
+            New deformation field with `data` on `device` and the same
+            `grid_type`.
+        """
         return DeformationField(
             data=self.data.to(device),
             grid_type=self.grid_type,
@@ -118,9 +130,9 @@ class DeformationField:
 
         Parameters
         ----------
-        t: float
+        t : float
             Normalized timepoint in [0, 1] at which to evaluate the field.
-        grid_shape: tuple[int, int]
+        grid_shape : tuple[int, int]
             Spatial grid shape as (height, width).
 
         Returns
@@ -144,7 +156,7 @@ class DeformationField:
 
         Parameters
         ----------
-        target_resolution: tuple[int, int, int]
+        target_resolution : tuple[int, int, int]
             Target resolution as (nt, nh, nw).
 
         Returns
@@ -174,13 +186,13 @@ class DeformationField:
 
         Parameters
         ----------
-        shifts: torch.Tensor
+        shifts : torch.Tensor
             (nt, 2) tensor of (y, x) shifts for each frame in pixels.
-        pixel_spacing: float
+        pixel_spacing : float
             Pixel spacing in Angstroms to convert shifts to Angstroms.
-        device: torch.device | None
-            Device for the output tensor. Defaults to the device of ``shifts``.
-        grid_type: str
+        device : torch.device | None
+            Device for the output tensor. Defaults to the device of `shifts`.
+        grid_type : str
             Grid type. One of "catmull_rom" or "bspline". Default is "catmull_rom".
 
         Returns
@@ -204,7 +216,7 @@ class DeformationField:
         """Create a new optimizable field and a frozen base field.
 
         The new (optimizable) field starts at zero shifts. The base field holds the
-        (resampled) shifts from ``initial_field``, or zeros if ``initial_field`` is
+        (resampled) shifts from `initial_field`, or zeros if `initial_field` is
         None.
 
         Parameters
@@ -222,7 +234,7 @@ class DeformationField:
         Returns
         -------
         new_field : DeformationField
-            Zero-initialised, optimisable field. Pass ``.parameters()`` to an
+            Zero-initialised, optimisable field. Pass `.parameters()` to an
             optimizer.
         base_field : DeformationField
             Frozen field holding the initial (resampled) shifts.
@@ -313,7 +325,7 @@ class DeformationField:
         device: torch.device | None = None,
         grid_type: str = "catmull_rom",
     ) -> "DeformationField":
-        """Load a DeformationField from a CSV file written by :meth:`to_csv`.
+        """Load a DeformationField from a CSV file written by `to_csv`.
 
         Parameters
         ----------
@@ -358,7 +370,7 @@ class DeformationField:
         hdf5_path: str | Path,
         device: torch.device | None = None,
     ) -> "DeformationField":
-        """Load a DeformationField from an HDF5 file written by :meth:`to_hdf5`.
+        """Load a DeformationField from an HDF5 file written by `to_hdf5`.
 
         Parameters
         ----------

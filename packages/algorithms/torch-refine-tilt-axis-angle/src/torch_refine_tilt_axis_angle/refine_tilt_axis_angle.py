@@ -64,21 +64,23 @@ def refine_tilt_axis_angle(
     preprocess : bool, default=True
         If True, preprocess `tilt_series` via
         `torch_tilt_series.preprocess_tilt_series_images` (background plane
-        subtraction, a bandpass filter with `low` fixed at 0.025 and `high`
-        below, and central-crop normalization) before the common-line search.
+        subtraction, a bandpass filter with `low` and `falloff` fixed at
+        0.025 cycles/pixel and `high` below, and central-crop normalization)
+        before the common-line search.
         This is also what removes each image's DC/background offset before
         windowing; if False, `tilt_series` is used as-is (the caller is
         expected to have handled that themselves).
     high : float, default=0.5
-        Low-pass cutoff frequency for `preprocess`, as a fraction of Nyquist
-        (0-0.5). Only used if `preprocess` is True. Default matches
+        Low-pass cutoff frequency for `preprocess`, in cycles/pixel
+        (0-0.5, 0.5 = Nyquist). Only used if `preprocess` is True. Default matches
         `torch_tiltxcorr`'s own default (no low-pass, i.e. Nyquist).
 
     Returns
     -------
     float
-        The tilt axis angle in degrees, in
-        `[tilt_axis_angle - 90, tilt_axis_angle + 90]`.
+        The tilt axis angle in degrees. The coarse search covers
+        `[tilt_axis_angle - 90, tilt_axis_angle + 90)`; refinement can move
+        the result up to `refine_range` beyond those bounds.
     """
     if preprocess:
         tilt_series = preprocess_tilt_series_images(

@@ -1,3 +1,5 @@
+"""Dataset of fiducial images and segmentation masks."""
+
 from os import PathLike
 from pathlib import Path
 from typing import Tuple
@@ -51,23 +53,29 @@ class FiducialSegmentationDataset(Dataset):
 
     @property
     def data_directory_is_empty(self):
+        """Whether the dataset directory contains no entries."""
         return len(list(self.dataset_directory.iterdir())) == 0
 
     def train(self):
+        """Switch to training mode (random augmentation)."""
         self._is_training = True
 
     def eval(self):
+        """Switch to evaluation mode (fixed validation crop)."""
         self._is_training = False
 
     @property
     def image_files(self):
+        """Sorted `.tif` files in the `images` subdirectory."""
         return sorted(self.image_directory.glob("*.tif"))
 
     @property
     def mask_files(self):
+        """Sorted `.tif` files in the `masks` subdirectory."""
         return sorted(self.mask_directory.glob("*.tif"))
 
     def check_files(self, *files: Path):
+        """Raise `FileNotFoundError` if any of `files` is not an existing file."""
         for file in files:
             if file.exists() and file.is_file():
                 continue
@@ -75,9 +83,11 @@ class FiducialSegmentationDataset(Dataset):
                 raise FileNotFoundError(f"{file} not found")
 
     def __len__(self):
+        """Number of images in the dataset."""
         return len(self.image_files)
 
     def __getitem__(self, idx):
+        """Load and preprocess the image `(1, h, w)` and mask `(h, w)` pair."""
         filename = self.image_files[idx].name
         image_file = self.image_directory / filename
         mask_file = self.mask_directory / filename
@@ -89,6 +99,7 @@ class FiducialSegmentationDataset(Dataset):
         return image, mask
 
     def preprocess(self, image: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """Augment or crop, then normalise an image/mask pair."""
         # add channel dim for torchvision transforms
         image = einops.rearrange(image, "h w -> 1 h w")
         mask = einops.rearrange(mask, "h w -> 1 h w")
@@ -105,6 +116,7 @@ class FiducialSegmentationDataset(Dataset):
     def augment(
         self, image: torch.Tensor, mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Random square crop, resize to the training size and random flip."""
         target_scale = np.prod(TRAINING_IMAGE_DIMENSIONS) / np.prod(image.shape)
         image, mask = random_square_crop_at_scale(
             image, mask, scale_range=[0.75 * target_scale, 1.33 * target_scale]
@@ -125,6 +137,7 @@ class FiducialSegmentationDataset(Dataset):
     def crop_for_validation(
         self, image: torch.Tensor, mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Crop to the training size at a position fixed on first call."""
         if self._validation_crop_parameters is None:
             self._validation_crop_parameters = T.RandomCrop.get_params(
                 image, output_size=TRAINING_IMAGE_DIMENSIONS
@@ -134,6 +147,7 @@ class FiducialSegmentationDataset(Dataset):
         return image, mask
 
     def normalise(self, image: torch.Tensor) -> torch.Tensor:
+        """Normalise an image to mean 0, standard deviation 1."""
         mean, std = torch.mean(image), torch.std(image)
         torch.nan_to_num(image, nan=mean)
         return (image - mean) / std

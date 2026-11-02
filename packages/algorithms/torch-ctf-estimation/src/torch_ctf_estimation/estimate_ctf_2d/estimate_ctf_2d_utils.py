@@ -22,7 +22,7 @@ def _clamp_optional_bounds(
     values: torch.Tensor,
     bounds: tuple[float, float] | None,
 ) -> torch.Tensor:
-    """Clamp ``values`` to ``bounds`` when set; otherwise return unchanged."""
+    """Clamp `values` to `bounds` when set; otherwise return unchanged."""
     if bounds is None:
         return values
     lo, hi = bounds
@@ -256,8 +256,8 @@ def estimate_defocus_2d_at_1x1(
     amplitude_contrast_fraction : float, optional
         Amplitude contrast fraction (0-1) for CTF simulation. Default 0.07.
     laser_params : Optional[LaserParams], optional
-        If set and ``model_laser`` is True, use LPP CTF model for 2D fit; if None
-        or ``model_laser`` is False, use standard CTF. Default None.
+        If set and `model_laser` is True, use LPP CTF model for 2D fit; if None
+        or `model_laser` is False, use standard CTF. Default None.
     axis_mask : torch.Tensor or None, optional
         Optional laser-axis mask applied during the 2D fit. Default None.
     defocus_bounds_microns : tuple[float, float] or None, optional
@@ -267,8 +267,8 @@ def estimate_defocus_2d_at_1x1(
     fixed_phase_shift_deg : float or None, optional
         Phase shift in degrees held fixed when not optimizing. Default None.
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback passed through to the 1x1
-        grid fit. Default None (run all ``n_iterations``).
+        Stateful `(loss) -> should_stop` callback passed through to the 1x1
+        grid fit. Default None (run all `n_iterations`).
     use_amplitude : bool, optional
         If True, fit against the CTF amplitude rather than CTF squared.
         Default False.

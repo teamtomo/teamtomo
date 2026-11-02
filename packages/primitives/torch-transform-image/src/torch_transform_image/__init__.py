@@ -1,4 +1,4 @@
-"""Real space transformations of 2D/3D images in PyTorch"""
+"""Real space transformations of 2D/3D images in PyTorch."""
 
 from importlib.metadata import PackageNotFoundError, version
 

@@ -49,6 +49,20 @@ class CubicSplineGrid(torch.nn.Module):
         )
 
     def forward(self, u: torch.Tensor) -> torch.Tensor:
+        """Interpolate the grid at query coordinates.
+
+        Parameters
+        ----------
+        u : torch.Tensor
+            `(..., ndim)` coordinates in which `[0, 1]` along each axis covers the
+            corresponding grid dimension. 1D grids also accept `(...)`.
+
+        Returns
+        -------
+        torch.Tensor
+            `(..., n_channels)` interpolated values. For `(...)` input to a
+            single-channel 1D grid the output is `(...)`.
+        """
         u = self._coerce_to_batched_coordinates(u)  # (b, d)
 
         interpolated = [
@@ -64,9 +78,14 @@ class CubicSplineGrid(torch.nn.Module):
 
         Parameters
         ----------
-        data: torch.Tensor
-            (c, *grid_dimensions) or (*grid_dimensions) array of multichannel values at
-            each grid point.
+        data : torch.Tensor
+            `(c, *grid_dimensions)` or `(*grid_dimensions)` array of multichannel
+            values at each grid point.
+
+        Returns
+        -------
+        Self
+            Grid whose control point values are `data`.
         """
         grid = cls()
         grid.data = data

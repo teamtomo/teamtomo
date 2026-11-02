@@ -80,6 +80,53 @@ class TiltSeries:
 
     `project_points` composes `tomo2sample` with `projection_matrices` to go
     tomogram space -> detector space (Angstroms) in one call.
+
+    Parameters
+    ----------
+    tilt_angles : torch.Tensor
+        `(n_tilts,)` stage tilt angles in degrees (rotation about the
+        microscope y axis). Array-likes such as numpy arrays are accepted and
+        converted to float32 tensors on `device`.
+    tilt_axis_angle : torch.Tensor
+        In-plane rotation of the tilt axis on the detector, in degrees
+        (rotation about the optical/z axis). Either a scalar or `(n_tilts,)`,
+        one value per tilt.
+    sample_translations : torch.Tensor
+        `(n_tilts, 2)` per-tilt 2D shifts in `(y, x)` order, in Angstroms,
+        applied in detector space after rotation and projection.
+    x_tilts : torch.Tensor | float
+        X-axis tilt of the specimen (IMOD XAXISTILT / XTILTFILE convention,
+        sign flipped by the etomo loader), in degrees. A scalar or
+        `(n_tilts,)`. Applied to sample points before the stage tilt.
+        Default 0.0.
+    sample2levelled : torch.Tensor | None
+        `(4, 4)` homogeneous zyxw transform from sample space to levelled
+        sample space. Defaults to identity.
+    levelled2tomo : torch.Tensor | None
+        `(4, 4)` homogeneous zyxw transform from levelled sample space to
+        tomogram space. Defaults to identity, i.e. tomogram space equals
+        levelled sample space.
+    local_shifts : Callable[[torch.Tensor], torch.Tensor] | None
+        Optional sample-space deformation model. Called in `project_points`
+        with sample-space points `(n_points, 3)` (zyx, Angstroms) and must
+        return an additive correction of the same shape, in Angstroms.
+    local_shifts_2d : Callable[[torch.Tensor], torch.Tensor] | None
+        Optional per-tilt 2D correction. Called in `project_points` with the
+        projected points `(n_points, n_tilts, 2)` (yx), or
+        `(n_points, n_tilts, 4)` (zyxw) when `output_zyxw=True`, in
+        Angstroms, and must return an additive correction of the same shape.
+    image_path : Path | str | None
+        Path to the MRC stack holding the raw tilt images. Only used by
+        `load_tilt_series_images`; no image data is read on construction.
+    image_indices : torch.Tensor | np.ndarray | None
+        `(n_tilts,)` 0-based indices into the stack at `image_path`, selecting
+        and ordering the images that match `tilt_angles`. Stored as an int64
+        tensor on the CPU. If None, all images in the stack are used in order.
+    pixel_spacing : float | None
+        Pixel size of the raw images at `image_path`, in Angstroms. Accessing
+        the `pixel_spacing` property raises `ValueError` while it is unset.
+    device : torch.device | str
+        Device on which the geometry tensors are stored. Default `"cpu"`.
     """
 
     def __init__(
@@ -222,7 +269,18 @@ class TiltSeries:
         return self.scope2detector @ self.sample2scope
 
     def to(self, device: torch.device | str) -> None:
-        """Move all tensors of the tilt series to the device."""
+        """Move the geometry tensors of the tilt series to `device`, in place.
+
+        Moves `tilt_angles`, `tilt_axis_angle`, `sample_translations`,
+        `x_tilts`, `sample2levelled` and `levelled2tomo`, and updates
+        `self.device`. `image_indices` stays on the CPU and the
+        `local_shifts`/`local_shifts_2d` callables are left untouched.
+
+        Parameters
+        ----------
+        device : torch.device | str
+            Target device.
+        """
         self.device = device
         self.tilt_angles = self.tilt_angles.to(device)
         self.tilt_axis_angle = self.tilt_axis_angle.to(device)
@@ -255,6 +313,24 @@ class TiltSeries:
           n_tilts, 2) yx. z here is scope-space depth (Rz leaves it
           untouched), so this is enough to invert exactly back to sample
           space via `scope2sample @ detector2scope`.
+
+        Parameters
+        ----------
+        points_zyx : torch.Tensor
+            `(n_points, 3)` zyx coordinates in tomogram space, in Angstroms,
+            relative to the tomogram centre. Converted to float32 on
+            `self.device`.
+        output_zyxw : bool
+            If False (default), return only the detector yx coordinates. If
+            True, return homogeneous zyxw coordinates including scope-space
+            depth.
+
+        Returns
+        -------
+        projected : torch.Tensor
+            `(n_points, n_tilts, 2)` yx detector coordinates in Angstroms,
+            relative to the detector centre, or `(n_points, n_tilts, 4)` zyxw
+            if `output_zyxw` is True.
         """
         points_zyx = torch.as_tensor(_writable(points_zyx), device=self.device).float()
 

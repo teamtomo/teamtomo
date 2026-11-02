@@ -74,7 +74,7 @@ def estimate_thickness_1d(
     use_equiphase : bool
         If True, use equiphase shell average for the 1D spectrum. Default False.
     equiphase_defocus_um : float, optional
-        Mean defocus (µm) for equiphase when ``use_equiphase`` is True.
+        Mean defocus (µm) for equiphase when `use_equiphase` is True.
     equiphase_astigmatism_um : float, optional
         Astigmatism (µm) for equiphase.
     equiphase_astigmatism_angle_deg : float, optional

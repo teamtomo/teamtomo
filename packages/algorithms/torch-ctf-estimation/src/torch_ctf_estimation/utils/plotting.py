@@ -271,7 +271,7 @@ def plot_2d_spectrum(
 ) -> None:
     """Plot 2D fit against the same 1D background-subtracted spectrum.
 
-    Background-subtracted power is identical to ``plot_1d_spectrum`` panel 3.
+    Background-subtracted power is identical to `plot_1d_spectrum` panel 3.
     Simulated CTF^2 uses the same 1D formula with defocus and phase shift from
     the 2D fit.
 
@@ -455,9 +455,9 @@ def plot_2d_spectrum_images(
     Parameters
     ----------
     results2d : Defocus2DResults
-        Results from 2D defocus / phase-shift estimation (``debug=True``).
+        Results from 2D defocus / phase-shift estimation (`debug=True`).
     frame_index : int
-        Time-frame index when ``patch_power_spectra`` includes a time dimension.
+        Time-frame index when `patch_power_spectra` includes a time dimension.
     saturated_percent : float
         Percent of pixels saturated at each histogram tail (ImageJ default is
         0.35; 3.0 matches common Fiji "Enhance Contrast" usage at 3%).
