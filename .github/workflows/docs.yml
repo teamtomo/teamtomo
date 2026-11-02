@@ -39,6 +39,10 @@ jobs:
 
       # Only the docs group is installed: API pages are read from source, so
       # the packages and torch are not needed.
+      # Every exported function and class documents its parameters (numpy style).
+      - name: Check API docstrings
+        run: uv run --only-group docs --locked python scripts/check_docstrings.py
+
       - name: Generate package pages
         run: uv run --only-group docs --locked python scripts/generate_docs.py --strict
 
