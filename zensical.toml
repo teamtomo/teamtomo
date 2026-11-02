@@ -1,0 +1,278 @@
+# Documentation site for the TeamTomo monorepo, built with Zensical.
+#
+#   uv run --isolated --only-group docs python scripts/generate_docs.py
+#   uv run --isolated --only-group docs zensical serve
+#
+# Package pages under docs/{primitives,algorithms,utils}/, docs/developer/ and
+# docs/examples/ are generated; see scripts/generate_docs.py. When a package,
+# extra page or notebook is added, the generator lists the nav entries to add.
+
+[project]
+site_name = "TeamTomo"
+site_url = "https://teamtomo.org/docs/"
+site_description = "Modular PyTorch packages for cryo-EM and cryo-ET."
+site_author = "TeamTomo"
+copyright = "Copyright &copy; 2024 - 2026 TeamTomo"
+repo_url = "https://github.com/teamtomo/teamtomo"
+repo_name = "teamtomo/teamtomo"
+docs_dir = "docs"
+site_dir = "site"
+exclude_docs = """
+/_snippets/
+"""
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = [
+    "getting-started/index.md",
+    { "Installation" = "getting-started/installation.md" },
+    { "Conventions" = "getting-started/conventions.md" },
+  ] },
+  { "Primitives" = [
+    "primitives/index.md",
+    { "torch-affine-utils" = [
+      { "Overview" = "primitives/torch-affine-utils/index.md" },
+      { "API reference" = "primitives/torch-affine-utils/api.md" },
+    ] },
+    { "torch-calculate-electrostatic-potential" = [
+      { "Overview" = "primitives/torch-calculate-electrostatic-potential/index.md" },
+      { "API reference" = "primitives/torch-calculate-electrostatic-potential/api.md" },
+    ] },
+    { "torch-ctf" = [
+      { "Overview" = "primitives/torch-ctf/index.md" },
+      { "API reference" = "primitives/torch-ctf/api.md" },
+    ] },
+    { "torch-cubic-spline-grids" = [
+      { "Overview" = "primitives/torch-cubic-spline-grids/index.md" },
+      { "API reference" = "primitives/torch-cubic-spline-grids/api.md" },
+      { "Examples" = [{ "Optimise 1d grid model" = "primitives/torch-cubic-spline-grids/examples/optimise_1d_grid_model.md" }, { "Optimise 2d grid model" = "primitives/torch-cubic-spline-grids/examples/optimise_2d_grid_model.md" }] },
+    ] },
+    { "torch-find-peaks" = [
+      { "Overview" = "primitives/torch-find-peaks/index.md" },
+      { "API reference" = "primitives/torch-find-peaks/api.md" },
+      { "Examples" = [{ "Find golds" = "primitives/torch-find-peaks/examples/find_golds.md" }, { "Fit 2dtm peaks" = "primitives/torch-find-peaks/examples/fit_2dtm_peaks.md" }, { "Plot gaussians" = "primitives/torch-find-peaks/examples/plot_gaussians.md" }] },
+    ] },
+    { "torch-fourier-filter" = [
+      { "Overview" = "primitives/torch-fourier-filter/index.md" },
+      { "API reference" = "primitives/torch-fourier-filter/api.md" },
+    ] },
+    { "torch-fourier-rescale" = [
+      { "Overview" = "primitives/torch-fourier-rescale/index.md" },
+      { "API reference" = "primitives/torch-fourier-rescale/api.md" },
+    ] },
+    { "torch-fourier-shell-correlation" = [
+      { "Overview" = "primitives/torch-fourier-shell-correlation/index.md" },
+      { "API reference" = "primitives/torch-fourier-shell-correlation/api.md" },
+    ] },
+    { "torch-fourier-shift" = [
+      { "Overview" = "primitives/torch-fourier-shift/index.md" },
+      { "API reference" = "primitives/torch-fourier-shift/api.md" },
+    ] },
+    { "torch-fourier-slice" = [
+      { "Overview" = "primitives/torch-fourier-slice/index.md" },
+      { "API reference" = "primitives/torch-fourier-slice/api.md" },
+      { "Examples" = [{ "Project the 4v6x ribosome and reconstruct it back from those projections" = "primitives/torch-fourier-slice/examples/ribosome_reconstruction_demo.md" }] },
+    ] },
+    { "torch-grid-utils" = [
+      { "Overview" = "primitives/torch-grid-utils/index.md" },
+      { "API reference" = "primitives/torch-grid-utils/api.md" },
+    ] },
+    { "torch-image-interpolation" = [
+      { "Overview" = "primitives/torch-image-interpolation/index.md" },
+      { "API reference" = "primitives/torch-image-interpolation/api.md" },
+    ] },
+    { "torch-scattering" = [
+      { "Overview" = "primitives/torch-scattering/index.md" },
+      { "API reference" = "primitives/torch-scattering/api.md" },
+    ] },
+    { "torch-so3" = [
+      { "Overview" = "primitives/torch-so3/index.md" },
+      { "API reference" = "primitives/torch-so3/api.md" },
+    ] },
+    { "torch-structure-manipulation" = [
+      { "Overview" = "primitives/torch-structure-manipulation/index.md" },
+      { "API reference" = "primitives/torch-structure-manipulation/api.md" },
+    ] },
+    { "torch-subpixel-crop" = [
+      { "Overview" = "primitives/torch-subpixel-crop/index.md" },
+      { "API reference" = "primitives/torch-subpixel-crop/api.md" },
+    ] },
+    { "torch-tilt-series" = [
+      { "Overview" = "primitives/torch-tilt-series/index.md" },
+      { "API reference" = "primitives/torch-tilt-series/api.md" },
+      { "Examples" = [{ "Load a tilt series from AreTomo output" = "primitives/torch-tilt-series/examples/load_from_aretomo.md" }] },
+    ] },
+    { "torch-transform-image" = [
+      { "Overview" = "primitives/torch-transform-image/index.md" },
+      { "API reference" = "primitives/torch-transform-image/api.md" },
+    ] },
+  ] },
+  { "Algorithms" = [
+    "algorithms/index.md",
+    { "torch-2dtm" = [
+      { "Overview" = "algorithms/torch-2dtm/index.md" },
+      { "API reference" = "algorithms/torch-2dtm/api.md" },
+    ] },
+    { "torch-cryoeraser" = [
+      { "Overview" = "algorithms/torch-cryoeraser/index.md" },
+      { "API reference" = "algorithms/torch-cryoeraser/api.md" },
+    ] },
+    { "torch-ctf-estimation" = [
+      { "Overview" = "algorithms/torch-ctf-estimation/index.md" },
+      { "API reference" = "algorithms/torch-ctf-estimation/api.md" },
+    ] },
+    { "torch-fit-in-map" = [
+      { "Overview" = "algorithms/torch-fit-in-map/index.md" },
+      { "API reference" = "algorithms/torch-fit-in-map/api.md" },
+    ] },
+    { "torch-local-resolution" = [
+      { "Overview" = "algorithms/torch-local-resolution/index.md" },
+      { "API reference" = "algorithms/torch-local-resolution/api.md" },
+    ] },
+    { "torch-motion-correction" = [
+      { "Overview" = "algorithms/torch-motion-correction/index.md" },
+      { "API reference" = "algorithms/torch-motion-correction/api.md" },
+    ] },
+    { "torch-reconstruct-tomogram" = [
+      { "Overview" = "algorithms/torch-reconstruct-tomogram/index.md" },
+      { "API reference" = "algorithms/torch-reconstruct-tomogram/api.md" },
+      { "Examples" = [{ "From a tilt series to subvolumes and a tomogram" = "algorithms/torch-reconstruct-tomogram/examples/pipeline.md" }, { "Reconstruct a tomogram from an AreTomo alignment" = "algorithms/torch-reconstruct-tomogram/examples/reconstruct_from_aretomo.md" }, { "Reconstruct a tomogram from an IMOD (ETOMO) alignment" = "algorithms/torch-reconstruct-tomogram/examples/reconstruct_from_etomo.md" }] },
+    ] },
+    { "torch-refine-tilt-axis-angle" = [
+      { "Overview" = "algorithms/torch-refine-tilt-axis-angle/index.md" },
+      { "API reference" = "algorithms/torch-refine-tilt-axis-angle/api.md" },
+    ] },
+    { "torch-segment-fiducials-2d" = [
+      { "Overview" = "algorithms/torch-segment-fiducials-2d/index.md" },
+      { "API reference" = "algorithms/torch-segment-fiducials-2d/api.md" },
+    ] },
+    { "torch-tiltxcorr" = [
+      { "Overview" = "algorithms/torch-tiltxcorr/index.md" },
+      { "API reference" = "algorithms/torch-tiltxcorr/api.md" },
+    ] },
+  ] },
+  { "Utilities" = [
+    "utils/index.md",
+    { "teamtomo-basemodel" = [
+      { "Overview" = "utils/teamtomo-basemodel/index.md" },
+      { "API reference" = "utils/teamtomo-basemodel/api.md" },
+    ] },
+  ] },
+  { "Examples" = [
+    { "Hierarchical S2 Grid Demo" = "examples/hierarchical_s2_grid_demo.md" },
+  ] },
+  { "Contributing" = [
+    { "Contribution Guidelines for TeamTomo" = "developer/index.md" },
+    { "Archiving Legacy Repositories" = "developer/archive-old-repo.md" },
+    { "Creating a new TeamTomo package" = "developer/create-new-package.md" },
+    { "Migrating Existing TeamTomo Repositories to Monorepo" = "developer/migrate-existing-repo.md" },
+    { "Migration Progress" = "developer/migration-progress.md" },
+    { "TeamTomo Package Versioning policy" = "developer/package-versioning-policy.md" },
+    { "Release Instructions" = "developer/release-instructions.md" },
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.annotate",
+  "content.code.copy",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[project.theme.icon]
+logo = "lucide/box"
+repo = "fontawesome/brands/github"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "blue"
+accent = "blue"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "blue"
+accent = "blue"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/teamtomo/teamtomo"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}
+
+[project.plugins.mkdocstrings.handlers.python]
+# Sources are read statically, so the packages (and torch) need not be installed.
+paths = ["packages/*/*/src"]
+inventories = [
+  "https://docs.python.org/3/objects.inv",
+  "https://docs.pytorch.org/docs/stable/objects.inv",
+  "https://numpy.org/doc/stable/objects.inv",
+]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "numpy"
+docstring_section_style = "table"
+filters = "public"
+heading_level = 2
+members_order = "source"
+merge_init_into_class = true
+separate_signature = true
+show_signature_annotations = true
+signature_crossrefs = true
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+show_source = false
+show_if_no_docstring = false
+summary = true

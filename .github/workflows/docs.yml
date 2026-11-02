@@ -1,0 +1,75 @@
+# --- Documentation ---
+#
+# Builds the Zensical site on every pull request (strict, so broken links and
+# missing nav entries fail the check) and publishes it on pushes to main.
+#
+# The site is served from teamtomo.org/docs/: it is pushed into the `docs/`
+# directory of the `gh-pages` branch of teamtomo/teamtomo.github.io, which hosts
+# teamtomo.org. Only that directory is replaced; the rest of the website is
+# built by that repository. Publishing needs a deploy key with write access to
+# teamtomo.github.io, stored here as the DOCS_DEPLOY_KEY secret.
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            uv.lock
+
+      # Only the docs group is installed: API pages are read from source, so
+      # the packages and torch are not needed.
+      - name: Generate package pages
+        run: uv run --only-group docs --locked python scripts/generate_docs.py --strict
+
+      - name: Build site
+        run: uv run --only-group docs --locked zensical build --clean --strict
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: site
+          retention-days: 7
+
+  deploy:
+    name: Publish to teamtomo.org/docs
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: docs-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: site
+
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.DOCS_DEPLOY_KEY }}
+          external_repository: teamtomo/teamtomo.github.io
+          publish_branch: gh-pages
+          publish_dir: ./site
+          destination_dir: docs
+          commit_message: "docs: publish from teamtomo/teamtomo@${{ github.sha }}"

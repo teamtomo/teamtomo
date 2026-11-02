@@ -8,7 +8,7 @@ This policy document outlines the versioning semantics used for TeamTomo and bro
 1. [Overview](#overview)
 2. [Versioning Semantics](#versioning-semantics)
 3. [Package Examples](#package-examples)
-3. [Preparing for a New Version Release](#package-releases)
+3. [Preparing for a New Version Release](#preparing-for-a-new-version-release)
 
 ## Overview
 
