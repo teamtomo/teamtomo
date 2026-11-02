@@ -16,7 +16,7 @@ Image data in masked regions are replaced with noise matching local image statis
 
 ## Installation
 
-```python
+```bash
 pip install torch-cryoeraser
 ```
 
@@ -39,4 +39,4 @@ mask = torch.tensor(mask)
 erased_image = erase_region_2d(image=image, mask=mask)
 ```
 
-for more info, please check the [documentation](https://teamtomo.org/torch-cryoeraser).
+For more information, see the [documentation](https://teamtomo.org/docs/algorithms/torch-cryoeraser/).

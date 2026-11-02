@@ -42,7 +42,7 @@ pip install torch-fourier-shift
 
 ## Usage
 
-Please check the the docs at [teamtomo.org/torch-fourier-shift](https://teamtomo.org/torch-fourier-shift/)
+See the [documentation](https://teamtomo.org/docs/primitives/torch-fourier-shift/)
 
 
 

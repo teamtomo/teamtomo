@@ -66,6 +66,7 @@ With [uv](https://github.com/astral-sh/uv): `uv pip install torch-calculate-elec
 ## Usage
 
 ```python
+import mmdf
 from torch_calculate_electrostatic_potential import (
     GridConfig,
     potential_from_structure_2d,
@@ -73,7 +74,12 @@ from torch_calculate_electrostatic_potential import (
 )
 from torch_structure_manipulation import AtomicStructure
 
-structure = AtomicStructure.from_dataframe(atoms, device="cuda")
+# File I/O belongs to the caller; any reader returning an atom DataFrame works.
+atoms = mmdf.read("structure.cif")
+# Bonded scattering factors need bonding environments, so annotate on load.
+structure = AtomicStructure.from_annotated_dataframe(
+    atoms, include_hydrogens=False, device="cuda"
+)
 
 grid_3d = GridConfig.from_grid_shape_and_voxel_size(
     grid_shape=(128, 128, 128),

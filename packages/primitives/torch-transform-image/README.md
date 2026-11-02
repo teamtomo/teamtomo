@@ -88,7 +88,7 @@ rotated = affine_transform_image_2d(
 ```python
 import torch
 from torch_transform_image import affine_transform_image_3d
-from torch_affine_utils.transforms_3d import R, T, S  # Rotation, Translation, Scale
+from torch_affine_utils.transforms_3d import Rx, Ry, Rz, T, S  # Rotations, Translation, Scale
 
 # Create a test volume (64×64×64)
 volume = torch.zeros((64, 64, 64), dtype=torch.float32)

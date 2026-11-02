@@ -2,7 +2,7 @@
 
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import einops
 import torch
@@ -19,7 +19,7 @@ def predict_fiducial_mask(
     pixel_spacing: float,
     probability_threshold: float,
     model_checkpoint_file: Optional[Path] = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     """Predict fiducial masks for a batch of arbitrarily sized images.
 
     Runs `predict_fiducial_probabilities` and thresholds the result; no
