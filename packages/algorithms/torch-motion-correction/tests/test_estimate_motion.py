@@ -214,8 +214,6 @@ class TestEstimateMotionCrossCorrelationPatches:
             image=sample_image,
             pixel_spacing=pixel_spacing,
             patch_sampling=PatchSamplingConfig(patch_shape=(64, 64)),
-            # a single patch leaves no spread to reject outliers against
-            refinement=XCRefinementConfig(outlier_rejection=False),
             initial_deformation_field=DeformationField(
                 data=true_shifts[:, :, None, None].clone()
             ),
@@ -240,6 +238,18 @@ class TestEstimateMotionCrossCorrelationPatches:
         torch.testing.assert_close(
             result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
         )
+
+    def test_single_patch_with_outlier_rejection(self, sample_image, pixel_spacing):
+        """One patch per frame has no spread to reject outliers against."""
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(64, 64)),
+            refinement=XCRefinementConfig(outlier_rejection=True),
+            device=torch.device("cpu"),
+        )
+        assert result.shape == (2, sample_image.shape[0], 1, 1)
+        assert torch.isfinite(result.data).all()
 
     def test_patch_sampling_overlap(self, sample_image, pixel_spacing):
         """Test that PatchSamplingConfig overlap parameter is used."""

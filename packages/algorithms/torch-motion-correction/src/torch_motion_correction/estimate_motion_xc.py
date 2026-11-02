@@ -578,6 +578,10 @@ def _apply_outlier_rejection(
     corrected_shift_x: torch.Tensor
         X shifts with outliers replaced by mean (gh, gw)
     """
+    # A single patch has no spread to judge outliers against
+    if shift_y.numel() < 2:
+        return shift_y, shift_x
+
     # Flatten for easier processing
     shift_y_flat = shift_y.flatten()
     shift_x_flat = shift_x.flatten()
