@@ -56,4 +56,5 @@ Move the input tensors to a GPU with `.to("cuda")` and the computation follows.
 - [Installation](installation.md): PyTorch builds, the metapackage, and source installs.
 - [Conventions](conventions.md): array layout, coordinate order and Fourier-space
   conventions shared by all packages. Worth reading before mixing packages.
-- Browse the [primitives](../primitives/index.md) and [algorithms](../algorithms/index.md).
+- Browse the [primitives](../primitives/index.md), [algorithms](../algorithms/index.md)
+  and [I/O packages](../io/index.md).

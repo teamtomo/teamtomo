@@ -40,6 +40,15 @@ dimensions, so the pieces compose without glue code.
 
     [:octicons-arrow-right-24: Algorithms](algorithms/index.md)
 
+-   :material-file-swap-outline: **I/O**
+
+    ---
+
+    Read and write the files other software produces: STAR, IMOD models, mdoc,
+    AreTomo and etomo alignments, Dynamo tables, EER, EM and structure files.
+
+    [:octicons-arrow-right-24: I/O](io/index.md)
+
 -   :material-source-pull: **Contributing**
 
     ---

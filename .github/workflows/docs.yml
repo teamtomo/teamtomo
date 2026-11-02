@@ -16,6 +16,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The I/O packages are cloned from their own repositories at build time;
+  # rebuild weekly so their pages follow changes there.
+  schedule:
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

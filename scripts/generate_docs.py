@@ -10,11 +10,18 @@ package already owns, so nothing is written twice:
         docs/api.md          -> replaces the default API reference  (optional)
         examples/*.ipynb     -> docs/<category>/<package>/examples/*.md
         examples/*.py        -> (rendered as code, docstring as intro)
+        docs/examples/*      -> examples too; Markdown is copied as is
 
 The default API reference renders the package's top-level ``__all__``.
 
-Contributor documentation is generated from ``CONTRIBUTING.md`` and ``notes/``,
-and top-level ``examples/`` notebooks and scripts become pages under ``docs/examples/``.
+The I/O packages live in their own repositories. They are listed in
+``scripts/io_packages.toml``, cloned into ``external/`` (git-ignored) when missing,
+and generated under ``docs/io/`` by the same rules. ``--update`` pulls the latest
+default branch of each clone.
+
+Contributor documentation is generated from ``CONTRIBUTING.md`` and ``notes/``.
+``docs/examples/index.md`` is a hand-written placeholder; the top-level
+``examples/`` are not rendered yet.
 Notebooks are rendered from their stored outputs; they are never executed.
 
 Generated directories are listed in ``GENERATED_DIRS`` and git-ignored. The
@@ -34,6 +41,7 @@ import argparse
 import ast
 import re
 import shutil
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -42,15 +50,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 REPO_URL = "https://github.com/teamtomo/teamtomo"
-BLOB_URL = f"{REPO_URL}/blob/main"
+EXTERNAL = ROOT / "external"
+IO_PACKAGES = ROOT / "scripts" / "io_packages.toml"
 CATEGORIES = {
     "primitives": "Primitives",
     "algorithms": "Algorithms",
+    "io": "I/O",
     "utils": "Utilities",
 }
-GENERATED_DIRS = [*CATEGORIES, "developer", "examples"]
+GENERATED_DIRS = [*CATEGORIES, "developer"]
 NOTES_SKIP = re.compile(r"\.local\.md$")
 WARNINGS: list[str] = []
+# Local checkout root -> GitHub URL prefix (with a {kind} of blob or tree). The
+# deepest matching root wins, so clones under external/ map to their own repo.
+SOURCE_ROOTS: dict[Path, str] = {ROOT: f"{REPO_URL}/{{kind}}/main"}
+# Package name -> checkout, for links to the old per-package sites.
+LEGACY_SITES: dict[str, Path] = {}
 
 
 def warn(message: str) -> None:
@@ -65,6 +80,10 @@ MD_LINK = re.compile(
 HTML_SRC = re.compile(
     r"""(<(?:img|source)\b[^>]*?\bsrc=["'])(?!https?://|/)([^"']+)(["'])"""
 )
+# Links to the per-package sites that these docs replace, e.g. teamtomo.org/starfile/.
+LEGACY_LINK = re.compile(
+    r"(\]\()https?://teamtomo\.org/([a-z0-9_-]+)/?([^)#\s]*)(#[^)\s]*)?\)"
+)
 BADGE_LINE = re.compile(r"^\s*(\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)\s*)+$")
 
 
@@ -75,6 +94,8 @@ class Package:
     path: Path
     module: str
     description: str
+    src: Path | None = None  # directory holding the module; default <path>/src
+    group: str = ""
     out: Path = field(init=False)
     pages: list[tuple[str, str]] = field(
         default_factory=list
@@ -83,6 +104,29 @@ class Package:
 
     def __post_init__(self) -> None:
         self.out = DOCS / self.category / self.name
+        if self.src is None:
+            self.src = self.path / "src"
+
+
+def github_url(path: Path) -> str | None:
+    """GitHub URL of a file or directory in the monorepo or an external clone."""
+    for root in sorted(SOURCE_ROOTS, key=lambda r: len(r.parts), reverse=True):
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            continue
+        kind = "tree" if path.is_dir() else "blob"
+        return f"{SOURCE_ROOTS[root].format(kind=kind)}/{rel.as_posix()}"
+    return None
+
+
+def source_label(path: Path) -> str:
+    """Path of a file within its own repository, prefixed for external ones."""
+    for root in sorted(SOURCE_ROOTS, key=lambda r: len(r.parts), reverse=True):
+        if path.is_relative_to(root):
+            rel = path.relative_to(root).as_posix()
+            return rel if root == ROOT else f"{root.name}/{rel}"
+    return path.name
 
 
 def discover_packages() -> list[Package]:
@@ -104,6 +148,50 @@ def discover_packages() -> list[Package]:
                     description=meta.get("description", "").strip(),
                 )
             )
+    return packages
+
+
+def git(*args: str, cwd: Path | None = None) -> str:
+    result = subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
+    )
+    if result.returncode:
+        sys.exit(f"git {' '.join(args)} failed:\n{result.stderr}")
+    return result.stdout.strip()
+
+
+def discover_io_packages(update: bool) -> list[Package]:
+    """Clone (or with ``update``, refresh) the I/O repositories and describe them."""
+    packages = []
+    for entry in tomllib.loads(IO_PACKAGES.read_text())["package"]:
+        name, repo = entry["name"], entry["repo"]
+        checkout = EXTERNAL / name
+        if not checkout.exists():
+            print(f"cloning {repo}", file=sys.stderr)
+            EXTERNAL.mkdir(exist_ok=True)
+            git("clone", "--quiet", "--depth", "1", repo, str(checkout))
+        elif update:
+            git("fetch", "--quiet", "--depth", "1", "origin", "HEAD", cwd=checkout)
+            git("reset", "--quiet", "--hard", "FETCH_HEAD", cwd=checkout)
+        branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=checkout)
+        SOURCE_ROOTS[checkout] = f"{repo}/{{kind}}/{branch}"
+        LEGACY_SITES[name] = checkout
+        # src/ layout, or the module at the top of the repository.
+        src = checkout / "src" if (checkout / "src").is_dir() else checkout
+        module = name.replace("-", "_")
+        if not (src / module / "__init__.py").exists():
+            sys.exit(f"{checkout}: no {module}/__init__.py under {src}")
+        packages.append(
+            Package(
+                name=name,
+                category="io",
+                path=checkout,
+                module=module,
+                description=entry["description"],
+                src=src,
+                group=entry.get("group", ""),
+            )
+        )
     return packages
 
 
@@ -179,14 +267,34 @@ def rewrite_links(
             return path_part
         if not source.exists():
             warn(f"{src_dir.relative_to(ROOT)}: broken link {target}")
-        try:
-            rel = source.relative_to(ROOT).as_posix()
-        except ValueError:
+        url = github_url(source)
+        if url is None:
             return target
-        kind = "tree" if source.is_dir() else "blob"
-        return f"{REPO_URL}/{kind}/main/{rel}{'#' + anchor if anchor else ''}"
+        return f"{url}{'#' + anchor if anchor else ''}"
+
+    def legacy(match: re.Match) -> str:
+        """Point a link to an old per-package site at the page that replaced it."""
+        name, page, anchor = match.group(2), match.group(3).strip("/"), match.group(4)
+        checkout = LEGACY_SITES.get(name)
+        if checkout is None:
+            return match.group(0)
+        candidates = (
+            [checkout / "README.md"]
+            if not page
+            else [
+                checkout / "docs" / f"{page}.md",
+                checkout / "docs" / page / "index.md",
+            ]
+        )
+        # Emit the source file; the relative-link pass maps it to its page.
+        for candidate in candidates:
+            if candidate.resolve() in page_map:
+                rel = _relpath(candidate, src_dir)
+                return f"{match.group(1)}{rel}{anchor or ''})"
+        return match.group(0)
 
     def rewrite(chunk: str) -> str:
+        chunk = LEGACY_LINK.sub(legacy, chunk)
         chunk = MD_LINK.sub(
             lambda m: f"{m.group(1)}{resolve(m.group(2))}{m.group(3) or ''})", chunk
         )
@@ -229,11 +337,11 @@ def render_notebook(notebook: Path, out_md: Path) -> str:
         dest = out_md.parent / name
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
-    rel = notebook.relative_to(ROOT).as_posix()
+    rel = source_label(notebook)
     title = title_of(body, notebook.stem.replace("_", " ").capitalize())
     banner = (
         f'!!! note "Notebook"\n'
-        f"    Rendered from [`{rel}`]({BLOB_URL}/{rel}) with its stored outputs. "
+        f"    Rendered from [`{rel}`]({github_url(notebook)}) with its stored outputs. "
         f"Download it to run it yourself.\n\n"
     )
     first_cell = nb.cells[0] if nb.cells else None
@@ -262,28 +370,52 @@ def render_script(script: Path, out_md: Path) -> str:
     prose = re.sub(r":\w+:`~?([^`]+)`", r"`\1`", docstring).replace("``", "`")
     first, _, rest = prose.partition("\n")
     title = first.strip().rstrip(".") or script.stem.replace("_", " ").capitalize()
-    rel = script.relative_to(ROOT).as_posix()
+    rel = source_label(script)
     body = (
         f"# {title}\n\n"
         f'!!! note "Script"\n'
-        f"    [`{rel}`]({BLOB_URL}/{rel}). Download it to run it yourself.\n\n"
+        f"    [`{rel}`]({github_url(script)}). Download it to run it yourself.\n\n"
         f"{separate_lists(rest.strip())}\n\n```python\n{code.rstrip()}\n```\n"
     )
     write(out_md, body)
     return title
 
 
-def render_example(example: Path, out_md: Path) -> str:
+def render_example(
+    example: Path, out_md: Path, page_map: dict[Path, Path] | None = None
+) -> str:
     if example.suffix == ".ipynb":
         return render_notebook(example, out_md)
+    if example.suffix == ".md":
+        assets: list[tuple[Path, Path]] = []
+        content = rewrite_links(
+            separate_lists(example.read_text()),
+            example.parent,
+            out_md.parent,
+            page_map or {},
+            assets,
+        )
+        write(out_md, content)
+        for source, dest in assets:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, dest)
+        return title_of(content, example.stem.replace("_", " ").capitalize())
     return render_script(example, out_md)
 
 
-def example_files(directory: Path) -> list[Path]:
+def example_files(directory: Path, markdown: bool = False) -> list[Path]:
+    suffixes = {".ipynb", ".py"} | ({".md"} if markdown else set())
     return sorted(
         p
         for p in directory.glob("*")
-        if p.suffix in {".ipynb", ".py"} and not p.name.startswith("_")
+        if p.suffix in suffixes and not p.name.startswith("_")
+    )
+
+
+def package_examples(pkg: Package) -> list[Path]:
+    """Examples of a package: ``examples/``, then ``docs/examples/``."""
+    return example_files(pkg.path / "examples") + example_files(
+        pkg.path / "docs" / "examples", markdown=True
     )
 
 
@@ -352,9 +484,10 @@ def export_targets(pkg: Package) -> list[tuple[str, str]] | None:
 
     Documenting the package as a whole is not enough: when a function shadows
     its own submodule (``from .fsc import fsc``), griffe documents the module.
-    Returns None if the package has no ``__all__``.
+    Without ``__all__``, the names imported into ``__init__`` from the package
+    itself are used. Returns None if there are none.
     """
-    init = pkg.path / "src" / pkg.module / "__init__.py"
+    init = pkg.src / pkg.module / "__init__.py"
     exports = None
     for node in ast.parse(init.read_text()).body:
         if isinstance(node, ast.Assign) and any(
@@ -362,10 +495,18 @@ def export_targets(pkg: Package) -> list[tuple[str, str]] | None:
         ):
             exports = list(ast.literal_eval(node.value))
     if exports is None:
-        return None
-    src = pkg.path / "src"
+        # No __all__: the public names the package imports into __init__.
+        exports = [
+            alias.asname or alias.name
+            for node in ast.parse(init.read_text()).body
+            if isinstance(node, ast.ImportFrom) and node.level
+            for alias in node.names
+            if not (alias.asname or alias.name).startswith("_")
+        ]
+        if not exports:
+            return None
     return [
-        resolve_definition(src, pkg.module, name)
+        resolve_definition(pkg.src, pkg.module, name)
         for name in exports
         if name != "__version__"
     ]
@@ -423,9 +564,9 @@ def generate_package(pkg: Package, page_map: dict[Path, Path]) -> None:
     write(pkg.out / "api.md", api)
     pkg.pages.append(("API reference", f"{pkg.category}/{pkg.name}/api.md"))
 
-    for example in example_files(pkg.path / "examples"):
+    for example in package_examples(pkg):
         out_md = pkg.out / "examples" / f"{example.stem}.md"
-        title = render_example(example, out_md)
+        title = render_example(example, out_md, page_map)
         pkg.examples.append((title, out_md.relative_to(DOCS).as_posix()))
 
     if pkg.examples:
@@ -448,19 +589,24 @@ def generate_package(pkg: Package, page_map: dict[Path, Path]) -> None:
 
 def generate_category_indexes(packages: list[Package]) -> None:
     for category, title in CATEGORIES.items():
-        rows = [
-            f"| [{p.name}]({p.name}/index.md) | {p.description} |"
-            for p in packages
-            if p.category == category
-        ]
+        members = [p for p in packages if p.category == category]
+        groups = list(dict.fromkeys(p.group for p in members))
+        tables = []
+        for group in groups:
+            rows = [
+                f"| [{p.name}]({p.name}/index.md) | {p.description} |"
+                for p in members
+                if p.group == group
+            ]
+            heading = f"## {group}\n\n" if group else ""
+            tables.append(
+                f"{heading}| Package | Description |\n| --- | --- |\n"
+                + "\n".join(rows)
+                + "\n"
+            )
         intro_file = DOCS / "_snippets" / f"{category}.md"
         intro = intro_file.read_text().strip() + "\n\n" if intro_file.exists() else ""
-        write(
-            DOCS / category / "index.md",
-            f"# {title}\n\n{intro}| Package | Description |\n| --- | --- |\n"
-            + "\n".join(rows)
-            + "\n",
-        )
+        write(DOCS / category / "index.md", f"# {title}\n\n{intro}" + "\n".join(tables))
 
 
 def generate_developer_docs(page_map: dict[Path, Path]) -> list[tuple[str, str]]:
@@ -484,16 +630,6 @@ def generate_developer_docs(page_map: dict[Path, Path]) -> list[tuple[str, str]]
     return nav
 
 
-def generate_examples() -> list[tuple[str, str]]:
-    nav = []
-    for example in example_files(ROOT / "examples"):
-        out_md = DOCS / "examples" / f"{example.stem}.md"
-        nav.append(
-            (render_example(example, out_md), out_md.relative_to(DOCS).as_posix())
-        )
-    return nav
-
-
 def nav_files(nav: object) -> set[str]:
     """Collect every page path referenced by a zensical nav structure."""
     found: set[str] = set()
@@ -508,7 +644,7 @@ def nav_files(nav: object) -> set[str]:
     return found
 
 
-def toml_nav(packages: list[Package], developer: list, examples: list) -> str:
+def toml_nav(packages: list[Package], developer: list) -> str:
     def q(s: str) -> str:
         return '"' + s.replace('"', '\\"') + '"'
 
@@ -525,10 +661,8 @@ def toml_nav(packages: list[Package], developer: list, examples: list) -> str:
             lines.extend(f"      {e}," for e in entries)
             lines.append("    ] },")
         lines.append("  ] },")
-    if examples:
-        lines.append('  { "Examples" = [')
-        lines.extend(f"    {{ {q(t)} = {q(f)} }}," for t, f in examples)
-        lines.append("  ] },")
+    # Hand-written placeholder until the top-level examples are curated.
+    lines.append('  { "Examples" = "examples/index.md" },')
     lines.append('  { "Contributing" = [')
     lines.extend(f"    {{ {q(t)} = {q(f)} }}," for t, f in developer)
     lines.append("  ] },")
@@ -543,12 +677,17 @@ def main() -> None:
     parser.add_argument(
         "--strict", action="store_true", help="treat warnings as errors"
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="pull the latest default branch of each I/O package clone",
+    )
     args = parser.parse_args()
 
     for name in GENERATED_DIRS:
         shutil.rmtree(DOCS / name, ignore_errors=True)
 
-    packages = discover_packages()
+    packages = discover_packages() + discover_io_packages(args.update)
     # Source files that become pages, so links between them survive.
     page_map: dict[Path, Path] = {
         (ROOT / "CONTRIBUTING.md").resolve(): DOCS / "developer" / "index.md",
@@ -557,23 +696,25 @@ def main() -> None:
         page_map[note.resolve()] = DOCS / "developer" / note.name
     for pkg in packages:
         page_map[(pkg.path / "README.md").resolve()] = pkg.out / "index.md"
-        for ex in example_files(pkg.path / "examples"):
+        # A docs homepage is replaced by the README; other pages map one to one.
+        page_map[(pkg.path / "docs" / "index.md").resolve()] = pkg.out / "index.md"
+        for page in (pkg.path / "docs").glob("*.md"):
+            if page.name not in {"index.md", "api.md"}:
+                page_map[page.resolve()] = pkg.out / page.name
+        for ex in package_examples(pkg):
             page_map[ex.resolve()] = pkg.out / "examples" / f"{ex.stem}.md"
         if example_files(pkg.path / "examples"):
             page_map[(pkg.path / "examples").resolve()] = (
                 pkg.out / "index.md#example-gallery"
             )
-    for ex in example_files(ROOT / "examples"):
-        page_map[ex.resolve()] = DOCS / "examples" / f"{ex.stem}.md"
 
     for pkg in packages:
         generate_package(pkg, page_map)
     generate_category_indexes(packages)
     developer = generate_developer_docs(page_map)
-    examples = generate_examples()
 
     if args.print_nav:
-        print(toml_nav(packages, developer, examples))
+        print(toml_nav(packages, developer))
         return
 
     config = tomllib.loads((ROOT / "zensical.toml").read_text())

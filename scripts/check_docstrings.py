@@ -17,7 +17,7 @@ docstring; dataclass and pydantic fields go in an ``Attributes`` section.
 
 Usage::
 
-    uv run --isolated --only-group docs python scripts/check_docstrings.py [package ...]
+    uv run --isolated --only-group docs python scripts/check_docstrings.py [--io] [package ...]
 """
 
 from __future__ import annotations
@@ -30,13 +30,19 @@ from pathlib import Path
 import griffe
 
 sys.path.insert(0, str(Path(__file__).parent))
-from generate_docs import discover_packages, export_targets  # noqa: E402
+from generate_docs import (  # noqa: E402
+    discover_io_packages,
+    discover_packages,
+    export_targets,
+)
 
 SPHINX_ROLE = re.compile(r":(?:func|class|meth|attr|mod|obj|data|exc):`")
 IGNORED_PARAMS = {"self", "cls"}
 
 
-def documented(docstring: griffe.Docstring | None, kind: griffe.DocstringSectionKind) -> set[str]:
+def documented(
+    docstring: griffe.Docstring | None, kind: griffe.DocstringSectionKind
+) -> set[str]:
     if docstring is None:
         return set()
     names: set[str] = set()
@@ -48,14 +54,23 @@ def documented(docstring: griffe.Docstring | None, kind: griffe.DocstringSection
     return names
 
 
-def check_function(func: griffe.Function, label: str, extra_doc: griffe.Docstring | None = None) -> list[str]:
+def check_function(
+    func: griffe.Function, label: str, extra_doc: griffe.Docstring | None = None
+) -> list[str]:
     problems = []
     params = [
         p.name
         for p in func.parameters
-        if p.name not in IGNORED_PARAMS and p.kind not in (griffe.ParameterKind.var_positional, griffe.ParameterKind.var_keyword)
+        if p.name not in IGNORED_PARAMS
+        and p.kind
+        not in (griffe.ParameterKind.var_positional, griffe.ParameterKind.var_keyword)
     ]
-    variadic = [p.name for p in func.parameters if p.kind in (griffe.ParameterKind.var_positional, griffe.ParameterKind.var_keyword)]
+    variadic = [
+        p.name
+        for p in func.parameters
+        if p.kind
+        in (griffe.ParameterKind.var_positional, griffe.ParameterKind.var_keyword)
+    ]
     if func.docstring is None and extra_doc is None:
         return [f"{label}: no docstring"]
     if func.docstring is not None and SPHINX_ROLE.search(func.docstring.value):
@@ -77,8 +92,10 @@ def is_model(cls: griffe.Class) -> bool:
     """Dataclasses, NamedTuples and pydantic models: fields, not __init__ arguments."""
     bases = {str(b).rsplit(".", 1)[-1] for b in cls.bases}
     decorators = {str(d.value).split("(")[0].rsplit(".", 1)[-1] for d in cls.decorators}
-    return bool(bases & {"BaseModel", "NamedTuple", "BaseModelTeamTomo", "TypedDict"}) or "dataclass" in decorators or any(
-        "BaseModel" in b for b in bases
+    return (
+        bool(bases & {"BaseModel", "NamedTuple", "BaseModelTeamTomo", "TypedDict"})
+        or "dataclass" in decorators
+        or any("BaseModel" in b for b in bases)
     )
 
 
@@ -101,13 +118,19 @@ def check_class(cls: griffe.Class, label: str) -> list[str]:
         ]
         names = documented(cls.docstring, griffe.DocstringSectionKind.attributes)
         if documented(cls.docstring, griffe.DocstringSectionKind.parameters):
-            problems.append(f"{label}: model fields belong in an Attributes section, not Parameters")
-        documented_inline = {name for name in fields if cls.members[name].docstring is not None}
+            problems.append(
+                f"{label}: model fields belong in an Attributes section, not Parameters"
+            )
+        documented_inline = {
+            name for name in fields if cls.members[name].docstring is not None
+        }
         missing = [f for f in fields if f not in names and f not in documented_inline]
         if missing:
             problems.append(f"{label}: undocumented fields {missing}")
     elif "__init__" in cls.members and not cls.members["__init__"].is_alias:
-        problems += check_function(cls.members["__init__"], f"{label}.__init__", extra_doc=cls.docstring)
+        problems += check_function(
+            cls.members["__init__"], f"{label}.__init__", extra_doc=cls.docstring
+        )
     for name, member in cls.members.items():
         if name.startswith("_") or member.is_alias or not member.is_function:
             continue
@@ -121,10 +144,18 @@ def check_class(cls: griffe.Class, label: str) -> list[str]:
 
 def main() -> None:
     logging.getLogger("griffe").setLevel(logging.ERROR)
-    wanted = set(sys.argv[1:])
-    packages = [p for p in discover_packages() if not wanted or p.name in wanted]
-    search = [str(p.path / "src") for p in discover_packages()]
-    loader = griffe.GriffeLoader(search_paths=search, docstring_parser=griffe.Parser.numpy)
+    args = sys.argv[1:]
+    # The I/O packages live in other repositories, so CI does not check them here.
+    candidates = discover_packages()
+    if "--io" in args:
+        args.remove("--io")
+        candidates += discover_io_packages(update=False)
+    wanted = set(args)
+    packages = [p for p in candidates if not wanted or p.name in wanted]
+    search = [str(p.src) for p in candidates]
+    loader = griffe.GriffeLoader(
+        search_paths=search, docstring_parser=griffe.Parser.numpy
+    )
     total = 0
     for pkg in packages:
         loader.load(pkg.module)
@@ -138,7 +169,9 @@ def main() -> None:
                 problems.append(f"{path}: not found")
                 continue
             label = path.rsplit(".", 1)[-1]
-            problems += check_class(obj, label) if obj.is_class else check_function(obj, label)
+            problems += (
+                check_class(obj, label) if obj.is_class else check_function(obj, label)
+            )
         if problems:
             print(f"\n{pkg.name} ({len(problems)})")
             for problem in problems:

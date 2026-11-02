@@ -152,6 +152,51 @@ nav = [
       { "API reference" = "algorithms/torch-tiltxcorr/api.md" },
     ] },
   ] },
+  { "I/O" = [
+    "io/index.md",
+    { "starfile" = [
+      { "Overview" = "io/starfile/index.md" },
+      { "API reference" = "io/starfile/api.md" },
+      { "Examples" = [{ "merging data across tables" = "io/starfile/examples/merging.md" }, { "multiple data block example" = "io/starfile/examples/multi_block.md" }, { "single data block example" = "io/starfile/examples/single_block.md" }] },
+    ] },
+    { "imodmodel" = [
+      { "Overview" = "io/imodmodel/index.md" },
+      { "Object-based API" = "io/imodmodel/object_api.md" },
+      { "Slicer Angles" = "io/imodmodel/slicer_angles.md" },
+      { "A note about 3dmod's coordinate system" = "io/imodmodel/z_coordinate_system_note.md" },
+      { "API reference" = "io/imodmodel/api.md" },
+      { "Examples" = [{ "Export mesh" = "io/imodmodel/examples/export_mesh.md" }, { "Read mesh" = "io/imodmodel/examples/read_mesh.md" }, { "Smiley" = "io/imodmodel/examples/smiley.md" }] },
+    ] },
+    { "mdocfile" = [
+      { "Overview" = "io/mdocfile/index.md" },
+      { "Writing mdoc files" = "io/mdocfile/writing.md" },
+      { "API reference" = "io/mdocfile/api.md" },
+    ] },
+    { "alnfile" = [
+      { "Overview" = "io/alnfile/index.md" },
+      { "API reference" = "io/alnfile/api.md" },
+    ] },
+    { "etomofiles" = [
+      { "Overview" = "io/etomofiles/index.md" },
+      { "API reference" = "io/etomofiles/api.md" },
+    ] },
+    { "dynamotable" = [
+      { "Overview" = "io/dynamotable/index.md" },
+      { "API reference" = "io/dynamotable/api.md" },
+    ] },
+    { "eerfile" = [
+      { "Overview" = "io/eerfile/index.md" },
+      { "API reference" = "io/eerfile/api.md" },
+    ] },
+    { "emfile" = [
+      { "Overview" = "io/emfile/index.md" },
+      { "API reference" = "io/emfile/api.md" },
+    ] },
+    { "mmdf" = [
+      { "Overview" = "io/mmdf/index.md" },
+      { "API reference" = "io/mmdf/api.md" },
+    ] },
+  ] },
   { "Utilities" = [
     "utils/index.md",
     { "teamtomo-basemodel" = [
@@ -159,9 +204,7 @@ nav = [
       { "API reference" = "utils/teamtomo-basemodel/api.md" },
     ] },
   ] },
-  { "Examples" = [
-    { "Hierarchical S2 Grid Demo" = "examples/hierarchical_s2_grid_demo.md" },
-  ] },
+  { "Examples" = "examples/index.md" },
   { "Contributing" = [
     { "Contribution Guidelines for TeamTomo" = "developer/index.md" },
     { "Archiving Legacy Repositories" = "developer/archive-old-repo.md" },
@@ -254,7 +297,8 @@ pymdownx.tilde = {}
 
 [project.plugins.mkdocstrings.handlers.python]
 # Sources are read statically, so the packages (and torch) need not be installed.
-paths = ["packages/*/*/src"]
+# I/O packages are cloned into external/ by scripts/generate_docs.py.
+paths = ["packages/*/*/src", "external/*/src", "external/*"]
 inventories = [
   "https://docs.python.org/3/objects.inv",
   "https://docs.pytorch.org/docs/stable/objects.inv",
