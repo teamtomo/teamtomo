@@ -317,7 +317,7 @@ def _run_defocus_2d(
         )
         if result2d.defocus_model_type == "linear":
             axis_deg, tilt_deg = linear_tilt_axis_and_magnitude_deg(
-                result2d, new_spacing, min(h, w)
+                result2d, new_spacing, (h, w)
             )
             result2d = result2d.model_copy(
                 update={
@@ -417,7 +417,7 @@ def _run_defocus_2d(
     )
     if result2d.defocus_model_type == "linear":
         axis_deg, tilt_deg = linear_tilt_axis_and_magnitude_deg(
-            result2d, new_spacing, min(h, w)
+            result2d, new_spacing, (h, w)
         )
         result2d = result2d.model_copy(
             update={

@@ -163,6 +163,8 @@ class Defocus2DResults(BaseModel):
     loss_trace: list[float] | None = None
     defocus_u: float | None = None  # highest principal defocus (defocus + astig)
     defocus_v: float | None = None  # lowest principal defocus (defocus - astig)
+    # linear model only: tilt axis in degrees from +x towards +y, in [0, 180),
+    # and tilt magnitude (>= 0) in degrees
     tilt_axis_angle_deg: float | None = None
     tilt_magnitude_deg: float | None = None
     phase_shift_degrees: float | None = None
@@ -198,15 +200,12 @@ class Defocus2DResults(BaseModel):
     def linear_tilt_axis_and_magnitude_deg(
         self,
         pixel_spacing_angstroms: float,
-        image_size_pixels: int,
+        image_size_pixels: int | tuple[int, int],
     ) -> tuple[float, float]:
         """
         For linear defocus model: (tilt_axis_angle_deg, tilt_magnitude_deg).
 
-        Tilt axis angle is the defocus gradient direction (degrees).
-        Tilt magnitude (degrees) from defocus gradient (um per normalized unit)
-        and pixel size: arctan(gradient in µm/µm) with gradient in µm/µm
-        = grad_mag*1e4 / (image_size_pixels * pixel_spacing_angstroms).
+        See :func:`linear_tilt_axis_and_magnitude_deg`.
         Returns (0.0, 0.0) if defocus_model_type is not "linear".
         """
         return linear_tilt_axis_and_magnitude_deg(
@@ -217,28 +216,53 @@ class Defocus2DResults(BaseModel):
 def linear_tilt_axis_and_magnitude_deg(
     result2d: Defocus2DResults,
     pixel_spacing_angstroms: float,
-    image_size_pixels: int,
+    image_size_pixels: int | tuple[int, int],
 ) -> tuple[float, float]:
     """
-    Tilt axis angle (degrees) and tilt magnitude (degrees) from a linear defocus result.
+    Tilt axis angle and tilt magnitude (degrees) from a linear defocus result.
 
-    The defocus gradient is in um per normalized unit (0-1 across the image).
-    Tilt magnitude (deg) = arctan(gradient in um/um) * 180/pi, with
-    gradient in µm/µm = defocus_gradient_magnitude * 1e4
-    / (image_size_pixels * pixel_spacing_angstroms)
-    (1 normalized unit = image_size_pixels * pixel_spacing_angstroms A).
+    The tilt axis is the line of constant defocus, perpendicular to the defocus
+    gradient. Its angle follows the TeamTomo convention used by torch-tilt-series
+    and torch-refine-tilt-axis-angle: degrees from +x (columns) towards +y
+    (increasing row), in [0, 180). Which side of the axis is further from focus
+    is given by the gradient in ``defocus_model``.
 
-    Returns (tilt_axis_angle_deg, tilt_magnitude_deg). If defocus_model_type is not
-    "linear", returns (0.0, 0.0).
+    The tilt magnitude is ``atan(|grad defocus|)`` with the gradient converted to
+    µm per µm. Normalised positions span ``h - 1`` rows and ``w - 1`` columns of
+    the image at ``pixel_spacing_angstroms``, so a normalised unit along rows is
+    ``(h - 1) * pixel_spacing_angstroms`` Å and along columns
+    ``(w - 1) * pixel_spacing_angstroms`` Å.
+
+    Parameters
+    ----------
+    result2d : Defocus2DResults
+        2D result with a linear defocus model.
+    pixel_spacing_angstroms : float
+        Pixel spacing of the image the model was fitted on.
+    image_size_pixels : int or tuple[int, int]
+        ``(h, w)`` of that image; an int means a square image.
+
+    Returns
+    -------
+    tuple[float, float]
+        ``(tilt_axis_angle_deg, tilt_magnitude_deg)``; ``(0.0, 0.0)`` if
+        ``defocus_model_type`` is not ``"linear"``.
     """
     if result2d.defocus_model_type != "linear":
         return (0.0, 0.0)
+    if isinstance(image_size_pixels, int):
+        image_size_pixels = (image_size_pixels, image_size_pixels)
+    h, w = image_size_pixels
     lm = result2d.defocus_model
-    grad_mag = lm.defocus_gradient_magnitude  # microns per normalized unit
-    axis_deg = lm.defocus_gradient_angle
-    grad_per_micron = (grad_mag * 1e4) / (image_size_pixels * pixel_spacing_angstroms)
-    tilt_rad = math.atan(grad_per_micron)
-    tilt_deg = tilt_rad * 180.0 / math.pi
+    angle = math.radians(lm.defocus_gradient_angle)  # from the row axis
+    # gradient in µm of defocus per µm laterally, along y (rows) and x (columns)
+    row_unit_um = max(h - 1, 1) * pixel_spacing_angstroms * 1e-4
+    col_unit_um = max(w - 1, 1) * pixel_spacing_angstroms * 1e-4
+    grad_y = lm.defocus_gradient_magnitude * math.cos(angle) / row_unit_um
+    grad_x = lm.defocus_gradient_magnitude * math.sin(angle) / col_unit_um
+    tilt_deg = math.degrees(math.atan(math.hypot(grad_x, grad_y)))
+    gradient_direction_deg = math.degrees(math.atan2(grad_y, grad_x))
+    axis_deg = (gradient_direction_deg + 90.0) % 180.0
     return (axis_deg, tilt_deg)
 
 
