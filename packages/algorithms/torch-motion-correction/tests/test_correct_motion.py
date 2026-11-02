@@ -159,7 +159,7 @@ class TestCorrectMotionFast:
     """Tests for correct_motion_fast function."""
 
     def test_basic_functionality(
-        self, sample_image, sample_single_patch_deformation_field
+        self, sample_image, sample_single_patch_deformation_field, pixel_spacing
     ):
         """Test basic fast motion correction."""
         corrected = correct_motion_fast(
@@ -167,23 +167,27 @@ class TestCorrectMotionFast:
             deformation_field=DeformationField(
                 data=sample_single_patch_deformation_field
             ),
+            pixel_spacing=pixel_spacing,
             device=torch.device("cpu"),
         )
         # Check output shape matches input
         assert corrected.shape == sample_image.shape
         assert isinstance(corrected, torch.Tensor)
 
-    def test_single_patch_requirement(self, sample_image, sample_deformation_field):
+    def test_single_patch_requirement(
+        self, sample_image, sample_deformation_field, pixel_spacing
+    ):
         """Test that function requires single patch deformation field."""
         with pytest.raises(ValueError, match="Expected single patch deformation field"):
             correct_motion_fast(
                 image=sample_image,
                 deformation_field=DeformationField(data=sample_deformation_field),
+                pixel_spacing=pixel_spacing,
                 device=torch.device("cpu"),
             )
 
     def test_different_devices(
-        self, sample_image, sample_single_patch_deformation_field
+        self, sample_image, sample_single_patch_deformation_field, pixel_spacing
     ):
         """Test that `device` controls compute location, not output location."""
         if torch.cuda.is_available():
@@ -192,6 +196,7 @@ class TestCorrectMotionFast:
                 deformation_field=DeformationField(
                     data=sample_single_patch_deformation_field
                 ),
+                pixel_spacing=pixel_spacing,
                 device=torch.device("cuda"),
             )
             assert corrected_gpu.device.type == sample_image.device.type == "cpu"
@@ -202,6 +207,7 @@ class TestCorrectMotionFast:
                 deformation_field=DeformationField(
                     data=sample_single_patch_deformation_field
                 ),
+                pixel_spacing=pixel_spacing,
                 device=torch.device("cpu"),
             )
             # Streaming through the GPU must give the same result as computing
@@ -211,7 +217,7 @@ class TestCorrectMotionFast:
             pytest.skip("CUDA not available")
 
     def test_does_not_mutate_input_deformation_field(
-        self, sample_image, sample_single_patch_deformation_field
+        self, sample_image, sample_single_patch_deformation_field, pixel_spacing
     ):
         """Applying shifts must not flip the sign of the caller's field in place.
 
@@ -224,16 +230,34 @@ class TestCorrectMotionFast:
         correct_motion_fast(
             image=sample_image,
             deformation_field=field,
+            pixel_spacing=pixel_spacing,
             device=torch.device("cpu"),
         )
         assert torch.equal(field.data, original_data)
 
-    def test_zero_deformation_field(self, sample_image):
+    def test_matches_correct_motion(self, sample_image):
+        """Shifts in Angstroms are converted to pixels, as in correct_motion."""
+        t = sample_image.shape[0]
+        data = torch.zeros((2, t, 1, 1))
+        data[0, :, 0, 0] = torch.linspace(-4.0, 4.0, t)
+        data[1, :, 0, 0] = torch.linspace(3.0, -3.0, t)
+        field = DeformationField(data=data)
+        kwargs = {"pixel_spacing": 2.0, "device": torch.device("cpu")}
+        fast = correct_motion_fast(sample_image, field, **kwargs)
+        reference = correct_motion(sample_image, field, **kwargs)
+        # Compare away from the borders, where the FFT shift wraps around and
+        # bicubic sampling pads; the rest differs only by interpolation error.
+        torch.testing.assert_close(
+            fast[:, 16:-16, 16:-16], reference[:, 16:-16, 16:-16], atol=5e-3, rtol=0
+        )
+
+    def test_zero_deformation_field(self, sample_image, pixel_spacing):
         """Test with zero deformation field."""
         t = sample_image.shape[0]
         corrected = correct_motion_fast(
             image=sample_image,
             deformation_field=DeformationField(data=torch.zeros((2, t, 1, 1))),
+            pixel_spacing=pixel_spacing,
             device=torch.device("cpu"),
         )
         assert corrected.shape == sample_image.shape
@@ -334,6 +358,7 @@ class TestMotionCorrectionIntegration:
         corrected = correct_motion_fast(
             image=sample_image,
             deformation_field=deformation_field,
+            pixel_spacing=pixel_spacing,
             device=torch.device("cpu"),
         )
 

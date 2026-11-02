@@ -430,6 +430,7 @@ def _correct_frame_slow(
 def correct_motion_fast(
     image: torch.Tensor,
     deformation_field: DeformationField,
+    pixel_spacing: float,
     device: torch.device = None,
     verbose: bool = False,
 ) -> torch.Tensor:
@@ -445,6 +446,8 @@ def correct_motion_fast(
         device than ``device`` (e.g. large super-res movie stored on CPU).
     deformation_field: DeformationField
         Deformation field with shape (2, t, 1, 1) in Angstroms.
+    pixel_spacing: float
+        Pixel spacing in Angstroms
     device: torch.device, optional
         Device for computation
     verbose: bool
@@ -470,12 +473,12 @@ def correct_motion_fast(
 
     t, h, w = image.shape
 
-    # Extract shifts from deformation field (2, t, 1, 1) -> (t, 2). Negation
-    # must be out-of-place: `deformation_field.to(device)` is a no-op (shares
-    # storage with the caller's tensor) when already on `device`, so an
+    # Extract shifts from deformation field (2, t, 1, 1) -> (t, 2), in pixels.
+    # Negation must be out-of-place: `deformation_field.to(device)` is a no-op
+    # (shares storage with the caller's tensor) when already on `device`, so an
     # in-place `*= -1` here would silently flip the sign of the caller's
     # deformation field.
-    shifts = -einops.rearrange(deformation_field.data, "c t 1 1 -> t c")
+    shifts = -einops.rearrange(deformation_field.data, "c t 1 1 -> t c") / pixel_spacing
 
     if verbose:
         print(f"Single patch correction: applying shifts to {t} frames")

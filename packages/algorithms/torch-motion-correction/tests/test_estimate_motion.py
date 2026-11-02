@@ -202,6 +202,29 @@ class TestEstimateMotionCrossCorrelationPatches:
         assert result.shape[0] == 2
         assert patch_positions is not None
 
+    def test_single_patch_initial_field_is_applied_in_angstroms(self, sample_image):
+        """Starting from the true 1x1 field, nothing is left to correct."""
+        pixel_spacing = 2.0
+        t = sample_image.shape[0]
+        # sample_image moves 2 px down and 1 px right per frame
+        true_shifts = torch.stack([2.0 * torch.arange(t), 1.0 * torch.arange(t)])
+        true_shifts = true_shifts * pixel_spacing
+        true_shifts = true_shifts - true_shifts.mean(dim=1, keepdim=True)
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(64, 64)),
+            # a single patch leaves no spread to reject outliers against
+            refinement=XCRefinementConfig(outlier_rejection=False),
+            initial_deformation_field=DeformationField(
+                data=true_shifts[:, :, None, None].clone()
+            ),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(2, 3)), true_shifts, atol=1.0, rtol=0
+        )
+
     def test_patch_sampling_overlap(self, sample_image, pixel_spacing):
         """Test that PatchSamplingConfig overlap parameter is used."""
         # 25% overlap should give more patches than 50%

@@ -247,6 +247,7 @@ def estimate_motion_cross_correlation_patches(
             image = correct_motion_fast(
                 image=image,
                 deformation_field=initial_deformation_field,
+                pixel_spacing=pixel_spacing,
                 device=device,
                 verbose=verbose,
             )
