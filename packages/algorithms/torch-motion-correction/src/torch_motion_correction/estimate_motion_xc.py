@@ -7,7 +7,10 @@ from scipy.signal import savgol_filter
 from torch_grid_utils.patch_grid import patch_grid_lazy
 
 from torch_motion_correction.correct_motion import correct_motion, correct_motion_fast
-from torch_motion_correction.deformation_field import DeformationField
+from torch_motion_correction.deformation_field import (
+    DeformationField,
+    _subtract_mean_shift,
+)
 from torch_motion_correction.types import (
     FourierFilterConfig,
     PatchSamplingConfig,
@@ -416,9 +419,7 @@ def estimate_motion_cross_correlation_patches(
         )
         print(f"Estimated deformation field shape: {deformation_field_tensor.shape}")
 
-    deformation_field_tensor = deformation_field_tensor - torch.mean(
-        deformation_field_tensor
-    )
+    deformation_field_tensor = _subtract_mean_shift(deformation_field_tensor)
     return DeformationField(data=deformation_field_tensor), data_patch_positions
 
 

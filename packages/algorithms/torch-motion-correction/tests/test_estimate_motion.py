@@ -225,6 +225,22 @@ class TestEstimateMotionCrossCorrelationPatches:
             result.data.mean(dim=(2, 3)), true_shifts, atol=1.0, rtol=0
         )
 
+    def test_mean_shift_removed_per_axis(self, sample_image, pixel_spacing):
+        """y and x shifts are each zero-mean, even from an offset initial field."""
+        initial = torch.zeros((2, sample_image.shape[0], 1, 1))
+        initial[0] += 3.0
+        initial[1] -= 3.0
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            initial_deformation_field=DeformationField(data=initial),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
+        )
+
     def test_patch_sampling_overlap(self, sample_image, pixel_spacing):
         """Test that PatchSamplingConfig overlap parameter is used."""
         # 25% overlap should give more patches than 50%
@@ -350,7 +366,9 @@ class TestEstimateMotionCrossCorrelationPatches:
             expected_field[0, frame_idx] = shift_y.view(gh, gw) * pixel_spacing
             expected_field[1, frame_idx] = shift_x.view(gh, gw) * pixel_spacing
 
-        expected_field = expected_field - torch.mean(expected_field)
+        expected_field = expected_field - expected_field.mean(
+            dim=(1, 2, 3), keepdim=True
+        )
         assert torch.allclose(result.data, expected_field, atol=1e-4)
 
 
@@ -370,6 +388,24 @@ class TestEstimateLocalMotion:
         assert isinstance(result, DeformationField)
         # Check output shape: (2, nt, nh, nw)
         assert result.shape == (2, sample_image.shape[0], 2, 2)
+
+    def test_mean_shift_removed_per_axis(self, sample_image, pixel_spacing):
+        """y and x shifts are each zero-mean, even from an offset initial field."""
+        initial = torch.zeros((2, sample_image.shape[0], 1, 1))
+        initial[0] += 3.0
+        initial[1] -= 3.0
+        result, _ = estimate_local_motion(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            deformation_field_resolution=(sample_image.shape[0], 1, 1),
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            initial_deformation_field=DeformationField(data=initial),
+            optimization=OptimizationConfig(max_iterations=2),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
+        )
 
     def test_with_initial_deformation_field(self, sample_image, pixel_spacing):
         """Test with initial deformation field."""
