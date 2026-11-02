@@ -1,4 +1,10 @@
 # teamtomo-basemodel
+
+[![License](https://img.shields.io/pypi/l/teamtomo-basemodel.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/utils/teamtomo-basemodel/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/teamtomo-basemodel.svg?color=green)](https://pypi.org/project/teamtomo-basemodel)
+[![Python Version](https://img.shields.io/pypi/pyversions/teamtomo-basemodel.svg?color=green)](https://python.org)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
+
 Custom Pydantic classes and type-hints for building more complex data classes within TeamTomo.
 
 ## Package Usage
@@ -134,12 +140,14 @@ pip install teamtomo-basemodel
 
 ### From source
 
-If you'd rather install the package from source, say for development purposes, use the following commands for cloning then installing a local editable version of the package
+TeamTomo packages are developed together in the [TeamTomo monorepo](https://github.com/teamtomo/teamtomo):
 
 ```bash
-git clone https://github.com/teamtomo/teamtomo-basemodel.git
-cd teamtomo-basemodel
-pip install -e .
+git clone https://github.com/teamtomo/teamtomo.git
+cd teamtomo
+uv sync --all-packages
 ```
+
+See the [contributing guide](../../../CONTRIBUTING.md) for the development setup.
 
 

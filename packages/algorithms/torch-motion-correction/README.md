@@ -1,10 +1,9 @@
 # torch-motion-correction
 
-[![License](https://img.shields.io/pypi/l/torch-motion-correction.svg?color=green)](https://github.com/teamtomo/torch-motion-correction/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-motion-correction.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-motion-correction/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-motion-correction.svg?color=green)](https://pypi.org/project/torch-motion-correction)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-motion-correction.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-motion-correction/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-motion-correction/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-motion-correction/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-motion-correction)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 Movie motion estimation and correction using PyTorch. Implements a spline-based deformation field to model the beam-induced motion over movie collection.
 

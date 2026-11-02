@@ -1,10 +1,9 @@
 # torch-ctf
 
-[![License](https://img.shields.io/pypi/l/torch-ctf.svg?color=green)](https://github.com/jdickerson95/torch-ctf/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-ctf.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-ctf/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-ctf.svg?color=green)](https://pypi.org/project/torch-ctf)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-ctf.svg?color=green)](https://python.org)
-[![CI](https://github.com/jdickerson95/torch-ctf/actions/workflows/ci.yml/badge.svg)](https://github.com/jdickerson95/torch-ctf/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/jdickerson95/torch-ctf/branch/main/graph/badge.svg)](https://codecov.io/gh/jdickerson95/torch-ctf)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 CTF calculation for cryoEM in torch
 

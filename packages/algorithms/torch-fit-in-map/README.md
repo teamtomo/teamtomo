@@ -1,6 +1,6 @@
 # torch-fit-in-map
 
-[![License](https://img.shields.io/pypi/l/torch-fit-in-map.svg?color=green)](https://github.com/teamtomo/teamtomo/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-fit-in-map.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-fit-in-map/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-fit-in-map.svg?color=green)](https://pypi.org/project/torch-fit-in-map)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-fit-in-map.svg?color=green)](https://python.org)
 [![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)

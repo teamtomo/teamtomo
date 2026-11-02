@@ -1,5 +1,10 @@
 # torch-calculate-electrostatic-potential
 
+[![License](https://img.shields.io/pypi/l/torch-calculate-electrostatic-potential.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-calculate-electrostatic-potential/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/torch-calculate-electrostatic-potential.svg?color=green)](https://pypi.org/project/torch-calculate-electrostatic-potential)
+[![Python Version](https://img.shields.io/pypi/pyversions/torch-calculate-electrostatic-potential.svg?color=green)](https://python.org)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
+
 Differentiable 2D projected and 3D electrostatic potentials from Peng 1996
 electron-scattering factors.
 
@@ -176,11 +181,13 @@ it for broad Gaussians.
 
 ## Testing
 
-Install the package together with test dependencies:
+Tests run from the [TeamTomo monorepo](https://github.com/teamtomo/teamtomo):
 
-```sh
-pip install "torch-calculate-electrostatic-potential[test]" @ git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
-pytest
+```bash
+git clone https://github.com/teamtomo/teamtomo.git
+cd teamtomo
+uv sync --all-packages --group test
+uv run pytest packages/primitives/torch-calculate-electrostatic-potential
 ```
 
 With coverage: `pytest --cov=torch_calculate_electrostatic_potential --cov-report=html`.

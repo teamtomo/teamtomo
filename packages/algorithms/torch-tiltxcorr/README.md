@@ -1,10 +1,9 @@
 # torch-tiltxcorr
 
-[![License](https://img.shields.io/pypi/l/torch-tiltxcorr.svg?color=green)](https://github.com/teamtomo/torch-tiltxcorr/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-tiltxcorr.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-tiltxcorr/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-tiltxcorr.svg?color=green)](https://pypi.org/project/torch-tiltxcorr)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-tiltxcorr.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-tiltxcorr/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-tiltxcorr/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-tiltxcorr/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-tiltxcorr)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 Cross correlation with image stretching for coarse alignment of cryo-EM tilt series data in PyTorch.
 

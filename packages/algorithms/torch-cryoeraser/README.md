@@ -1,10 +1,9 @@
 # torch-cryoeraser
 
-[![License](https://img.shields.io/pypi/l/torch-cryoeraser.svg?color=green)](https://github.com/teamtomo/torch-cryoeraser/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-cryoeraser.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-cryoeraser/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-cryoeraser.svg?color=green)](https://pypi.org/project/torch-cryoeraser)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-cryoeraser.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-cryoeraser/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-cryoeraser/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-cryoeraser/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-cryoeraser)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 *torch-cryoeraser* is a Python package for erasing local regions of cryo-EM images.
 

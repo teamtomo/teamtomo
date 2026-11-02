@@ -1,10 +1,9 @@
 # torch-cubic-spline-grids
 
-[![License](https://img.shields.io/pypi/l/torch-cubic-spline-grids.svg?color=green)](https://github.com/alisterburt/torch-cubic-spline-grids/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-cubic-spline-grids.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-cubic-spline-grids/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-cubic-spline-grids.svg?color=green)](https://pypi.org/project/torch-cubic-spline-grids)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-cubic-spline-grids.svg?color=green)](https://python.org)
-[![CI](https://github.com/alisterburt/torch-cubic-spline-grids/actions/workflows/ci.yml/badge.svg)](https://github.com/alisterburt/torch-cubic-spline-grids/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/alisterburt/torch-cubic-spline-grids/branch/main/graph/badge.svg)](https://codecov.io/gh/alisterburt/torch-cubic-spline-grids)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 *Cubic spline interpolation on multidimensional grids in PyTorch.*
 

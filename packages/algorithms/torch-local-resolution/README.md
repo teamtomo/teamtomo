@@ -1,5 +1,10 @@
 # torch-local-resolution
 
+[![License](https://img.shields.io/pypi/l/torch-local-resolution.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-local-resolution/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/torch-local-resolution.svg?color=green)](https://pypi.org/project/torch-local-resolution)
+[![Python Version](https://img.shields.io/pypi/pyversions/torch-local-resolution.svg?color=green)](https://python.org)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
+
 Core functionality for local resolution estimation of cryo-EM half-maps.
 
 ## Overview
