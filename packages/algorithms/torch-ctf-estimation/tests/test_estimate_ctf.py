@@ -1,3 +1,4 @@
+import importlib
 import math
 
 import pytest
@@ -597,3 +598,24 @@ def test_estimate_ctf_recovers_principal_defocus(
     assert result2d.astigmatism_angle == pytest.approx(30.0, abs=3.0)
     assert result2d.defocus_u == pytest.approx(2.1, abs=0.02)
     assert result2d.defocus_v == pytest.approx(1.9, abs=0.02)
+
+
+class _DeviceSeen(Exception):
+    """Raised by a stub to report the device it was called with."""
+
+
+def test_estimate_ctf_defaults_to_image_device(monkeypatch):
+    """With device=None, computation runs on the input image's device."""
+    module = importlib.import_module("torch_ctf_estimation.estimate_ctf")
+
+    def record_device(image, optical_params, fitting_params, laser_params, device):
+        raise _DeviceSeen(device)
+
+    # A hard-coded CUDA default would be chosen if CUDA were available.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(module, "_estimate_defocus", record_device)
+    with pytest.raises(_DeviceSeen) as seen:
+        estimate_ctf(
+            torch.randn(64, 64), default_optical_params(), default_fitting_params()
+        )
+    assert seen.value.args[0] == torch.device("cpu")

@@ -453,7 +453,7 @@ def estimate_ctf(
         masking when ``mask_laser_axis`` is enabled. Use ``model_laser=True`` to
         fit with the LPP CTF model; if None, use standard CTF with no masking.
     device : torch.device | None, optional
-        Device for computation. If None, uses cuda:0 when available, else cpu.
+        Device for computation. If None, uses the device of ``image``.
 
     Returns
     -------
@@ -465,7 +465,7 @@ def estimate_ctf(
         Results from 2D defocus estimation.
     """
     if device is None:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = image.device
     pipeline = _estimate_defocus(
         image, optical_params, fitting_params, laser_params, device
     )
@@ -506,7 +506,7 @@ def estimate_ctf_and_thickness(
     laser_params : LaserParams | None, optional
         See :func:`estimate_ctf`.
     device : torch.device | None, optional
-        Device for computation. If None, uses cuda:0 when available, else cpu.
+        Device for computation. If None, uses the device of ``image``.
 
     Returns
     -------
@@ -517,7 +517,7 @@ def estimate_ctf_and_thickness(
         (post-rescale pixel spacing used for fitting).
     """
     if device is None:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = image.device
     pipeline = _estimate_defocus(
         image, optical_params, fitting_params, laser_params, device
     )
