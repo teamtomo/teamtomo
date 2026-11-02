@@ -35,8 +35,8 @@ class DefocusResultsOutput(BaseModelTeamTomo):
     defocus_model_type: Literal["grid", "linear"]
     linear_defocus: LinearDefocusOutput | None = None
     grid_defocus: GridDefocusOutput | None = None
-    # linear model only: tilt axis in degrees from +x towards +y, in [0, 180),
-    # and tilt magnitude (>= 0) in degrees
+    # linear model only: tilt axis angle in [0, 180) (TeamTomo convention, axis
+    # along (-sin a, cos a) in (x, y)), and tilt magnitude (>= 0) in degrees
     tilt_axis_angle_deg: float | None = None
     tilt_magnitude_deg: float | None = None
 

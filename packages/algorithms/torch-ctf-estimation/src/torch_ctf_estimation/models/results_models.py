@@ -163,8 +163,8 @@ class Defocus2DResults(BaseModel):
     loss_trace: list[float] | None = None
     defocus_u: float | None = None  # highest principal defocus (defocus + astig)
     defocus_v: float | None = None  # lowest principal defocus (defocus - astig)
-    # linear model only: tilt axis in degrees from +x towards +y, in [0, 180),
-    # and tilt magnitude (>= 0) in degrees
+    # linear model only: tilt axis angle in [0, 180) (TeamTomo convention, axis
+    # along (-sin a, cos a) in (x, y)), and tilt magnitude (>= 0) in degrees
     tilt_axis_angle_deg: float | None = None
     tilt_magnitude_deg: float | None = None
     phase_shift_degrees: float | None = None
@@ -222,10 +222,14 @@ def linear_tilt_axis_and_magnitude_deg(
     Tilt axis angle and tilt magnitude (degrees) from a linear defocus result.
 
     The tilt axis is the line of constant defocus, perpendicular to the defocus
-    gradient. Its angle follows the TeamTomo convention used by torch-tilt-series
-    and torch-refine-tilt-axis-angle: degrees from +x (columns) towards +y
-    (increasing row), in [0, 180). Which side of the axis is further from focus
-    is given by the gradient in ``defocus_model``.
+    gradient. Its angle ``a`` follows the TeamTomo convention of torch-tilt-series
+    (``Rz(a) @ Ry(tilt)``), torch-tiltxcorr and torch-refine-tilt-axis-angle (the
+    same as Warp's ``AxisAngle``): the axis points along ``(-sin a, cos a)`` in
+    ``(x, y) = (column, row)``, so ``a = 0`` is the y axis. Tilting about that axis
+    moves the specimen along ``(cos a, sin a)``, so ``a`` is the direction of the
+    defocus gradient measured from +x towards +y, reported in [0, 180). Which side
+    of the axis is further from focus is given by the gradient in
+    ``defocus_model``.
 
     The tilt magnitude is ``atan(|grad defocus|)`` with the gradient converted to
     µm per µm. Normalised positions span ``h - 1`` rows and ``w - 1`` columns of
@@ -262,7 +266,7 @@ def linear_tilt_axis_and_magnitude_deg(
     grad_x = lm.defocus_gradient_magnitude * math.sin(angle) / col_unit_um
     tilt_deg = math.degrees(math.atan(math.hypot(grad_x, grad_y)))
     gradient_direction_deg = math.degrees(math.atan2(grad_y, grad_x))
-    axis_deg = (gradient_direction_deg + 90.0) % 180.0
+    axis_deg = gradient_direction_deg % 180.0
     return (axis_deg, tilt_deg)
 
 

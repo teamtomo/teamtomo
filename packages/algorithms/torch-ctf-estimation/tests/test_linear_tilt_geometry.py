@@ -27,21 +27,25 @@ def _linear_result(angle_deg: float, magnitude: float) -> Defocus2DResults:
 
 
 # 1001 px at 1 A: one normalised unit is 1000 A = 0.1 um, so a 0.1 um gradient is a
-# slope of 1 (45 degrees). The tilt axis follows TeamTomo's convention (degrees from
-# +x towards +y, i.e. increasing row) and is perpendicular to the defocus gradient.
+# slope of 1 (45 degrees). The tilt axis follows the TeamTomo convention of
+# torch-tilt-series (Rz(axis) @ Ry(tilt)), torch-tiltxcorr and
+# torch-refine-tilt-axis-angle: the axis points along (-sin a, cos a) in (x, y) =
+# (column, row), so a = 0 is the y axis. Tilting about it moves the specimen up and
+# down along (cos a, sin a), which is where the defocus gradient points.
 @pytest.mark.parametrize(
     ("gradient_angle", "magnitude", "expected_axis"),
     [
-        (90.0, 0.1, 90.0),  # defocus rises along columns (x): axis along y
-        (0.0, 0.1, 0.0),  # defocus rises along rows (y): axis along x
-        (45.0, 0.1, 135.0),  # rises towards +x+y: axis along the other diagonal
-        (135.0, -0.1, 45.0),  # rises towards +x-y; the sign does not move the axis
+        (90.0, 0.1, 0.0),  # defocus rises along columns (+x): axis along y
+        (0.0, 0.1, 90.0),  # defocus rises along rows (+y): axis along x
+        (45.0, 0.1, 45.0),  # rises towards +x+y: axis along (-1, 1)
+        (135.0, -0.1, 135.0),  # rises towards -x+y; the sign does not move the axis
+        (90.0, -0.1, 0.0),  # rises towards -x: same axis as rising towards +x
     ],
 )
 def test_tilt_axis_is_perpendicular_to_the_defocus_gradient(
     gradient_angle, magnitude, expected_axis
 ):
-    """The reported tilt axis is the line of constant defocus, not the gradient."""
+    """The reported axis is the line of constant defocus, in TeamTomo's convention."""
     axis, tilt = linear_tilt_axis_and_magnitude_deg(
         _linear_result(gradient_angle, magnitude), 1.0, (1001, 1001)
     )
@@ -90,7 +94,9 @@ def test_estimate_ctf_reports_axis_perpendicular_to_gradient():
         image, optical, fitting, device=torch.device("cpu")
     )
     gradient_angle = result2d.defocus_model.defocus_gradient_angle
+    # gradient (row, col) direction (cos g, sin g) -> (x, y) = (sin g, cos g), at
+    # 90 - g from +x; for a square image that is the axis angle
     assert result2d.tilt_axis_angle_deg == pytest.approx(
-        (180.0 - gradient_angle) % 180.0, abs=1e-4
+        (90.0 - gradient_angle) % 180.0, abs=1e-4
     )
     assert result2d.tilt_magnitude_deg >= 0.0
