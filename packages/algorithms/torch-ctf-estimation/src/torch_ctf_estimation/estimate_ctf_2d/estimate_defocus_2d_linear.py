@@ -24,6 +24,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _check_astig_grad_and_reset,
     _clamp_optional_bounds,
     _get_astig_clamped,
+    _principal_defocus,
     _reset_astigmatism,
     _shared_astigmatism_and_env,
 )
@@ -345,8 +346,9 @@ def _linear_final_scalars(
         else:
             assert params.defocus_0_fixed is not None
             mean_defocus = float(params.defocus_0_fixed)
-    final_defocus_u = mean_defocus + final_astigmatism / 2.0
-    final_defocus_v = mean_defocus - final_astigmatism / 2.0
+    final_defocus_u, final_defocus_v = _principal_defocus(
+        mean_defocus, final_astigmatism
+    )
     return (
         final_defocus_0,
         final_grad_mag,

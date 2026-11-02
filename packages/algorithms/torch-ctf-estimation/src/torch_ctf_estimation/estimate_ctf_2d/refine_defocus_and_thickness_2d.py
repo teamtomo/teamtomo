@@ -20,6 +20,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _clamp_defocus_grid_after_step,
     _clamp_optional_bounds,
     _get_astig_clamped,
+    _principal_defocus,
     _shared_astigmatism_and_env,
 )
 from torch_ctf_estimation.estimate_ctf_2d.estimate_defocus_2d_linear import (
@@ -312,12 +313,13 @@ def refine_defocus_and_thickness_2d(
         mean_defocus = float(defocus_grid.data.detach().cpu().mean().item())
         model_type = "grid"
 
+    defocus_u, defocus_v = _principal_defocus(mean_defocus, astig)
     result2d_out = result2d.model_copy(
         update={
             "defocus_model_type": model_type,
             "defocus_model": updated_defocus,
-            "defocus_u": mean_defocus + astig / 2.0,
-            "defocus_v": mean_defocus - astig / 2.0,
+            "defocus_u": defocus_u,
+            "defocus_v": defocus_v,
             "cross_correlation_final": cc_final,
             "envelope_B": float(envelope_B.detach().cpu().item()),
         }

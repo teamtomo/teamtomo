@@ -8,6 +8,9 @@ import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
 
 from torch_ctf_estimation.estimate_ctf_1d import estimate_ctf_1d
+from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
+    _principal_defocus,
+)
 from torch_ctf_estimation.models import (
     Defocus2DResults,
     LaserParams,
@@ -160,6 +163,7 @@ def defocus_field_from_1d_fits(
             defocus_gradient_angle=angle_deg,
         )
         mean_defocus = defocus_0
+        defocus_u, defocus_v = _principal_defocus(mean_defocus, astig)
         return Defocus2DResults(
             defocus_model_type="linear",
             defocus_model=linear_model,
@@ -167,8 +171,8 @@ def defocus_field_from_1d_fits(
             astigmatism=astig,
             astigmatism_angle=result_1x1.astigmatism_angle or 0.0,
             envelope_B=envelope_B,
-            defocus_u=mean_defocus + astig / 2.0,
-            defocus_v=mean_defocus - astig / 2.0,
+            defocus_u=defocus_u,
+            defocus_v=defocus_v,
         )
     # grid: fit 3D spline to (positions, defocus_flat)
     grid_data = (
@@ -185,6 +189,7 @@ def defocus_field_from_1d_fits(
         loss.backward()
         optimiser.step()
     mean_defocus = float(grid_model.data.mean().cpu().item())
+    defocus_u, defocus_v = _principal_defocus(mean_defocus, astig)
     return Defocus2DResults(
         defocus_model_type="grid",
         defocus_model=grid_model,
@@ -192,8 +197,8 @@ def defocus_field_from_1d_fits(
         astigmatism=astig,
         astigmatism_angle=result_1x1.astigmatism_angle or 0.0,
         envelope_B=envelope_B,
-        defocus_u=mean_defocus + astig / 2.0,
-        defocus_v=mean_defocus - astig / 2.0,
+        defocus_u=defocus_u,
+        defocus_v=defocus_v,
     )
 
 

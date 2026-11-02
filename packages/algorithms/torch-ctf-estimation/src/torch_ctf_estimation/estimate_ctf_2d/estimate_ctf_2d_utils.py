@@ -18,6 +18,16 @@ def _astig_angle_to_m90_p90(angle_0_180: float) -> float:
     return a if a <= 90.0 else a - 180.0
 
 
+def _principal_defocus(mean_defocus: float, astigmatism: float) -> tuple[float, float]:
+    """Return (defocus_u, defocus_v) in microns.
+
+    ``astigmatism`` follows the torch-ctf convention: the defocus along a direction
+    at angle phi is ``mean_defocus + astigmatism * cos(2 * (phi - angle))``, so it is
+    half the difference between the principal defocuses.
+    """
+    return mean_defocus + astigmatism, mean_defocus - astigmatism
+
+
 def _clamp_optional_bounds(
     values: torch.Tensor,
     bounds: tuple[float, float] | None,

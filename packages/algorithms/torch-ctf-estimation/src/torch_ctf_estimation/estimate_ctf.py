@@ -34,6 +34,9 @@ from torch_ctf_estimation.estimate_ctf_2d import (
 from torch_ctf_estimation.estimate_ctf_2d.estimate_background_2d import (
     estimate_background_2d,
 )
+from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
+    _principal_defocus,
+)
 from torch_ctf_estimation.models import (
     CTFFittingParams,
     Defocus1DResults,
@@ -625,10 +628,11 @@ def estimate_ctf_and_thickness(
         )
         if thickness_params.refine_dim == "1d":
             df_joint_um = _scalar(result1d_joint.ctf_model.defocus_um)
+            defocus_u, defocus_v = _principal_defocus(df_joint_um, astig_2d_um)
             result2d = result2d.model_copy(
                 update={
-                    "defocus_u": df_joint_um + astig_2d_um / 2.0,
-                    "defocus_v": df_joint_um - astig_2d_um / 2.0,
+                    "defocus_u": defocus_u,
+                    "defocus_v": defocus_v,
                     "cross_correlation_final": result1d_joint.cross_correlation_final,
                 }
             )

@@ -1,5 +1,6 @@
 """Tests for joint defocus+thickness refine primitives."""
 
+import pytest
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
 
@@ -68,8 +69,8 @@ def test_refine_defocus_and_thickness_2d_grid():
         astigmatism=0.05,
         astigmatism_angle=10.0,
         envelope_B=20.0,
-        defocus_u=1.825,
-        defocus_v=1.775,
+        defocus_u=1.85,
+        defocus_v=1.75,
         phase_shift_degrees=0.0,
     )
     out2d, thick2d = refine_defocus_and_thickness_2d(
@@ -85,6 +86,8 @@ def test_refine_defocus_and_thickness_2d_grid():
     assert out2d.defocus_model_type == "grid"
     assert thick2d.mean_thickness >= 1.0
     assert out2d.defocus_u is not None
+    assert out2d.defocus_v is not None
+    assert out2d.defocus_u - out2d.defocus_v == pytest.approx(2 * out2d.astigmatism)
 
 
 def test_refine_defocus_and_thickness_2d_linear():

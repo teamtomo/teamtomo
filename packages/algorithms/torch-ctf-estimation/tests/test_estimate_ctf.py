@@ -2,8 +2,13 @@ import math
 
 import pytest
 import torch
+from torch_ctf import calculate_ctf_2d
+from torch_ctf.ctf_aberrations import apply_astigmatism_to_defocus
 
 from torch_ctf_estimation.estimate_ctf import estimate_ctf
+from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
+    _principal_defocus,
+)
 from torch_ctf_estimation.models import (
     CTFFittingParams,
     LaserParams,
@@ -508,3 +513,87 @@ def test_estimate_ctf_use_amplitude_2d():
     assert result2d.defocus_model_type == "grid"
     assert result2d.defocus_u is not None
     assert result2d.defocus_v is not None
+
+
+def test_principal_defocus_matches_torch_ctf_astigmatism():
+    """defocus_u/v are torch-ctf's defocus along and across the astigmatism angle."""
+    angle = 30.0
+    theta = math.radians(angle)
+    # (y, x) unit frequency vectors along and perpendicular to the astigmatism angle
+    directions = torch.tensor(
+        [[[math.sin(theta), math.cos(theta)], [math.cos(theta), -math.sin(theta)]]]
+    )
+    defocus = apply_astigmatism_to_defocus(
+        defocus=torch.tensor([[2.0]]),
+        astigmatism=torch.tensor(0.1),
+        astigmatism_angle=torch.tensor(angle),
+        fft_freq_grid=directions,
+        fft_freq_grid_squared=torch.ones(1, 2),
+    )
+    defocus_u, defocus_v = _principal_defocus(2.0, 0.1)
+    torch.testing.assert_close(defocus, torch.tensor([[defocus_u, defocus_v]]))
+
+
+def _synthetic_ctf_image(
+    defocus: float,
+    astigmatism: float,
+    astigmatism_angle: float,
+    pixel_spacing: float,
+    n_frames: int = 4,
+    sidelength: int = 1024,
+    seed: int = 0,
+) -> torch.Tensor:
+    """White noise filtered by a known torch-ctf CTF, plus white noise."""
+    generator = torch.Generator().manual_seed(seed)
+    ctf = calculate_ctf_2d(
+        defocus=defocus,
+        astigmatism=astigmatism,
+        astigmatism_angle=astigmatism_angle,
+        voltage=300.0,
+        spherical_aberration=2.7,
+        amplitude_contrast=0.1,
+        phase_shift=0.0,
+        pixel_size=pixel_spacing,
+        image_shape=(sidelength, sidelength),
+        rfft=True,
+        fftshift=False,
+    )
+    shape = (n_frames, sidelength, sidelength)
+    noise = torch.randn(shape, generator=generator)
+    signal = torch.fft.irfft2(torch.fft.rfft2(noise) * ctf, s=(sidelength, sidelength))
+    return signal + 0.3 * torch.randn(shape, generator=generator)
+
+
+@pytest.mark.parametrize("defocus_model", ["grid", "linear"])
+@pytest.mark.parametrize("use_1d_defocus_for_spatial", [False, True])
+def test_estimate_ctf_recovers_principal_defocus(
+    defocus_model, use_1d_defocus_for_spatial
+):
+    """defocus_u/v are the principal defocuses of the simulated CTF.
+
+    torch-ctf's astigmatism is half the principal defocus difference, so a CTF
+    simulated at 2.0 um with astigmatism 0.1 um has defocus_u = 2.1 um and
+    defocus_v = 1.9 um.
+    """
+    image = _synthetic_ctf_image(
+        defocus=2.0, astigmatism=0.1, astigmatism_angle=30.0, pixel_spacing=1.5
+    )
+    _mean_ps, _result1d, result2d = estimate_ctf(
+        image,
+        default_optical_params(
+            pixel_spacing_angstroms=1.5, target_pixel_spacing_angstroms=1.5
+        ),
+        default_fitting_params(
+            defocus_grid_resolution=(1, 1, 1),
+            defocus_range_microns=(0.5, 5.0),
+            patch_sidelength=256,
+            defocus_model=defocus_model,
+            use_1d_defocus_for_spatial=use_1d_defocus_for_spatial,
+            optimize_astigmatism=True,
+        ),
+        device=torch.device("cpu"),
+    )
+    assert result2d.astigmatism == pytest.approx(0.1, abs=0.01)
+    assert result2d.astigmatism_angle == pytest.approx(30.0, abs=3.0)
+    assert result2d.defocus_u == pytest.approx(2.1, abs=0.02)
+    assert result2d.defocus_v == pytest.approx(1.9, abs=0.02)

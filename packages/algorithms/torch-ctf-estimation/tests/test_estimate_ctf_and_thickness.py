@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from torch_ctf_estimation.estimate_ctf import (
@@ -91,6 +92,9 @@ def test_estimate_ctf_and_thickness_refine_1d():
     assert result.thickness_joint is not None
     assert result.result2d.defocus_u is not None
     assert result.result2d.defocus_v is not None
+    assert result.result2d.defocus_u - result.result2d.defocus_v == pytest.approx(
+        2 * result.result2d.astigmatism
+    )
 
 
 def test_estimate_ctf_and_thickness_refine_2d():
