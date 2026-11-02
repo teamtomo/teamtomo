@@ -298,6 +298,9 @@ def _run_defocus_2d(
             image_sidelength=image_sidelength_for_1d,
             frequency_fit_range_angstroms=fitting_params.frequency_fit_range_angstroms,
             defocus_range_microns=defocus_bounds,
+            defocus_search_window_microns=(
+                fitting_params.spatial_1d_defocus_window_microns
+            ),
             phase_shift_range_degrees=phase_bounds,
             voltage_kev=optical_params.voltage_kev,
             spherical_aberration_mm=optical_params.spherical_aberration_mm,

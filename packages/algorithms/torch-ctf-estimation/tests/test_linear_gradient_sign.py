@@ -107,8 +107,8 @@ def test_linear_model_reproduces_gradient_direction(
 
     Fitted directions outside [0, 180) used to be folded into that range without
     flipping the magnitude, which reversed the reported gradient. The per-patch 1D
-    path recovers only part of the gradient magnitude, so for it only the direction
-    is checked.
+    path used to refine every patch from the centre defocus without a search, so
+    patches stayed near the centre and most of the gradient was lost.
     """
     image = _tilted_ctf_image(model_angle_deg)
     optical = OpticalParams(
@@ -143,7 +143,4 @@ def test_linear_model_reproduces_gradient_direction(
             + model.defocus_gradient_magnitude
             * ((row - 0.5) * fitted_cos + (col - 0.5) * fitted_sin)
         )
-    if use_1d_defocus_for_spatial:
-        assert fitted[0] > fitted[1]  # defocus rises along the true gradient direction
-    else:
-        assert fitted == pytest.approx(expected, abs=0.06)
+    assert fitted == pytest.approx(expected, abs=0.06)
