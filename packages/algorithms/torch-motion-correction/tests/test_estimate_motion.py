@@ -73,6 +73,21 @@ class TestEstimateGlobalMotion:
         )
         assert result.shape == (2, sample_image.shape[0], 1, 1)
 
+    @pytest.mark.parametrize("reference_frame", [0, None])
+    def test_mean_shift_removed_per_axis(
+        self, sample_image, pixel_spacing, reference_frame
+    ):
+        """y and x shifts are each zero-mean, whichever frame is the reference."""
+        result = estimate_global_motion(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            reference_frame=reference_frame,
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
+        )
+
     def test_different_devices(self, sample_image, pixel_spacing):
         """Test that device parameter works."""
         if torch.cuda.is_available():

@@ -38,7 +38,9 @@ def estimate_global_motion(
     pixel_spacing: float
         Pixel spacing in angstroms
     reference_frame: int, optional
-        Frame index to use as reference. If None, uses middle frame.
+        Frame index to cross-correlate the other frames against. If None, uses the
+        middle frame. The returned shifts are zero-mean in y and in x, like those of
+        the other estimators, so this frame's shift is not zero in general.
     fourier_filter: FourierFilterConfig, optional
         Fourier-space filtering parameters. Defaults to ``FourierFilterConfig()``
         when None.
@@ -136,9 +138,10 @@ def estimate_global_motion(
             f"x=[{shifts[:, 1].min():.1f}, {shifts[:, 1].max():.1f}]"
         )
 
-    return DeformationField.from_frame_shifts(
+    field = DeformationField.from_frame_shifts(
         shifts=shifts, pixel_spacing=working_pixel_spacing, device=device
     )
+    return DeformationField(data=_subtract_mean_shift(field.data))
 
 
 def estimate_motion_cross_correlation_patches(
