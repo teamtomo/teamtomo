@@ -208,10 +208,7 @@ nav = [
   { "Examples" = "examples/index.md" },
   { "Contributing" = [
     { "Contribution Guidelines for TeamTomo" = "developer/index.md" },
-    { "Archiving Legacy Repositories" = "developer/archive-old-repo.md" },
     { "Creating a new TeamTomo package" = "developer/create-new-package.md" },
-    { "Migrating Existing TeamTomo Repositories to Monorepo" = "developer/migrate-existing-repo.md" },
-    { "Migration Progress" = "developer/migration-progress.md" },
     { "TeamTomo Package Versioning policy" = "developer/package-versioning-policy.md" },
     { "Release Instructions" = "developer/release-instructions.md" },
   ] },

@@ -19,9 +19,9 @@ The I/O packages live in their own repositories. They are listed in
 and generated under ``docs/io/`` by the same rules. ``--update`` pulls the latest
 default branch of each clone.
 
-Contributor documentation is generated from ``CONTRIBUTING.md`` and ``notes/``.
-``docs/examples/index.md`` is a hand-written placeholder; the top-level
-``examples/`` are not rendered yet.
+Contributor documentation is generated from ``CONTRIBUTING.md`` and ``notes/``,
+leaving out the notes on migrating the old repositories (``NOTES_UNPUBLISHED``).
+``docs/examples/index.md`` lists every package's examples.
 Notebooks are rendered from their stored outputs; they are never executed.
 
 Generated directories are listed in ``GENERATED_DIRS`` and git-ignored. The
@@ -58,8 +58,15 @@ CATEGORIES = {
     "io": "I/O",
     "utils": "Utilities",
 }
-GENERATED_DIRS = [*CATEGORIES, "developer"]
+GENERATED_DIRS = [*CATEGORIES, "developer", "examples"]
 NOTES_SKIP = re.compile(r"\.local\.md$")
+# Maintainer notes on moving the old package repositories into the monorepo. They
+# stay in notes/ but not on the site; links to them go to GitHub.
+NOTES_UNPUBLISHED = {
+    "archive-old-repo.md",
+    "migrate-existing-repo.md",
+    "migration-progress.md",
+}
 WARNINGS: list[str] = []
 # Local checkout root -> GitHub URL prefix (with a {kind} of blob or tree). The
 # deepest matching root wins, so clones under external/ map to their own repo.
@@ -609,11 +616,41 @@ def generate_category_indexes(packages: list[Package]) -> None:
         write(DOCS / category / "index.md", f"# {title}\n\n{intro}" + "\n".join(tables))
 
 
+def generate_examples_index(packages: list[Package]) -> None:
+    """List every package's examples on the top-level Examples page."""
+    sections = []
+    for category, title in CATEGORIES.items():
+        members = [p for p in packages if p.category == category and p.examples]
+        if not members:
+            continue
+        lines = [f"## {title}", ""]
+        for p in members:
+            lines += [f"### [{p.name}](../{p.category}/{p.name}/index.md)", ""]
+            lines += [f"- [{t}](../{f})" for t, f in p.examples]
+            lines.append("")
+        sections.append("\n".join(lines))
+    intro = (
+        "Worked examples from each package. They also appear under their package "
+        "in the navigation. Notebooks are shown with the outputs they were saved "
+        "with; they are not run when the site is built.\n\n"
+    )
+    write(
+        DOCS / "examples" / "index.md", "# Examples\n\n" + intro + "\n".join(sections)
+    )
+
+
+def published_notes() -> list[Path]:
+    """Notes under ``notes/`` that become pages of the Contributing section."""
+    return sorted(
+        p
+        for p in (ROOT / "notes").glob("*.md")
+        if not NOTES_SKIP.search(p.name) and p.name not in NOTES_UNPUBLISHED
+    )
+
+
 def generate_developer_docs(page_map: dict[Path, Path]) -> list[tuple[str, str]]:
     out = DOCS / "developer"
-    sources = [ROOT / "CONTRIBUTING.md"] + sorted(
-        p for p in (ROOT / "notes").glob("*.md") if not NOTES_SKIP.search(p.name)
-    )
+    sources = [ROOT / "CONTRIBUTING.md", *published_notes()]
     nav = []
     for source in sources:
         dest = out / ("index.md" if source.name == "CONTRIBUTING.md" else source.name)
@@ -661,7 +698,7 @@ def toml_nav(packages: list[Package], developer: list) -> str:
             lines.extend(f"      {e}," for e in entries)
             lines.append("    ] },")
         lines.append("  ] },")
-    # Hand-written placeholder until the top-level examples are curated.
+    # Generated index of every package's examples.
     lines.append('  { "Examples" = "examples/index.md" },')
     lines.append('  { "Contributing" = [')
     lines.extend(f"    {{ {q(t)} = {q(f)} }}," for t, f in developer)
@@ -692,7 +729,7 @@ def main() -> None:
     page_map: dict[Path, Path] = {
         (ROOT / "CONTRIBUTING.md").resolve(): DOCS / "developer" / "index.md",
     }
-    for note in (ROOT / "notes").glob("*.md"):
+    for note in published_notes():
         page_map[note.resolve()] = DOCS / "developer" / note.name
     for pkg in packages:
         page_map[(pkg.path / "README.md").resolve()] = pkg.out / "index.md"
@@ -711,6 +748,7 @@ def main() -> None:
     for pkg in packages:
         generate_package(pkg, page_map)
     generate_category_indexes(packages)
+    generate_examples_index(packages)
     developer = generate_developer_docs(page_map)
 
     if args.print_nav:
