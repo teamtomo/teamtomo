@@ -3977,6 +3977,7 @@ dependencies = [
     { name = "torch-tilt-series" },
     { name = "torch-tiltalign" },
     { name = "torch-tiltxcorr" },
+    { name = "torch-track-fiducials" },
     { name = "torch-transform-image" },
 ]
 
@@ -4035,6 +4036,7 @@ requires-dist = [
     { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-tiltalign", editable = "packages/algorithms/torch-tiltalign" },
     { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
+    { name = "torch-track-fiducials", editable = "packages/algorithms/torch-track-fiducials" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
 
