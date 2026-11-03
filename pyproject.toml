@@ -39,6 +39,7 @@ dependencies = [
     "teamtomo-basemodel",
     "torch-calculate-electrostatic-potential",
     "torch-structure-manipulation",
+    "torch-tiltalign",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -75,6 +76,7 @@ torch-ctf-estimation = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 torch-calculate-electrostatic-potential = { workspace = true }
 torch-structure-manipulation = { workspace = true }
+torch-tiltalign = { workspace = true }
 
 [tool.uv.workspace]
 members = [

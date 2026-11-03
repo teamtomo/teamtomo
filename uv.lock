@@ -28,6 +28,7 @@ members = [
     "torch-image-interpolation",
     "torch-local-resolution",
     "torch-motion-correction",
+    "torch-projection-matching",
     "torch-reconstruct-tomogram",
     "torch-refine-tilt-axis-angle",
     "torch-scattering",
@@ -36,7 +37,9 @@ members = [
     "torch-structure-manipulation",
     "torch-subpixel-crop",
     "torch-tilt-series",
+    "torch-tiltalign",
     "torch-tiltxcorr",
+    "torch-track-fiducials",
     "torch-transform-image",
 ]
 overrides = [{ name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" }]
@@ -3972,6 +3975,7 @@ dependencies = [
     { name = "torch-structure-manipulation" },
     { name = "torch-subpixel-crop" },
     { name = "torch-tilt-series" },
+    { name = "torch-tiltalign" },
     { name = "torch-tiltxcorr" },
     { name = "torch-transform-image" },
 ]
@@ -4029,6 +4033,7 @@ requires-dist = [
     { name = "torch-structure-manipulation", editable = "packages/primitives/torch-structure-manipulation" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
     { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tiltalign", editable = "packages/algorithms/torch-tiltalign" },
     { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]
@@ -5242,6 +5247,50 @@ test = [
 ]
 
 [[package]]
+name = "torch-projection-matching"
+source = { editable = "packages/algorithms/torch-projection-matching" }
+dependencies = [
+    { name = "torch" },
+    { name = "torch-tilt-series" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "torch-image-interpolation" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-image-interpolation" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "torch" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+]
+
+[[package]]
 name = "torch-reconstruct-tomogram"
 source = { editable = "packages/algorithms/torch-reconstruct-tomogram" }
 dependencies = [
@@ -5701,6 +5750,46 @@ test = [
 ]
 
 [[package]]
+name = "torch-tiltalign"
+source = { editable = "packages/algorithms/torch-tiltalign" }
+dependencies = [
+    { name = "torch" },
+    { name = "torch-tilt-series" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "torch" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+]
+
+[[package]]
 name = "torch-tiltxcorr"
 source = { editable = "packages/algorithms/torch-tiltxcorr" }
 dependencies = [
@@ -5760,6 +5849,56 @@ test = [
     { name = "pytest-cov" },
     { name = "torch-fourier-shift", editable = "packages/primitives/torch-fourier-shift" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
+]
+
+[[package]]
+name = "torch-track-fiducials"
+source = { editable = "packages/algorithms/torch-track-fiducials" }
+dependencies = [
+    { name = "torch" },
+    { name = "torch-find-peaks" },
+    { name = "torch-subpixel-crop" },
+    { name = "torch-tilt-series" },
+    { name = "torch-tiltalign" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "torch-image-interpolation" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-image-interpolation" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "torch" },
+    { name = "torch-find-peaks", editable = "packages/primitives/torch-find-peaks" },
+    { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
+    { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
+    { name = "torch-tiltalign", editable = "packages/algorithms/torch-tiltalign" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ipython" },
+    { name = "pdbpp" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "rich" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
+]
+test = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
 ]
 
 [[package]]
