@@ -235,13 +235,20 @@ class TestCorrectMotionFast:
         )
         assert torch.equal(field.data, original_data)
 
-    def test_matches_correct_motion(self, sample_image):
-        """Shifts in Angstroms are converted to pixels, as in correct_motion."""
-        t = sample_image.shape[0]
-        data = torch.zeros((2, t, 1, 1))
-        data[0, :, 0, 0] = torch.linspace(-4.0, 4.0, t)
-        data[1, :, 0, 0] = torch.linspace(3.0, -3.0, t)
-        field = DeformationField(data=data)
+    @pytest.mark.parametrize("grid_type", ["catmull_rom", "bspline"])
+    @pytest.mark.parametrize("nt_minus_t", [-2, 0, 3])
+    def test_matches_correct_motion(self, sample_image, grid_type, nt_minus_t):
+        """Shifts match correct_motion for any nt and grid type, in pixels.
+
+        The field is evaluated at each frame's time; its control points are the
+        per-frame shifts only for a Catmull-Rom field with nt == t.
+        """
+        nt = sample_image.shape[0] + nt_minus_t
+        s = torch.linspace(0.0, 1.0, nt)
+        data = torch.zeros((2, nt, 1, 1))
+        data[0, :, 0, 0] = 6.0 * torch.sin(2 * torch.pi * s)
+        data[1, :, 0, 0] = 4.0 * torch.cos(torch.pi * s)
+        field = DeformationField(data=data, grid_type=grid_type)
         kwargs = {"pixel_spacing": 2.0, "device": torch.device("cpu")}
         fast = correct_motion_fast(sample_image, field, **kwargs)
         reference = correct_motion(sample_image, field, **kwargs)

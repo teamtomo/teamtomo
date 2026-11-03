@@ -438,6 +438,8 @@ def correct_motion_fast(
 
     Requires a single-patch deformation field (final two spatial dimensions are
     both 1) and applies FFT-based whole-frame shifts via ``fourier_shift_dft_2d``.
+    As in :func:`correct_motion`, the field is evaluated at each frame's time, so
+    it may have any number of time points and either grid type.
 
     Parameters
     ----------
@@ -445,7 +447,7 @@ def correct_motion_fast(
         (t, h, w) array of images to motion correct. May reside on a different
         device than ``device`` (e.g. large super-res movie stored on CPU).
     deformation_field: DeformationField
-        Deformation field with shape (2, t, 1, 1) in Angstroms.
+        Deformation field with shape (2, nt, 1, 1) in Angstroms.
     pixel_spacing: float
         Pixel spacing in Angstroms
     device: torch.device, optional
@@ -466,19 +468,17 @@ def correct_motion_fast(
     # Check that deformation field has single patch dimensions
     if deformation_field.data.shape[-2:] != (1, 1):
         raise ValueError(
-            f"Expected single patch deformation field with shape (2, t, 1, 1), "
+            f"Expected single patch deformation field with shape (2, nt, 1, 1), "
             f"but got shape {deformation_field.data.shape}. "
             f"Final two dimensions must be (1, 1) for single patch correction."
         )
 
     t, h, w = image.shape
 
-    # Extract shifts from deformation field (2, t, 1, 1) -> (t, 2), in pixels.
-    # Negation must be out-of-place: `deformation_field.to(device)` is a no-op
-    # (shares storage with the caller's tensor) when already on `device`, so an
-    # in-place `*= -1` here would silently flip the sign of the caller's
-    # deformation field.
-    shifts = -einops.rearrange(deformation_field.data, "c t 1 1 -> t c") / pixel_spacing
+    # Evaluate the field at each frame's time, as correct_motion does. The control
+    # points are the per-frame shifts only for a Catmull-Rom field with nt == t.
+    frame_shifts = deformation_field.resample((t, 1, 1)).data  # (2, t, 1, 1), Å
+    shifts = -einops.rearrange(frame_shifts, "c t 1 1 -> t c") / pixel_spacing
 
     if verbose:
         print(f"Single patch correction: applying shifts to {t} frames")
