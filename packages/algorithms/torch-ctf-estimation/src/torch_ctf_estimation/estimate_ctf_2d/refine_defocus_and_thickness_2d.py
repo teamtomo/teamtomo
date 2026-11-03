@@ -20,6 +20,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _clamp_defocus_grid_after_step,
     _clamp_optional_bounds,
     _get_astig_clamped,
+    _mean_linear_gradient,
     _principal_defocus,
     _shared_astigmatism_and_env,
 )
@@ -295,14 +296,14 @@ def refine_defocus_and_thickness_2d(
         assert grad_mag_param is not None
         assert angle_u_param is not None
         assert angle_v_param is not None
-        au = float(angle_u_param.detach().cpu().item())
-        av = float(angle_v_param.detach().cpu().item())
-        angle_deg = (math.atan2(av, au) * 180.0 / math.pi + 180.0) % 180.0
+        angle_deg, grad_mag = _mean_linear_gradient(
+            grad_mag_param.detach(), angle_u_param.detach(), angle_v_param.detach()
+        )
         mean_defocus = float(defocus_0_param.detach().cpu().item())
         updated_defocus: LinearDefocusModel | CubicCatmullRomGrid3d = (
             LinearDefocusModel(
                 defocus_0=mean_defocus,
-                defocus_gradient_magnitude=float(grad_mag_param.detach().cpu().item()),
+                defocus_gradient_magnitude=grad_mag,
                 defocus_gradient_angle=angle_deg,
             )
         )

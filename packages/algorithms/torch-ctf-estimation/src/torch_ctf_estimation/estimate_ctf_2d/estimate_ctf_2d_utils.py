@@ -2,7 +2,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Literal, overload
+from typing import Literal
 
 import torch
 from torch_fourier_filter.bandpass import bandpass_filter
@@ -28,38 +28,32 @@ def _principal_defocus(mean_defocus: float, astigmatism: float) -> tuple[float, 
     return mean_defocus + astigmatism, mean_defocus - astigmatism
 
 
-@overload
-def _fold_gradient_direction(
-    angle_deg: float, magnitude: float
-) -> tuple[float, float]: ...
-
-
-@overload
-def _fold_gradient_direction(
-    angle_deg: torch.Tensor, magnitude: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]: ...
-
-
-def _fold_gradient_direction(
-    angle_deg: float | torch.Tensor,
-    magnitude: float | torch.Tensor,
-) -> tuple[float, float] | tuple[torch.Tensor, torch.Tensor]:
-    """Fold a linear defocus gradient direction into [0, 180), keeping the field.
-
-    A direction and the opposite direction with a negated magnitude describe the same
-    gradient, so whenever the angle is moved by 180 degrees the magnitude changes sign.
-    Works element-wise on tensors.
-    """
-    if isinstance(angle_deg, torch.Tensor):
-        angle = torch.remainder(angle_deg, 360.0)
-        flip = angle >= 180.0
-        return torch.where(flip, angle - 180.0, angle), torch.where(
-            flip, -magnitude, magnitude
-        )
+def _fold_gradient_direction(angle_deg: float, magnitude: float) -> tuple[float, float]:
+    """Fold a gradient angle into [0, 180), negating the magnitude when it moves."""
     angle = angle_deg % 360.0
     if angle >= 180.0:
         return angle - 180.0, -magnitude
     return angle, magnitude
+
+
+def _mean_linear_gradient(
+    magnitude: torch.Tensor,
+    direction_u: torch.Tensor,
+    direction_v: torch.Tensor,
+) -> tuple[float, float]:
+    """Average linear defocus gradients as vectors; return (angle_deg, magnitude).
+
+    Each gradient is ``magnitude * (u, v) / |(u, v)|``. Averaging these vectors, rather
+    than angles and magnitudes separately, keeps gradients whose angles straddle
+    0/180 degrees from cancelling. The result is folded into [0, 180).
+    """
+    direction_norm = torch.sqrt(direction_u**2 + direction_v**2 + 1e-8)
+    gradient_u = (magnitude * direction_u / direction_norm).mean()
+    gradient_v = (magnitude * direction_v / direction_norm).mean()
+    angle_deg = math.degrees(math.atan2(float(gradient_v), float(gradient_u)))
+    return _fold_gradient_direction(
+        angle_deg, math.hypot(float(gradient_u), float(gradient_v))
+    )
 
 
 def _clamp_optional_bounds(

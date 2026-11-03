@@ -85,17 +85,42 @@ def test_fold_gradient_direction_keeps_the_same_field(
     assert vector(angle, mag) == pytest.approx(vector(angle_deg, magnitude), abs=1e-9)
 
 
-def test_fold_gradient_direction_tensor():
-    """The helper folds per element for tensors (per-knot spline summaries)."""
-    from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
-        _fold_gradient_direction,
+def test_linear_summary_averages_knots_as_vectors():
+    """Knots whose angles straddle 0/180 degrees average to the shared gradient.
+
+    Folding each knot and then averaging angles and magnitudes separately sent these
+    knots to 90 degrees with zero magnitude.
+    """
+    from torch_cubic_spline_grids import CubicCatmullRomGrid1d
+
+    from torch_ctf_estimation.estimate_ctf_2d.estimate_defocus_2d_linear import (
+        _linear_final_scalars,
+        _LinearDefocusParams,
     )
 
-    angles = torch.tensor([30.0, 210.0, -30.0, 180.0])
-    magnitudes = torch.tensor([1.0, 1.0, 1.0, 0.5])
-    folded, mags = _fold_gradient_direction(angles, magnitudes)
-    torch.testing.assert_close(folded, torch.tensor([30.0, 30.0, 150.0, 0.0]))
-    torch.testing.assert_close(mags, torch.tensor([1.0, -1.0, -1.0, -0.5]))
+    angles = torch.deg2rad(torch.tensor([-2.0, -1.0, 1.0, 2.0]))
+    params = _LinearDefocusParams(
+        defocus_0_fixed=None,
+        defocus_0_param=None,
+        grad_mag_param=None,
+        grad_angle_u=None,
+        grad_angle_v=None,
+        defocus_0_spline_1d=CubicCatmullRomGrid1d.from_grid_data(
+            torch.full((4,), DEFOCUS_0)
+        ),
+        grad_mag_spline_1d=CubicCatmullRomGrid1d.from_grid_data(
+            torch.full((4,), GRADIENT)
+        ),
+        grad_angle_u_spline_1d=CubicCatmullRomGrid1d.from_grid_data(torch.cos(angles)),
+        grad_angle_v_spline_1d=CubicCatmullRomGrid1d.from_grid_data(torch.sin(angles)),
+    )
+    _d0, grad_mag, grad_angle, *_ = _linear_final_scalars(params, torch.tensor(0.0))
+    expected_mag = GRADIENT * float(torch.cos(angles).mean())
+    gradient = (
+        grad_mag * math.cos(math.radians(grad_angle)),
+        grad_mag * math.sin(math.radians(grad_angle)),
+    )
+    assert gradient == pytest.approx((expected_mag, 0.0), abs=1e-6)
 
 
 @pytest.mark.parametrize("use_1d_defocus_for_spatial", [False, True])

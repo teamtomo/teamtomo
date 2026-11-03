@@ -23,8 +23,8 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _astig_angle_to_m90_p90,
     _check_astig_grad_and_reset,
     _clamp_optional_bounds,
-    _fold_gradient_direction,
     _get_astig_clamped,
+    _mean_linear_gradient,
     _principal_defocus,
     _reset_astigmatism,
     _shared_astigmatism_and_env,
@@ -250,34 +250,45 @@ def _linear_get_defocus_components_t(
     return defocus_0_t, grad_mag_t, angle_u_t, angle_v_t
 
 
+def _linear_gradient_summary(params: _LinearDefocusParams) -> tuple[float, float]:
+    """Gradient as (angle_deg in [0, 180), signed magnitude), averaged over knots."""
+    if params.grad_mag_spline_1d is not None:
+        assert params.grad_angle_u_spline_1d is not None
+        assert params.grad_angle_v_spline_1d is not None
+        magnitude = params.grad_mag_spline_1d.data
+        direction_u = params.grad_angle_u_spline_1d.data
+        direction_v = params.grad_angle_v_spline_1d.data
+    else:
+        assert params.grad_mag_param is not None
+        assert params.grad_angle_u is not None
+        assert params.grad_angle_v is not None
+        magnitude = params.grad_mag_param
+        direction_u = params.grad_angle_u
+        direction_v = params.grad_angle_v
+    return _mean_linear_gradient(
+        magnitude.detach(), direction_u.detach(), direction_v.detach()
+    )
+
+
+def _linear_mean_defocus(params: _LinearDefocusParams) -> float:
+    """Defocus at the image centre, averaged over spline knots."""
+    if params.defocus_0_spline_1d is not None:
+        return float(params.defocus_0_spline_1d.data.detach().mean().cpu().item())
+    if params.defocus_0_param is not None:
+        return float(params.defocus_0_param.detach().cpu().item())
+    assert params.defocus_0_fixed is not None
+    return float(params.defocus_0_fixed)
+
+
 def _linear_trace_snapshot(
     params: _LinearDefocusParams,
     device: torch.device,
 ) -> torch.Tensor:
     """Current [d0, grad_mag, angle_deg, 0] for appending to defocus_models trace."""
-    if params.defocus_0_spline_1d is not None:
-        assert params.grad_mag_spline_1d is not None
-        assert params.grad_angle_u_spline_1d is not None
-        assert params.grad_angle_v_spline_1d is not None
-        d0 = params.defocus_0_spline_1d.data.detach().mean().cpu().item()
-        gm = params.grad_mag_spline_1d.data.detach().mean().cpu().item()
-        au = params.grad_angle_u_spline_1d.data.detach().mean().cpu().item()
-        av = params.grad_angle_v_spline_1d.data.detach().mean().cpu().item()
-    else:
-        assert params.grad_mag_param is not None
-        assert params.grad_angle_u is not None
-        assert params.grad_angle_v is not None
-        d0 = (
-            params.defocus_0_param.detach().cpu().item()
-            if params.defocus_0_param is not None
-            else params.defocus_0_fixed
-        )
-        gm = params.grad_mag_param.detach().cpu().item()
-        au = params.grad_angle_u.detach().cpu().item()
-        av = params.grad_angle_v.detach().cpu().item()
-    _norm = (au**2 + av**2 + 1e-8) ** 0.5
-    angle_deg = (math.atan2(av / _norm, au / _norm) * (180.0 / math.pi) + 180.0) % 180.0
-    return torch.tensor([d0, gm, angle_deg, 0.0], device=device)
+    angle_deg, grad_mag = _linear_gradient_summary(params)
+    return torch.tensor(
+        [_linear_mean_defocus(params), grad_mag, angle_deg, 0.0], device=device
+    )
 
 
 def _linear_final_scalars(
@@ -291,57 +302,9 @@ def _linear_final_scalars(
              final_defocus_u, final_defocus_v).
     """
     final_astigmatism = float(astigmatism.detach().cpu().item())
-
-    if params.defocus_0_spline_1d is not None:
-        assert params.grad_mag_spline_1d is not None
-        assert params.grad_angle_u_spline_1d is not None
-        assert params.grad_angle_v_spline_1d is not None
-        _gn = torch.sqrt(
-            params.grad_angle_u_spline_1d.data**2
-            + params.grad_angle_v_spline_1d.data**2
-            + 1e-8
-        )
-        _grad_angle_deg, _grad_mag = _fold_gradient_direction(
-            torch.atan2(
-                params.grad_angle_v_spline_1d.data / _gn,
-                params.grad_angle_u_spline_1d.data / _gn,
-            )
-            * (180.0 / math.pi),
-            params.grad_mag_spline_1d.data,
-        )
-        final_grad_angle = float(_grad_angle_deg.mean().cpu().item())
-        final_defocus_0 = float(params.defocus_0_spline_1d.data.mean().cpu().item())
-        final_grad_mag = float(_grad_mag.mean().cpu().item())
-        mean_defocus = float(
-            params.defocus_0_spline_1d.data.detach().cpu().mean().item()
-        )
-    else:
-        assert params.grad_mag_param is not None
-        assert params.grad_angle_u is not None
-        assert params.grad_angle_v is not None
-        _gn = torch.sqrt(
-            params.grad_angle_u.detach() ** 2 + params.grad_angle_v.detach() ** 2 + 1e-8
-        )
-        final_grad_angle, final_grad_mag = _fold_gradient_direction(
-            torch.atan2(
-                params.grad_angle_v.detach() / _gn,
-                params.grad_angle_u.detach() / _gn,
-            )
-            .cpu()
-            .item()
-            * (180.0 / math.pi),
-            float(params.grad_mag_param.detach().cpu().item()),
-        )
-        if params.defocus_0_param is not None:
-            final_defocus_0 = float(params.defocus_0_param.detach().cpu().item())
-        else:
-            assert params.defocus_0_fixed is not None
-            final_defocus_0 = float(params.defocus_0_fixed)
-        if params.defocus_0_param is not None:
-            mean_defocus = float(params.defocus_0_param.detach().cpu().item())
-        else:
-            assert params.defocus_0_fixed is not None
-            mean_defocus = float(params.defocus_0_fixed)
+    final_grad_angle, final_grad_mag = _linear_gradient_summary(params)
+    mean_defocus = _linear_mean_defocus(params)
+    final_defocus_0 = mean_defocus
     final_defocus_u, final_defocus_v = _principal_defocus(
         mean_defocus, final_astigmatism
     )
