@@ -5800,6 +5800,7 @@ dependencies = [
     { name = "torch-affine-utils" },
     { name = "torch-fourier-rescale" },
     { name = "torch-grid-utils" },
+    { name = "torch-subpixel-crop" },
     { name = "torch-tilt-series" },
     { name = "torch-transform-image" },
 ]
@@ -5830,6 +5831,7 @@ requires-dist = [
     { name = "torch-affine-utils", editable = "packages/primitives/torch-affine-utils" },
     { name = "torch-fourier-rescale", editable = "packages/primitives/torch-fourier-rescale" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
+    { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
     { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
 ]

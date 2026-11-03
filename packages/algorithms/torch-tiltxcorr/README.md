@@ -110,6 +110,33 @@ shifts, sample_tilt = tiltxcorr_with_sample_tilt_estimation(
 aligned_tilt_series = fourier_shift_image_2d(tilt_series, shifts=shifts)
 ```
 
+### Patch Tracking
+
+`tiltxcorr_patches` is the patch-tracking mode of IMOD's tiltxcorr, for
+marker-free fine alignment. A grid of patches is laid out in the tilt closest
+to 0 and each patch is followed outwards, tilt by tilt, by cross-correlating
+it with the patch at its predicted position in the next tilt (stretched
+perpendicular to the tilt axis, as above). The coarse shifts from `tiltxcorr`
+give the predicted positions.
+
+A patch is a column through the specimen rather than a point, so cut the
+tracks into short pieces with `chop_tracks` (as IMOD's imodchopconts does)
+before fitting them with `torch_tiltalign.fit_tilt_series`.
+
+```python
+from torch_tiltalign import fit_tilt_series
+from torch_tiltxcorr import chop_tracks, tiltxcorr, tiltxcorr_patches
+
+shifts = tiltxcorr(tilt_series, tilt_angles, tilt_axis_angle, 10, 40)
+tracks, observed = tiltxcorr_patches(
+    tilt_series, tilt_angles, tilt_axis_angle, shifts=shifts,
+    patch_size=100, pixel_spacing_angstroms=10, lowpass_angstroms=40,
+)
+# tracks: (n_patches, batch, 2) patch centers in pixels from the image center
+pieces, seen = chop_tracks(tracks, observed, tilt_angles, 16, 4)
+result = fit_tilt_series(tilt_series_geometry, pieces * 10, seen)
+```
+
 ## License
 
 This package is distributed under the BSD 3-Clause License.
