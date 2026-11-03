@@ -41,6 +41,7 @@ dependencies = [
     "torch-structure-manipulation",
     "torch-tiltalign",
     "torch-track-fiducials",
+    "torch-projection-matching",
 ]
 
 # Force uv to use workspace versions of packages (instead of PyPI versions)
@@ -79,6 +80,7 @@ torch-calculate-electrostatic-potential = { workspace = true }
 torch-structure-manipulation = { workspace = true }
 torch-tiltalign = { workspace = true }
 torch-track-fiducials = { workspace = true }
+torch-projection-matching = { workspace = true }
 
 [tool.uv.workspace]
 members = [
