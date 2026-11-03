@@ -16,8 +16,8 @@ def make_early_stopper(
     """Return a stateful callable that signals when optimisation should stop.
 
     Early stopping is triggered (returns True) when an average of the loss
-    history (of ``window_size``) has a relative change (in absolute terms)
-    less than ``tolerance`` for ``patience`` consecutive checks. Otherwise,
+    history (of `window_size`) has a relative change (in absolute terms)
+    less than `tolerance` for `patience` consecutive checks. Otherwise,
     continue optimisation (returns False).
     """
     loss_history: list[float] = []

@@ -23,6 +23,44 @@ def insert_central_slices_rfft_3d(
     surface following an Ewald sphere. Wavelength is computed from `ewald_voltage_kv`
     using relativistic electron wavelength formula. If False (default), a flat
     central slice is used.
+
+    Parameters
+    ----------
+    image_rfft : torch.Tensor
+        `(..., h, w // 2 + 1)` rffts of 2D images, fftshifted along the `h` dimension.
+        The leading dimensions must match those of `rotation_matrices`.
+    volume_shape : tuple[int, int, int]
+        `(d, h, w)` shape of the real-space volume to insert into.
+    rotation_matrices : torch.Tensor
+        `(..., 3, 3)` array of rotation matrices, one per image, defining the
+        orientation of each central slice. Matrices left-multiply xyz column
+        vectors unless `zyx_matrices` is `True`.
+    fftfreq_max : float | None, optional
+        Maximum frequency (cycles per pixel) to insert. If `None` (default), all
+        frequencies are inserted.
+    zyx_matrices : bool, optional
+        Set to `True` if the provided matrices left-multiply zyx column vectors
+        instead of xyz column vectors. Default is `False`.
+    apply_ewald_curvature : bool, optional
+        If `True`, bend the central slice onto an Ewald sphere. If `False`
+        (default), use a flat central slice.
+    ewald_voltage_kv : float, optional
+        Acceleration voltage in kV, used to compute the electron wavelength.
+        Default is 300.0.
+    ewald_flip_sign : bool, optional
+        If `True`, flip the sign of the Ewald curvature (apply the curve in the
+        opposite direction). Default is `False`.
+    ewald_px_size : float, optional
+        Pixel size (Å / pixel). Used to convert between grid units
+        (cycles / pixel) and physical spatial frequencies. Default is 1.0.
+
+    Returns
+    -------
+    dft_3d, weights : tuple[torch.Tensor, torch.Tensor]
+        `(d, h, w // 2 + 1)` rfft of the volume (fftshifted along `d` and `h`)
+        containing the accumulated, trilinearly-interpolated data, and the
+        `(d, h, w // 2 + 1)` accumulated interpolation weights for each voxel.
+        Data are not normalised by the weights.
     """
     rotation_matrices = rotation_matrices.to(torch.float32)
 
@@ -143,6 +181,45 @@ def insert_central_slices_rfft_3d_multichannel(
     surface following an Ewald sphere. Wavelength is computed from `ewald_voltage_kv`
     using relativistic electron wavelength formula. If False (default), a flat
     central slice is used.
+
+    Parameters
+    ----------
+    image_rfft : torch.Tensor
+        `(..., c, h, w // 2 + 1)` multichannel rffts of 2D images, fftshifted
+        along the `h` dimension.
+        The leading dimensions must match those of `rotation_matrices`.
+    volume_shape : tuple[int, int, int]
+        `(d, h, w)` shape of the real-space volume to insert into.
+    rotation_matrices : torch.Tensor
+        `(..., 3, 3)` array of rotation matrices, one per image, defining the
+        orientation of each central slice. Matrices left-multiply xyz column
+        vectors unless `zyx_matrices` is `True`.
+    fftfreq_max : float | None, optional
+        Maximum frequency (cycles per pixel) to insert. If `None` (default), all
+        frequencies are inserted.
+    zyx_matrices : bool, optional
+        Set to `True` if the provided matrices left-multiply zyx column vectors
+        instead of xyz column vectors. Default is `False`.
+    apply_ewald_curvature : bool, optional
+        If `True`, bend the central slice onto an Ewald sphere. If `False`
+        (default), use a flat central slice.
+    ewald_voltage_kv : float, optional
+        Acceleration voltage in kV, used to compute the electron wavelength.
+        Default is 300.0.
+    ewald_flip_sign : bool, optional
+        If `True`, flip the sign of the Ewald curvature (apply the curve in the
+        opposite direction). Default is `False`.
+    ewald_px_size : float, optional
+        Pixel size (Å / pixel). Used to convert between grid units
+        (cycles / pixel) and physical spatial frequencies. Default is 1.0.
+
+    Returns
+    -------
+    dft_3d, weights : tuple[torch.Tensor, torch.Tensor]
+        `(c, d, h, w // 2 + 1)` rfft of the volume (fftshifted along `d` and `h`)
+        containing the accumulated, trilinearly-interpolated data, and the
+        `(d, h, w // 2 + 1)` accumulated interpolation weights for each voxel.
+        Data are not normalised by the weights.
     """
     rotation_matrices = rotation_matrices.to(torch.float32)
     ft_dtype = image_rfft.dtype

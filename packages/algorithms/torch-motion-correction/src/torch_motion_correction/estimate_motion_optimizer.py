@@ -58,15 +58,15 @@ def _prepare_patch_state(
     Move is static across entire optimization which means patch extraction plus any
     masking and filtering operations can happen once rather than within optimization
     loop. Additionally, band-pass filtering zeros many pixels in Fourier space. Can crop
-    down to new resolution (``fourier_filter.frequency_range[1]``) without losing any
+    down to new resolution (`fourier_filter.frequency_range[1]`) without losing any
     information to dramatically speed up per-iteration work.
 
     Parameters
     ----------
     image : torch.Tensor
-        (t, H, W) movie. May reside on a different device than ``device`` (e.g.
+        (t, H, W) movie. May reside on a different device than `device` (e.g.
         large super-res movie stored on CPU). Patches are extracted onto the image's
-        own device and moved to ``device`` one chunk at a time. Normalized
+        own device and moved to `device` one chunk at a time. Normalized
         internally, per patch chunk.
     pixel_spacing : float
         Pixel spacing in Angstroms.
@@ -189,29 +189,29 @@ def estimate_local_motion(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, H, W) image to estimate motion from where t is the number of frames,
         H is the height, and W is the width. May reside on a different device than
-        ``device`` (e.g. large super-res movie stored on CPU).
-    pixel_spacing: float
+        `device` (e.g. large super-res movie stored on CPU).
+    pixel_spacing : float
         Pixel spacing in Angstroms.
-    deformation_field_resolution: tuple[int, int, int]
+    deformation_field_resolution : tuple[int, int, int]
         Resolution of the deformation field (nt, nh, nw) where nt is the number of
         time points, nh is the number of control points in height, and nw is the
         number of control points in width.
-    patch_sampling: PatchSamplingConfig
+    patch_sampling : PatchSamplingConfig
         Patch extraction configuration, including patch shape and overlap fraction.
-    initial_deformation_field: DeformationField | None
+    initial_deformation_field : DeformationField | None
         Initial deformation field to start from. If None, initializes to zero shifts.
-    fourier_filter: FourierFilterConfig | None
+    fourier_filter : FourierFilterConfig | None
         Fourier-space filtering parameters (b_factor and frequency_range).
-        Defaults to ``FourierFilterConfig()`` when None.
-    optimization: OptimizationConfig | None
+        Defaults to `FourierFilterConfig()` when None.
+    optimization : OptimizationConfig | None
         Optimization hyper-parameters (max_iterations, optimizer, loss, grid type).
-        Defaults to ``OptimizationConfig()`` when None.
-    device: torch.device | None
+        Defaults to `OptimizationConfig()` when None.
+    device : torch.device | None
         Device to perform computation on. If None, uses the device of the input image.
-    trajectory_kwargs: dict | None
+    trajectory_kwargs : dict | None
         Additional keyword arguments for the trajectory tracking. If None, uses
         defaults.
 
@@ -482,9 +482,9 @@ def _run_lbfgs_step(
     base_shifts_cache : torch.Tensor
         (t, n_patches, 2) frozen base deformation field shifts, detached.
     process_batch_fn : Callable
-        Partially-applied ``_process_patch_batch`` with all frozen args bound.
+        Partially-applied `_process_patch_batch` with all frozen args bound.
     lbfgs_patch_subsample : int | None
-        If set, only the first ``lbfgs_patch_subsample`` batches are used per
+        If set, only the first `lbfgs_patch_subsample` batches are used per
         closure call to reduce memory usage.
     use_checkpointing : bool
         Whether to apply gradient checkpointing inside the closure.
@@ -562,7 +562,7 @@ def _run_standard_step(
     base_shifts_cache : torch.Tensor
         (t, n_patches, 2) frozen base deformation field shifts, detached.
     process_batch_fn : Callable
-        Partially-applied ``_process_patch_batch`` with all frozen args bound.
+        Partially-applied `_process_patch_batch` with all frozen args bound.
 
     Returns
     -------
@@ -597,11 +597,11 @@ def _setup_optimizer(
 
     Parameters
     ----------
-    optimizer_type: str
+    optimizer_type : str
         Type of optimizer to use ('adam', 'sgd', 'rmsprop', or 'lbfgs').
-    parameters: list[torch.Tensor]
+    parameters : list[torch.Tensor]
         List of parameters to optimize.
-    **kwargs: dict[str, Any]
+    **kwargs : dict[str, Any]
         Additional keyword arguments for the optimizer.
 
     Returns
@@ -711,9 +711,9 @@ def _compute_loss(
     t : int, optional
         Number of frames. When provided (and > 1) for "ncc"/"cc", real-space reference
         is derived from the real-space shifted patches as their leave-one-out mean. Only
-        valid when ``reference_patches`` constructed via
-        ``(sum(shifted_patches, dim=1) - shifted_patches) / (t - 1)``. If ``t`` is None,
-        falls back to irfft-ing ``reference_patches`` directly.
+        valid when `reference_patches` constructed via
+        `(sum(shifted_patches, dim=1) - shifted_patches) / (t - 1)`. If `t` is None,
+        falls back to irfft-ing `reference_patches` directly.
     """
     if loss_type == "mse":
         return torch.mean((shifted_patches - reference_patches).abs() ** 2) / (ph * pw)

@@ -1,6 +1,6 @@
 """Utils for local resolution estimation.
 
-Batched half-maps use layout ``(B, Z, Y, X)``. This module handles FFT padding,
+Batched half-maps use layout `(B, Z, Y, X)`. This module handles FFT padding,
 rFFT preparation, resolution shells, and bandpass multiply + inverse FFT.
 """
 
@@ -31,8 +31,8 @@ def estimate_random_maps(
         Maximum sampling window radius.
 
     map_size
-        Spatial size of the map as a tuple (e.g., ``(Y, X)`` for 2D or
-        ``(Z, Y, X)`` for 3D).
+        Spatial size of the map as a tuple (e.g., `(Y, X)` for 2D or
+        `(Z, Y, X)` for 3D).
 
     Returns
     -------
@@ -49,20 +49,20 @@ def estimate_random_maps(
 
 
 def spatial_shape_from_bzyx(maps_bzyx: torch.Tensor) -> tuple[int, ...]:
-    """Spatial dimensions of batched maps in ``(B, Z, Y, X)`` layout.
+    """Spatial dimensions of batched maps in `(B, Z, Y, X)` layout.
 
-    If ``Z == 1``, the data are treated as 2D in the plane and the returned shape
-    is ``(Y, X)``. Otherwise the full volume shape ``(Z, Y, X)`` is returned.
+    If `Z == 1`, the data are treated as 2D in the plane and the returned shape
+    is `(Y, X)`. Otherwise the full volume shape `(Z, Y, X)` is returned.
 
     Parameters
     ----------
     maps_bzyx
-        Tensor with shape ``(B, Z, Y, X)`` (batch, depth, height, width).
+        Tensor with shape `(B, Z, Y, X)` (batch, depth, height, width).
 
     Returns
     -------
     tuple[int, ...]
-        Either ``(Y, X)`` when ``Z == 1``, or ``(Z, Y, X)`` when ``Z > 1``.
+        Either `(Y, X)` when `Z == 1`, or `(Z, Y, X)` when `Z > 1`.
     """
     _b, z, y, x = maps_bzyx.shape
     if z == 1:
@@ -76,14 +76,14 @@ def spatial_map_bzyx(maps_bzyx: torch.Tensor, batch_index: int) -> torch.Tensor:
     Parameters
     ----------
     maps_bzyx
-        Tensor with shape ``(B, Z, Y, X)``.
+        Tensor with shape `(B, Z, Y, X)`.
     batch_index
-        Which batch element to take, ``0 <= batch_index < B``.
+        Which batch element to take, `0 <= batch_index < B`.
 
     Returns
     -------
     torch.Tensor
-        If ``Z == 1``, shape ``(Y, X)``. If ``Z > 1``, shape ``(Z, Y, X)``.
+        If `Z == 1`, shape `(Y, X)`. If `Z > 1`, shape `(Z, Y, X)`.
     """
     slab = maps_bzyx[batch_index]
     if slab.shape[0] == 1:
@@ -154,7 +154,7 @@ def prepare_halfmaps_for_fft(
     tuple[int, int] | tuple[int, int, int],
     tuple[slice, ...],
 ]:
-    """Pad to FFT-friendly size and compute ``rfftn`` on both half-maps.
+    """Pad to FFT-friendly size and compute `rfftn` on both half-maps.
 
     Parameters
     ----------
@@ -166,7 +166,7 @@ def prepare_halfmaps_for_fft(
         Number of voxels to mirror-pad on each side.
         This is the edge-padding.
     device : str or torch.device
-        Device for computation (e.g. ``"cpu"`` or ``"cuda"`` or ``torch.device(...)``).
+        Device for computation (e.g. `"cpu"` or `"cuda"` or `torch.device(...)`).
 
     Returns
     -------
@@ -175,8 +175,8 @@ def prepare_halfmaps_for_fft(
     fft2 : torch.Tensor
         Complex rfftn output of second half-map.
     padded_image_shape : tuple
-        Real-space shape of the padded grid **before** ``rfftn`` (same meaning as
-        ``image_shape`` in torch-grid-utils / torch-fourier-filter).
+        Real-space shape of the padded grid **before** `rfftn` (same meaning as
+        `image_shape` in torch-grid-utils / torch-fourier-filter).
     fft_crop : tuple of slices
         Slices to crop back to original size.
     """
@@ -265,7 +265,7 @@ def apply_bandpass_and_invert(
     bandpass : torch.Tensor
         Bandpass filter.
     padded_image_shape : tuple
-        Real-space output shape for ``irfftn`` (same padded grid as before ``rfftn``).
+        Real-space output shape for `irfftn` (same padded grid as before `rfftn`).
     fft_crop : tuple
         Slices to crop irfftn output back to radius-padded shape.
 

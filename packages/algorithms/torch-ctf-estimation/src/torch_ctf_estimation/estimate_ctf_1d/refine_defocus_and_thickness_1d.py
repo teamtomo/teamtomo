@@ -53,17 +53,17 @@ def refine_defocus_and_thickness_1d(
     """Refine 1D thickness (and optionally defocus) with the thickness CTF.
 
     Standalone 1D thickness remains a grid search. This is the 1D
-    gradient-descent step. Set ``optimize_defocus=False`` to hold defocus
-    at ``initial_defocus_um`` and update thickness only.
+    gradient-descent step. Set `optimize_defocus=False` to hold defocus
+    at `initial_defocus_um` and update thickness only.
 
     Parameters
     ----------
     power_spectrum : torch.Tensor
-        Mean (or single) rFFT power spectrum, shape ``(h, w_rfft)``.
+        Mean (or single) rFFT power spectrum, shape `(h, w_rfft)`.
     image_sidelength : int
         Real-space sidelength used for the 1D CTF.
     frequency_fit_range_angstroms : tuple[float, float]
-        ``(low, high)`` fit band in Angstroms.
+        `(low, high)` fit band in Angstroms.
     initial_defocus_um : float
         Starting defocus in micrometers.
     initial_thickness_angstroms : float
@@ -87,8 +87,8 @@ def refine_defocus_and_thickness_1d(
     laser_params : LaserParams | None, optional
         Unused for the 1D thickness CTF (kept for call-site consistency).
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback. Default None (run all
-        ``n_iterations``).
+        Stateful `(loss) -> should_stop` callback. Default None (run all
+        `n_iterations`).
     use_equiphase : bool, optional
         If True, compute the background/1D profile with equiphase averaging
         instead of a plain rotational average. Default False.
@@ -103,7 +103,7 @@ def refine_defocus_and_thickness_1d(
     equiphase_n_theta : int, optional
         Number of azimuthal samples for equiphase averaging. Default 64.
     optimize_defocus : bool, optional
-        If False, keep defocus at ``initial_defocus_um`` and refine thickness
+        If False, keep defocus at `initial_defocus_um` and refine thickness
         only. Default True.
 
     Returns

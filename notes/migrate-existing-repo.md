@@ -127,29 +127,6 @@ cp /tmp/${PACKAGE_NAME}/LICENSE packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
 cp /tmp/${PACKAGE_NAME}/pyproject.toml packages/${PACKAGE_CATEGORY}/${PACKAGE_NAME}/
 ```
 
-<!-- ### Phase 3: Clean Up and Configure Package
-
-**1. Remove monorepo-level config files from package**
-
-These are now handled at the root level:
-
-```bash
-cd packages/<category>/<package-name>
-
-# Remove package-level configs (use monorepo's instead)
-rm -rf .github/              # CI/CD workflows
-rm .gitignore                # Use root .gitignore
-rm .pre-commit-config.yaml   # Use root pre-commit
-rm .copier-answers.yml       # Template metadata (if exists)
-
-# Keep these files:
-# - LICENSE (package-specific)
-# - README.md (package docs)
-# - pyproject.toml (will modify)
-# - src/ (source code)
-# - tests/ (tests)
-``` -->
-
 ### Phase 3: Configure Package in the Monorepo
 
 TeamTomo uses a standardized BSD 3-Clause License across all packages. Copy over the root LICENSE file to ensure consistent copyright attribution:

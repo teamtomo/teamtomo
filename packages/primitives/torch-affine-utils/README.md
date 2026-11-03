@@ -1,10 +1,9 @@
 # torch-affine-utils
 
-[![License](https://img.shields.io/pypi/l/torch-affine-utils.svg?color=green)](https://github.com/teamtomo/torch-affine-utils/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-affine-utils.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-affine-utils/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-affine-utils.svg?color=green)](https://pypi.org/project/torch-affine-utils)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-affine-utils.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-affine-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-affine-utils/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-affine-utils/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-affine-utils)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 A small utility library for generating affine matrices for 2D and 3D coordinates.
 

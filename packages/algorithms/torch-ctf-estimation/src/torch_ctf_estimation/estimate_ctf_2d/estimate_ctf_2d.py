@@ -62,14 +62,14 @@ def estimate_ctf_2d(
     Parameters
     ----------
     patch_power_spectra : torch.Tensor
-        Patch power spectra, shape ``(t, gh, gw, ph, pw)`` (frames, patch grid, freq).
+        Patch power spectra, shape `(t, gh, gw, ph, pw)` (frames, patch grid, freq).
     normalised_patch_positions : torch.Tensor
-        Normalised patch positions, shape ``(t, gh, gw, 3)`` in [0, 1].
+        Normalised patch positions, shape `(t, gh, gw, 3)` in [0, 1].
     defocus_grid_resolution : tuple[int, int, int]
-        Resolution ``(nt, nh, nw)``. For grid model all three are used; for linear
-        only ``nt`` is used (time knots for cubic spline when t>1).
+        Resolution `(nt, nh, nw)`. For grid model all three are used; for linear
+        only `nt` is used (time knots for cubic spline when t>1).
     frequency_fit_range_angstroms : tuple[float, float]
-        ``(low, high)`` frequency fit range in angstroms.
+        `(low, high)` frequency fit range in angstroms.
     initial_defocus : float
         Initial defocus in microns.
     pixel_spacing_angstroms : float
@@ -87,11 +87,11 @@ def estimate_ctf_2d(
     defocus_lr : float, optional
         Learning rate for the defocus (grid or base defocus_0). Default 0.01.
     astigmatism_lr : float, optional
-        Learning rate for the astigmatism magnitude (when ``optimize_astigmatism``).
+        Learning rate for the astigmatism magnitude (when `optimize_astigmatism`).
         Default 0.05.
     astigmatism_angle_lr : float, optional
         Learning rate for the astigmatism angle parameters (when
-        ``optimize_astigmatism``). Default 50.0.
+        `optimize_astigmatism`). Default 50.0.
     defocus_model : {"grid", "linear"}, optional
         Defocus model: "grid" (3D spline) or "linear" (tilt). Default "grid".
     initial_defocus_gradient_magnitude : float, optional
@@ -113,7 +113,7 @@ def estimate_ctf_2d(
     phase_shift_model : {"grid", "quadratic"}, optional
         "grid" (per-patch) or "quadratic" (directional). Default "grid".
     phase_shift_quadratic_perpendicular_axis : bool, optional
-        If True and ``phase_shift_model`` is "quadratic", fit g2, k2 along t
+        If True and `phase_shift_model` is "quadratic", fit g2, k2 along t
         perpendicular to s. Default False.
     initial_phase_shift : float, optional
         Initial phase shift in degrees when optimizing. Default 0.0.
@@ -126,12 +126,12 @@ def estimate_ctf_2d(
     amplitude_contrast_fraction : float, optional
         Amplitude contrast fraction (0-1) for CTF simulation. Default 0.07.
     laser_params : Optional[LaserParams], optional
-        If set and ``model_laser`` is True, use LPP (laser phase plate) CTF
+        If set and `model_laser` is True, use LPP (laser phase plate) CTF
         model; otherwise use standard calculate_ctf_2d. Laser geometry is still
-        used for axis masking when ``mask_laser_axis`` is enabled. Default None.
+        used for axis masking when `mask_laser_axis` is enabled. Default None.
     axis_mask : Optional[torch.Tensor], optional
-        2D rFFT-layout mask (shape ``(ph, pw // 2 + 1)``, values 0/1) that
-        zeros strips along the laser axis.  Folded into ``bp_filter`` so both
+        2D rFFT-layout mask (shape `(ph, pw // 2 + 1)`, values 0/1) that
+        zeros strips along the laser axis.  Folded into `bp_filter` so both
         data and simulated spectra are masked identically.  Default None
         (no masking).
     defocus_bounds_microns : tuple[float, float] or None, optional
@@ -141,11 +141,11 @@ def estimate_ctf_2d(
         (low, high) phase shift bounds in degrees for 2D fitting. Default None
         uses (0, 180)°. Equal values fix phase at that value.
     fixed_phase_shift_deg : float or None, optional
-        Known phase shift in degrees when ``optimize_phase_shift`` is False.
+        Known phase shift in degrees when `optimize_phase_shift` is False.
         Default None (phase treated as zero unless set via equal bounds).
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback. Default None (run all
-        ``n_iterations``).
+        Stateful `(loss) -> should_stop` callback. Default None (run all
+        `n_iterations`).
     use_amplitude : bool, optional
         If True, fit against the CTF amplitude rather than CTF squared.
         Default False.

@@ -1,3 +1,5 @@
+"""Training entry point for the fiducial segmentation model."""
+
 from pathlib import Path
 
 import typer

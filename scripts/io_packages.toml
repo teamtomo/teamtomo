@@ -1,0 +1,63 @@
+# I/O packages documented alongside the monorepo packages.
+#
+# Each one lives in its own repository. scripts/generate_docs.py clones them into
+# external/ (git-ignored) and builds their pages from the clone exactly as it does
+# for a monorepo package: README.md is the overview, docs/*.md are extra pages,
+# docs/examples/ and examples/ hold examples, and the API reference is read from
+# the source. Run it with --update to pull the latest default branch of each.
+#
+# `group` splits the I/O index page into sections.
+
+[[package]]
+name = "starfile"
+repo = "https://github.com/teamtomo/starfile"
+group = "Metadata"
+description = "Read and write STAR files as pandas DataFrames."
+
+[[package]]
+name = "imodmodel"
+repo = "https://github.com/teamtomo/imodmodel"
+group = "Metadata"
+description = "Read and write IMOD model files."
+
+[[package]]
+name = "mdocfile"
+repo = "https://github.com/teamtomo/mdocfile"
+group = "Metadata"
+description = "Read and write SerialEM mdoc metadata files."
+
+[[package]]
+name = "alnfile"
+repo = "https://github.com/teamtomo/alnfile"
+group = "Metadata"
+description = "Read AreTomo alignment files."
+
+[[package]]
+name = "etomofiles"
+repo = "https://github.com/teamtomo/etomofiles"
+group = "Metadata"
+description = "Read IMOD etomo alignment files."
+
+[[package]]
+name = "dynamotable"
+repo = "https://github.com/teamtomo/dynamotable"
+group = "Metadata"
+description = "Read and write Dynamo table files."
+
+[[package]]
+name = "eerfile"
+repo = "https://github.com/teamtomo/eerfile"
+group = "Images and models"
+description = "Read electron event representation (EER) files."
+
+[[package]]
+name = "emfile"
+repo = "https://github.com/teamtomo/emfile"
+group = "Images and models"
+description = "Read and write EM image files."
+
+[[package]]
+name = "mmdf"
+repo = "https://github.com/teamtomo/mmdf"
+group = "Images and models"
+description = "Read and write macromolecular structure files (PDB, mmCIF) as DataFrames."

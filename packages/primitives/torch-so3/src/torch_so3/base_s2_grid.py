@@ -196,29 +196,29 @@ def healpix_sectored_base_grid(
 ) -> torch.Tensor:
     """Generate a two-level HEALPix S2 grid grouped by coarse sector.
 
-    The sphere is divided into ``n_sectors = 12 * nside_coarse**2`` equal-area sectors
+    The sphere is divided into `n_sectors = 12 * nside_coarse**2` equal-area sectors
     using a coarse HEALPix resolution.  Within each sector a finer HEALPix grid samples
     the direction space.  Because HEALPix is equal-area, every sector contains exactly
-    the same number of fine pixels ``k2 = (nside_fine / nside_coarse)**2``.
+    the same number of fine pixels `k2 = (nside_fine / nside_coarse)**2`.
 
-    Optional ``theta_*`` and ``phi_*`` bounds select **which coarse sectors to keep**:
+    Optional `theta_*` and `phi_*` bounds select **which coarse sectors to keep**:
     if **any** fine-pixel centre in a sector lies within the bounds, the **entire**
-    sector is retained (all ``k2`` directions, including centres that fall outside the
+    sector is retained (all `k2` directions, including centres that fall outside the
     bounds).  Sectors with no centres in range are omitted.  This matches
-    :func:`healpix_base_grid` comparisons (no phi wrap-around across 0/360).
+    `healpix_base_grid` comparisons (no phi wrap-around across 0/360).
 
     Parameters
     ----------
     nside_coarse : int
-        HEALPix ``nside`` for the coarse sector grid. Must be a power of two >= 1.
-        ``n_sectors = 12 * nside_coarse**2``.
+        HEALPix `nside` for the coarse sector grid. Must be a power of two >= 1.
+        `n_sectors = 12 * nside_coarse**2`.
     nside_fine : int, optional
-        HEALPix ``nside`` for the fine sampling inside each sector.  Must be a power
-        of two >= ``nside_coarse``.  If ``None``, inferred from ``theta_step`` and
+        HEALPix `nside` for the fine sampling inside each sector.  Must be a power
+        of two >= `nside_coarse`.  If `None`, inferred from `theta_step` and
         rounded up to the nearest power of two.
     theta_step : float, optional
-        Angular step in degrees used to infer ``nside_fine`` when ``nside_fine`` is
-        ``None``.  Ignored if ``nside_fine`` is provided.  Default is 2.5.
+        Angular step in degrees used to infer `nside_fine` when `nside_fine` is
+        `None`.  Ignored if `nside_fine` is provided.  Default is 2.5.
     theta_min, theta_max, phi_min, phi_max : float, optional
         In degrees.  Used only to decide sector inclusion; see above.  Defaults cover
         the full sphere (all sectors kept).
@@ -226,10 +226,10 @@ def healpix_sectored_base_grid(
     Returns
     -------
     torch.Tensor
-        Tensor of shape ``(n_kept, k2, 2)`` where ``n_kept <= 12 * nside_coarse**2``,
-        last dimension is ``(phi, theta)`` in degrees, and
-        ``k2 = (nside_fine // nside_coarse)**2``.  If no sector qualifies, shape
-        ``(0, k2, 2)``.
+        Tensor of shape `(n_kept, k2, 2)` where `n_kept <= 12 * nside_coarse**2`,
+        last dimension is `(phi, theta)` in degrees, and
+        `k2 = (nside_fine // nside_coarse)**2`.  If no sector qualifies, shape
+        `(0, k2, 2)`.
     """
     if platform.system() == "Windows":
         raise ImportError("healpy cannot be installed on Windows systems.")

@@ -1,5 +1,10 @@
 # torch-structure-manipulation
 
+[![License](https://img.shields.io/pypi/l/torch-structure-manipulation.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-structure-manipulation/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/torch-structure-manipulation.svg?color=green)](https://pypi.org/project/torch-structure-manipulation)
+[![Python Version](https://img.shields.io/pypi/pyversions/torch-structure-manipulation.svg?color=green)](https://python.org)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
+
 Typed, in-memory utilities for atomic structures:
 
 - `AtomicStructure.from_dataframe` converts mmdf-compatible DataFrames into

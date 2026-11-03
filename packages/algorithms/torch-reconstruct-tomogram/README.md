@@ -1,16 +1,15 @@
 # torch-reconstruct-tomogram
 
-[![License](https://img.shields.io/pypi/l/torch-reconstruct-tomogram.svg?color=green)](https://github.com/teamtomo/torch-reconstruct-tomogram/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-reconstruct-tomogram.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-reconstruct-tomogram/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-reconstruct-tomogram.svg?color=green)](https://pypi.org/project/torch-reconstruct-tomogram)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-reconstruct-tomogram.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-reconstruct-tomogram/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-reconstruct-tomogram/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-reconstruct-tomogram/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-reconstruct-tomogram)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 (sub-)Tomogram reconstruction and subtilt extraction for cryo-ET.
 
 ## Overview
 
-This package provides (sub-)tomogram reconstruction and subtilt extraction driven entirely from a [`torch-tilt-series`](https://github.com/teamtomo/torch-tilt-series) `TiltSeries`. It supports
+This package provides (sub-)tomogram reconstruction and subtilt extraction driven entirely from a [`torch-tilt-series`](../../primitives/torch-tilt-series/README.md) `TiltSeries`. It supports
 
 * `extract_particle_tilt_series()`: extract a subtilt-series at 3D location(s) in the sample
 * `reconstruct_subvolume()`: rank-polymorphic reconstruction of 3D patch(es) at location(s) in the sample
@@ -24,7 +23,7 @@ This package provides (sub-)tomogram reconstruction and subtilt extraction drive
 pip install torch-reconstruct-tomogram
 ```
 
-To load a tilt series from AreTomo or ETOMO output, also install the IO dependencies for [`torch-tilt-series`](https://github.com/teamtomo/torch-tilt-series):
+To load a tilt series from AreTomo or ETOMO output, also install the IO dependencies for [`torch-tilt-series`](../../primitives/torch-tilt-series/README.md):
 
 ```bash
 pip install torch-tilt-series[io]

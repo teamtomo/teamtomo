@@ -24,19 +24,19 @@ def prepare_image_for_ctf(
     Parameters
     ----------
     image : torch.Tensor
-        ``(t, h, w)`` or ``(h, w)`` real-space image.
+        `(t, h, w)` or `(h, w)` real-space image.
     pixel_spacing_angstroms : float
         Source pixel spacing in Angstroms.
     target_pixel_spacing_angstroms : float, optional
         Internal fitting spacing. The image is never upsampled:
-        ``new_spacing = max(target, source)``. Default 3.0.
+        `new_spacing = max(target, source)`. Default 3.0.
     device : torch.device | None, optional
-        Device for the output tensor. If None, uses ``image.device``.
+        Device for the output tensor. If None, uses `image.device`.
 
     Returns
     -------
     image : torch.Tensor
-        Prepared image of shape ``(t, h, w)`` on ``device``.
+        Prepared image of shape `(t, h, w)` on `device`.
     pixel_spacing_used : float
         Pixel spacing after rescaling.
     """

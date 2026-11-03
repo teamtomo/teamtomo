@@ -15,11 +15,24 @@ from torch_tilt_series import (
 def project_points(tilt_series: TiltSeries, points_zyx: torch.Tensor) -> torch.Tensor:
     """Project 3D points to 2D image pixel coordinates.
 
-    - points are 3D zyx coordinates in Angstroms, relative to the tomogram center
-    - tilt_series supplies the projection geometry (`tilt_series.project_points`
-      works in Angstroms) and `tilt_series.pixel_spacing` (raises if unset),
-      used to convert the projected Angstrom positions to pixels
-    - projected 2D points are in pixels, relative to the center of each image
+    Calls `tilt_series.project_points` (which works in Angstroms) and divides
+    the result by `tilt_series.pixel_spacing`.
+
+    Parameters
+    ----------
+    tilt_series : TiltSeries
+        Supplies the projection geometry and `pixel_spacing` (accessing it
+        raises `ValueError` if unset), used to convert the projected
+        Angstrom positions to pixels.
+    points_zyx : torch.Tensor
+        `(n_points, 3)` zyx coordinates in Angstroms, relative to the
+        tomogram center.
+
+    Returns
+    -------
+    projected_yx : torch.Tensor
+        `(n_points, n_tilts, 2)` yx positions in pixels, relative to the
+        center of each image.
     """
     return tilt_series.project_points(points_zyx) / tilt_series.pixel_spacing
 
@@ -64,6 +77,35 @@ def extract_particle_tilt_series(
     defaults (`low`, `high`, `falloff`, `bandpass_padding`,
     `subtract_background`, `normalize`) - see that function's docstring for
     details.
+
+    Parameters
+    ----------
+    tilt_series : TiltSeries
+        Supplies the projection geometry, `pixel_spacing`, and the
+        `image_path`/`image_indices` used to load the raw images (loaded on
+        `tilt_series.device`).
+    points_zyx : torch.Tensor
+        `(n_points, 3)` zyx coordinates in Angstroms, relative to the
+        tomogram center.
+    sidelength : int
+        Sidelength of the square patches, in pixels of the raw images.
+    return_rfft : bool
+        If True (default), return the rfft of each patch, with the patch
+        center shifted to the real-space origin before the transform and the
+        Fourier origin at index (0, 0) (no fftshift). If False, return
+        real-space patches.
+    preprocess : bool
+        If True (default), apply `preprocess_tilt_series_images` to the
+        loaded images before extraction.
+    **preprocessing_kwargs : Any
+        Forwarded to `preprocess_tilt_series_images`.
+
+    Returns
+    -------
+    patches : torch.Tensor
+        `(n_points, n_tilts, sidelength, sidelength)` real-space patches, or
+        `(n_points, n_tilts, sidelength, sidelength // 2 + 1)` complex rffts
+        if `return_rfft` is True.
     """
     images = load_tilt_series_images(tilt_series)
     if preprocess:

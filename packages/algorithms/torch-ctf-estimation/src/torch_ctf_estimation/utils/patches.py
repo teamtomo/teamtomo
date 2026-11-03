@@ -17,18 +17,18 @@ def extract_ctf_patches(
     Parameters
     ----------
     image : torch.Tensor
-        Prepared image of shape ``(t, h, w)``.
+        Prepared image of shape `(t, h, w)`.
     patch_sidelength : int
-        Patch size in pixels. Values ``< 0`` select whole-image mode.
+        Patch size in pixels. Values `< 0` select whole-image mode.
     defocus_grid_resolution : tuple[int, int, int]
-        ``(nt, nh, nw)``. Whole-image mode requires ``nh == nw == 1``.
+        `(nt, nh, nw)`. Whole-image mode requires `nh == nw == 1`.
 
     Returns
     -------
     patches : torch.Tensor
-        Shape ``(t, gh, gw, ph, pw)``.
+        Shape `(t, gh, gw, ph, pw)`.
     patch_centers : torch.Tensor
-        Patch centers in pixel coordinates, shape ``(t, gh, gw, 3)``.
+        Patch centers in pixel coordinates, shape `(t, gh, gw, 3)`.
     image_sidelength_for_1d : int
         Sidelength to pass to 1D estimators.
     use_whole_image : bool
@@ -78,14 +78,14 @@ def compute_patch_power_spectra(
     Parameters
     ----------
     patches : torch.Tensor
-        Shape ``(t, gh, gw, ph, pw)``.
+        Shape `(t, gh, gw, ph, pw)`.
 
     Returns
     -------
     patch_ps : torch.Tensor
-        Per-patch power spectra, shape ``(t, gh, gw, ph, pw_rfft)``.
+        Per-patch power spectra, shape `(t, gh, gw, ph, pw_rfft)`.
     mean_ps : torch.Tensor
-        Mean power spectrum, shape ``(ph, pw_rfft)``.
+        Mean power spectrum, shape `(ph, pw_rfft)`.
     """
     patch_ps = torch.abs(torch.fft.rfftn(patches, dim=(-2, -1))) ** 2
     mean_ps = einops.reduce(patch_ps, "... ph pw -> ph pw", reduction="mean")
@@ -96,19 +96,19 @@ def normalised_patch_positions(
     patch_centers: torch.Tensor,
     image_shape: tuple[int, int, int],
 ) -> torch.Tensor:
-    """Normalize patch centers to ``[0, 1]`` using ``(t-1, h-1, w-1)``.
+    """Normalize patch centers to `[0, 1]` using `(t-1, h-1, w-1)`.
 
     Parameters
     ----------
     patch_centers : torch.Tensor
-        Pixel-space centers, shape ``(t, gh, gw, 3)``.
+        Pixel-space centers, shape `(t, gh, gw, 3)`.
     image_shape : tuple[int, int, int]
-        ``(t, h, w)`` of the prepared image.
+        `(t, h, w)` of the prepared image.
 
     Returns
     -------
     torch.Tensor
-        Normalised positions, same shape as ``patch_centers``.
+        Normalised positions, same shape as `patch_centers`.
     """
     t, h, w = image_shape
     lengths = torch.tensor(

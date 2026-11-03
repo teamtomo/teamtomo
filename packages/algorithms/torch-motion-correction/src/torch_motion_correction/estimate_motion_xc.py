@@ -29,21 +29,21 @@ def estimate_global_motion(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) array of images to motion correct. May live on a different
-        device than ``device`` (e.g. CPU); frames are transferred lazily.
-    pixel_spacing: float
+        device than `device` (e.g. CPU); frames are transferred lazily.
+    pixel_spacing : float
         Pixel spacing in angstroms
-    reference_frame: int, optional
+    reference_frame : int, optional
         Frame index to use as reference. If None, uses middle frame.
-    fourier_filter: FourierFilterConfig, optional
-        Fourier-space filtering parameters. Defaults to ``FourierFilterConfig()``
+    fourier_filter : FourierFilterConfig, optional
+        Fourier-space filtering parameters. Defaults to `FourierFilterConfig()`
         when None.
-    device: torch.device, optional
+    device : torch.device, optional
         Device for computation
-    verbose: bool
+    verbose : bool
         Whether to print progress information. Default is False.
-    downsample_factor: int
+    downsample_factor : int
         Integer factor to downsample (average pool) each frame before cross-correlation.
         The sub-pixel precision lost to downsampling may be acceptable in exchange for
         large reductions in per-frame compute and memory on very large movies. Default
@@ -154,35 +154,35 @@ def estimate_motion_cross_correlation_patches(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         (t, h, w) array of images to motion correct. May live on a different device than
-        parameter ``device`` (e.g. CPU). Patches are transferred lazily.
-    pixel_spacing: float
+        parameter `device` (e.g. CPU). Patches are transferred lazily.
+    pixel_spacing : float
         Pixel spacing in angstroms
-    patch_sampling: PatchSamplingConfig
+    patch_sampling : PatchSamplingConfig
         Patch extraction configuration, including patch shape and overlap fraction.
-    reference_frame: int, optional
+    reference_frame : int, optional
         Frame index to use as reference. If None, uses middle frame.
-    reference_strategy: str
+    reference_strategy : str
         Strategy for reference frame selection:
         - "middle_frame": Use the middle frame as reference for all frames
         - "mean_except_current": Use mean of all frames except current frame
         as reference
-    fourier_filter: FourierFilterConfig, optional
-        Fourier-space filtering parameters. Defaults to ``FourierFilterConfig()``
+    fourier_filter : FourierFilterConfig, optional
+        Fourier-space filtering parameters. Defaults to `FourierFilterConfig()`
         when None.
-    refinement: XCRefinementConfig, optional
+    refinement : XCRefinementConfig, optional
         Post-processing configuration (sub-pixel refinement, temporal smoothing,
-        outlier rejection). Defaults to ``XCRefinementConfig()`` when None.
-    initial_deformation_field: DeformationField | None
+        outlier rejection). Defaults to `XCRefinementConfig()` when None.
+    initial_deformation_field : DeformationField | None
         Optional deformation field to apply to the image before motion estimation.
         If provided, the image will be corrected first, and the newly calculated
         motion will be added to this field (cumulative correction).
-        If shape[-2:] == (1, 1), uses ``correct_motion_fast``; otherwise uses
-        ``correct_motion``.
-    device: torch.device, optional
+        If shape[-2:] == (1, 1), uses `correct_motion_fast`; otherwise uses
+        `correct_motion`.
+    device : torch.device, optional
         Device for computation
-    verbose: bool
+    verbose : bool
         Whether to print progress information. Default is False.
 
     Returns
@@ -431,13 +431,13 @@ def _apply_sub_pixel_refinement(
 
     Parameters
     ----------
-    cross_corr: torch.Tensor
+    cross_corr : torch.Tensor
         Cross-correlation values (gh*gw, ph*pw)
-    peak_indices: torch.Tensor
+    peak_indices : torch.Tensor
         Integer peak indices (gh*gw,)
-    patch_height: int
+    patch_height : int
         Height of patches
-    patch_width: int
+    patch_width : int
         Width of patches
 
     Returns
@@ -499,11 +499,11 @@ def _apply_temporal_smoothing(
 
     Parameters
     ----------
-    deformation_field: torch.Tensor
+    deformation_field : torch.Tensor
         Deformation field (2, t, gh, gw)
-    window_size: int
+    window_size : int
         Window size for smoothing (must be odd)
-    device: torch.device
+    device : torch.device
         Device for computation
 
     Returns
@@ -558,15 +558,15 @@ def _apply_outlier_rejection(
 
     Parameters
     ----------
-    shift_y: torch.Tensor
+    shift_y : torch.Tensor
         Y shifts for all patches in the frame (gh, gw)
-    shift_x: torch.Tensor
+    shift_x : torch.Tensor
         X shifts for all patches in the frame (gh, gw)
-    outlier_threshold: float
+    outlier_threshold : float
         Threshold in standard deviations from median for outlier detection
-    frame_idx: int
+    frame_idx : int
         Frame index for logging purposes
-    verbose: bool
+    verbose : bool
         Whether to print outlier counts. Default is False.
 
     Returns

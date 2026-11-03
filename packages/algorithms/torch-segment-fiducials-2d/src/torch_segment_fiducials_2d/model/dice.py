@@ -1,3 +1,5 @@
+"""Dice coefficient, score and loss for multiclass segmentation."""
+
 import torch
 import torch.nn.functional as F
 from einops import rearrange, reduce
@@ -62,7 +64,7 @@ def dice_score(ground_truth: torch.Tensor, logits: torch.Tensor):
 
 
 def dice_loss(ground_truth: torch.Tensor, logits: torch.Tensor):
-    """Optimisation target based on the dice coefficient
+    """Optimisation target based on the dice coefficient.
 
     Parameters
     ----------

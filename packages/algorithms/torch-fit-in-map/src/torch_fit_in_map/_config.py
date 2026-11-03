@@ -11,27 +11,35 @@ from teamtomo_basemodel import BaseModelTeamTomo
 class PotentialSimulatorConfig(BaseModelTeamTomo):
     """Options for the default electrostatic-potential simulator.
 
-    Parameters
+    Attributes
     ----------
     scattering_factors : {"peng_elemental", "peng_bonded"}
-        Peng parameter model passed to ``potential_from_structure_3d``.
+        Peng parameter model passed to `potential_from_structure_3d`. Default
+        is `"peng_elemental"`. With `"peng_bonded"`, existing
+        `bonded_environments` and `molecule_type` columns are used if present;
+        otherwise the atoms are annotated first.
     annotate_bonding : bool
-        When ``True`` (or when ``scattering_factors`` is ``peng_bonded``), build
+        When `True` (or when `scattering_factors` is `peng_bonded`), build
         the structure with
-        :meth:`~torch_structure_manipulation.AtomicStructure.from_annotated_dataframe`
-        so bonded environments are available. Requires ``chain``, ``residue_id``,
-        ``residue``, and ``atom`` columns in addition to coordinates.
+        `AtomicStructure.from_annotated_dataframe`
+        so bonded environments are available. Requires `chain`, `residue_id`,
+        `residue`, and `atom` columns in addition to coordinates. Default is
+        False.
     include_hydrogens : bool
-        Passed to ``from_annotated_dataframe`` when bonding annotation runs.
+        Passed to `from_annotated_dataframe` when bonding annotation runs.
+        Default is True.
     sublattice_radius : float or None
-        Per-atom stencil radius in Angstroms. ``None`` uses
-        :func:`~torch_calculate_electrostatic_potential.default_sublattice_radius`.
+        Per-atom stencil radius in Angstroms. `None` (default) uses
+        `default_sublattice_radius`.
     per_voxel_averaging : bool
         Average the potential over each voxel instead of sampling its centre.
+        Default is True.
     bonded_fallback : {"elemental", "error"}
         Behaviour for unsupported bonded providers or environment keys.
+        Default is `"elemental"`.
     batch_size : int
         Number of atoms evaluated per chunk during potential calculation.
+        Must be at least 1. Default is 4096.
     """
 
     scattering_factors: Literal["peng_elemental", "peng_bonded"] = "peng_elemental"
@@ -46,23 +54,36 @@ class PotentialSimulatorConfig(BaseModelTeamTomo):
 class ExhaustiveSearchConfig(BaseModelTeamTomo):
     """Configuration for the exhaustive SO(3) grid search.
 
-    Parameters
+    Attributes
     ----------
     angular_step_degrees : float
-        Step size for both ``theta`` and ``psi`` axes of the SO(3) grid.
+        Step size in degrees for both `theta` and `psi` axes of the SO(3) grid.
         Smaller values give finer orientation sampling at the cost of runtime.
+        Must be positive. Default is 15.0.
     angular_sampling_method : {"uniform", "healpix", "cartesian"}
-        Base grid method passed to ``get_uniform_euler_angles``.
+        Base grid method passed to `get_uniform_euler_angles`. Default is
+        `"uniform"`.
     rotation_batch_size : int
         Number of rotation matrices processed per GPU batch.  Reduce if you
-        run out of VRAM; increase for faster throughput.
+        run out of VRAM; increase for faster throughput. Default is 16.
     symmetry : str
-        Point-group symmetry of the *reference* map, e.g. ``"C1"``, ``"C4"``,
-        ``"D2"``, ``"T"``, ``"O"``, ``"I"``.  The SO(3) search is restricted to
+        Point-group symmetry of the *reference* map, e.g. `"C1"`, `"C4"`,
+        `"D2"`, `"T"`, `"O"`, `"I"`.  The SO(3) search is restricted to
         the corresponding asymmetric unit, reducing runtime by the symmetry
-        order.  Default ``"C1"`` performs a full SO(3) search.
+        order.  Default `"C1"` performs a full SO(3) search.
+    n_start : int
+        Number of top-scoring poses from the exhaustive search to keep. When
+        used through `fit_map_in_map`, each is refined independently and the
+        best-scoring refined pose is returned, at the cost of `n_start` times
+        the gradient-refinement time. `exhaustive_search` returns only the
+        best pose. Must be at least 1. Default is 1.
     pixel_size_angstroms : float or None
-        If provided, ``AlignmentResult.translation_angstroms`` is populated.
+        If provided, `AlignmentResult.translation_angstroms` is populated.
+        Default is None.
+    devices : list of str or None
+        Devices to split the rotation search across, e.g.
+        `["cuda:0", "cuda:1"]`. If None (default), the device of the reference
+        volume is used.
     """
 
     angular_step_degrees: float = Field(default=15.0, gt=0.0)
@@ -92,22 +113,30 @@ class ExhaustiveSearchConfig(BaseModelTeamTomo):
 class GradientRefinementConfig(BaseModelTeamTomo):
     """Configuration for gradient-based local refinement.
 
-    Parameters
+    Attributes
     ----------
     optimizer : {"lbfgs", "adam"}
         Optimizer to use.  "lbfgs" is generally faster and more precise for
         low-dimensional problems like this.  "adam" is more robust to noise.
+        Default is `"lbfgs"`.
     n_iterations : int
-        Number of optimisation steps.  For "lbfgs", this corresponds to the
-        maximum number of iterations within the line search.
+        Number of optimisation steps.  For "adam", the number of optimizer
+        steps. For "lbfgs", passed as `max_iter` to `torch.optim.LBFGS`, which
+        runs up to that many iterations in a single step. Must be at least 1.
+        Default is 100.
     learning_rate : float
-        Learning rate (step size).  Default is 1.0 for "lbfgs" and 1e-2 for "adam".
+        Learning rate (step size). Must be positive. Default is 1.0; with
+        "adam", a value of exactly 1.0 is replaced by 1e-2.
     loss : {"ncc", "mse"}
-        Similarity metric minimised during optimisation.
+        Similarity metric minimised during optimisation. Default is `"ncc"`.
     pixel_size_angstroms : float or None
-        If provided, ``AlignmentResult.translation_angstroms`` is populated.
+        If provided, `AlignmentResult.translation_angstroms` is populated.
+        Default is None.
     devices : list of str or None
-        List of devices to use for parallel refinement of multiple poses.
+        Devices used by `fit_map_in_map` to refine multiple starting poses in
+        parallel (poses are assigned round-robin). If None (default), the
+        device of the reference map is used. Not used by `gradient_refine`
+        itself, which runs on the device of its inputs.
     """
 
     optimizer: Literal["lbfgs", "adam"] = "lbfgs"
@@ -124,15 +153,17 @@ class GradientRefinementConfig(BaseModelTeamTomo):
 class ProjectionAlignmentConfig(BaseModelTeamTomo):
     """Configuration for the projection-based alignment.
 
-    Parameters
+    Attributes
     ----------
     angular_step_degrees : float
-        Angular sampling step for the mobile orientation search.
+        Angular sampling step in degrees for the mobile orientation search.
+        Must be positive. Default is 15.0.
     fftfreq_max : float or None
         High-frequency cutoff (cycles/pixel) applied to the projections.
-        Passed to ``project_3d_to_2d``.
+        Passed to `project_3d_to_2d`. Default is None.
     pixel_size_angstroms : float or None
-        If provided, ``AlignmentResult.translation_angstroms`` is populated.
+        If provided, `AlignmentResult.translation_angstroms` is populated.
+        Default is None.
     """
 
     angular_step_degrees: float = Field(default=15.0, gt=0.0)

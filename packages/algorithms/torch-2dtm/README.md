@@ -1,10 +1,9 @@
 # torch-2dtm
 
-[![License](https://img.shields.io/pypi/l/torch-2dtm.svg?color=green)](https://github.com/teamtomo/torch-2dtm/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-2dtm.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-2dtm/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-2dtm.svg?color=green)](https://pypi.org/project/torch-2dtm)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-2dtm.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-2dtm/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-2dtm/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-2dtm/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-2dtm)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 ## Overview
 
@@ -22,7 +21,7 @@ This is implemented for cryo-EM applications, see
 - GPU acceleration through PyTorch
 
 Projections are calculated on-the-fly using 
-[*torch-fourier-slice*](https://github.com/teamtomo/torch-fourier-slice).
+[*torch-fourier-slice*](../../primitives/torch-fourier-slice/README.md).
 
 ## Installation
 

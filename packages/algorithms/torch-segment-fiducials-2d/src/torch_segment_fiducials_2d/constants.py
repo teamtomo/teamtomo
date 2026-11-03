@@ -1,3 +1,5 @@
+"""Constants describing the training data of the pretrained model."""
+
 import numpy as np
 
 TRAINING_IMAGE_DIMENSIONS = (512, 512)

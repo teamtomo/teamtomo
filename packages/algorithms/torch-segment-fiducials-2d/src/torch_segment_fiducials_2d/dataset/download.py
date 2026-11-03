@@ -1,3 +1,5 @@
+"""Download of the fiducial segmentation training data."""
+
 import os
 import shutil
 import subprocess

@@ -94,20 +94,20 @@ def apply_astigmatism_to_defocus(
     Parameters
     ----------
     defocus : torch.Tensor
-        Mean defocus in micrometers with shape ``(..., 1, 1)``.
+        Mean defocus in micrometers with shape `(..., 1, 1)`.
     astigmatism : torch.Tensor
-        Astigmatism magnitude in micrometers with shape ``(...)``.
+        Astigmatism magnitude in micrometers with shape `(...)`.
     astigmatism_angle : torch.Tensor
-        Astigmatism angle in degrees with shape ``(...)``.
+        Astigmatism angle in degrees with shape `(...)`.
     fft_freq_grid : torch.Tensor
-        Frequency grid in cycles/Angstrom with shape ``(..., H, W, 2)``.
+        Frequency grid in cycles/Angstrom with shape `(..., H, W, 2)`.
     fft_freq_grid_squared : torch.Tensor
-        Squared norm of frequency grid with shape ``(..., H, W)``.
+        Squared norm of frequency grid with shape `(..., H, W)`.
 
     Returns
     -------
     defocus : torch.Tensor
-        Per-frequency defocus map with shape ``(..., H, W)``.
+        Per-frequency defocus map with shape `(..., H, W)`.
     """
     sin_theta = torch.sin(torch.deg2rad(astigmatism_angle))
     cos_theta = torch.cos(torch.deg2rad(astigmatism_angle))
@@ -234,12 +234,12 @@ def _as_zernike_coeff(
 
     Parameters
     ----------
-    coeff: float | torch.Tensor
+    coeff : float | torch.Tensor
         Zernike coefficient. A scalar applies to every image; a tensor of
         shape (..., 1, 1) gives one coefficient per image in a batch.
-    dtype: torch.dtype
+    dtype : torch.dtype
         Dtype of the coordinate grid the coefficient will be applied to.
-    device: torch.device
+    device : torch.device
         Device of the coordinate grid the coefficient will be applied to.
 
     Returns
@@ -268,19 +268,19 @@ def apply_odd_zernikes(
 
     Parameters
     ----------
-    odd_zernikes: dict | None
+    odd_zernikes : dict | None
         Odd Zernike coefficients. Values can be floats or tensors. A
         coefficient of shape (..., 1, 1) is treated as one value per image
         and broadcasts the returned phase up to (..., h, w).
-    rho: torch.Tensor
+    rho : torch.Tensor
         Radial coordinate.
-    theta: torch.Tensor
+    theta : torch.Tensor
         Angular coordinate.
-    voltage_kv: torch.Tensor
+    voltage_kv : torch.Tensor
         Acceleration voltage in kilovolts (kV).
-    spherical_aberration_mm: torch.Tensor
+    spherical_aberration_mm : torch.Tensor
         Spherical aberration in millimeters (mm).
-    beam_tilt_mrad: torch.Tensor | None
+    beam_tilt_mrad : torch.Tensor | None
         Beam tilt in milliradians.
 
     Returns
@@ -326,18 +326,18 @@ def apply_even_zernikes(
 
     Parameters
     ----------
-    even_zernikes: dict
+    even_zernikes : dict
         Even Zernike coefficients, keyed by name. Supported names are
-        ``Z42c``/``Z42s`` (secondary astigmatism), ``Z44c``/``Z44s``
-        (four-fold astigmatism) and ``Z60`` (sixth-order spherical).
+        `Z42c`/`Z42s` (secondary astigmatism), `Z44c`/`Z44s`
+        (four-fold astigmatism) and `Z60` (sixth-order spherical).
         Values can be floats or tensors. A coefficient of shape
         (..., 1, 1) is treated as one value per image and broadcasts the
         returned phase up to (..., h, w).
-    total_phase_shift: torch.Tensor
+    total_phase_shift : torch.Tensor
         Total phase shift.
-    rho: torch.Tensor
+    rho : torch.Tensor
         Radial coordinate.
-    theta: torch.Tensor
+    theta : torch.Tensor
         Angular coordinate.
 
     Returns

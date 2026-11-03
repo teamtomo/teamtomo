@@ -187,7 +187,7 @@ def estimate_defocus_2d_grid(
     """
     Estimate defocus in 2D using a 3D spline grid over (t, x, y).
 
-    See :func:`estimate_ctf_2d` for parameter descriptions.
+    See `estimate_ctf_2d` for parameter descriptions.
     """
     defocus_bounds_microns = resolve_defocus_bounds(defocus_bounds_microns)
     phase_shift_bounds_degrees = resolve_phase_shift_bounds(phase_shift_bounds_degrees)

@@ -625,8 +625,8 @@ def calc_LPP_ctf_2D(
         Optional 2x2 transformation matrix for anisotropic magnification.
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
-    return_complex_ctf: bool = False,
-        Whether to return the complex CTF e^(-i*chi)
+    return_complex_ctf : bool, optional
+        Whether to return the complex CTF e^(-i*chi). Default False.
 
     Returns
     -------

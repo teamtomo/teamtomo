@@ -1,0 +1,19 @@
+/* Long dotted signatures in the API reference should wrap, not overflow. */
+.doc-signature code {
+  white-space: pre-wrap;
+}
+
+/* pandas DataFrames in rendered notebooks */
+.md-typeset table.dataframe {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+}
+.md-typeset table.dataframe th,
+.md-typeset table.dataframe td {
+  padding: 0.3em 0.8em;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  text-align: right;
+}

@@ -4,7 +4,25 @@ from typing import NamedTuple
 
 
 class SymmetryRanges(NamedTuple):
-    """NamedTuple child class for 'get_symmetry_ranges' return type."""
+    """NamedTuple child class for `get_symmetry_ranges` return type.
+
+    All angles are in degrees.
+
+    Attributes
+    ----------
+    phi_min : float
+        Minimum phi angle.
+    phi_max : float
+        Maximum phi angle.
+    theta_min : float
+        Minimum theta angle.
+    theta_max : float
+        Maximum theta angle.
+    psi_min : float
+        Minimum psi angle.
+    psi_max : float
+        Maximum psi angle.
+    """
 
     phi_min: float
     phi_max: float

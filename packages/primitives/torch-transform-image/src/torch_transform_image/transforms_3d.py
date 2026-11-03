@@ -17,6 +17,38 @@ def affine_transform_image_3d(
     output_shape: Optional[tuple] = None,
     zyx_matrices: bool = False,
 ) -> torch.Tensor:
+    """Resample a 3D image on a grid of voxel coordinates transformed by an affine.
+
+    A grid of output voxel coordinates `[z, y, x]` is built, made homogeneous
+    (`[z, y, x, 1]`), left-multiplied by `matrices`, and the input image is
+    sampled at the resulting positions. The matrices therefore map output voxel
+    coordinates to positions in the input image; use `torch.linalg.inv` on a
+    matrix to transform the image itself by that matrix.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        `(d, h, w)` image or `(c, d, h, w)` multichannel image.
+    matrices : torch.Tensor
+        `(..., 4, 4)` affine matrices acting on homogeneous voxel coordinates.
+        Batch dimensions must broadcast against the `(d, h, w)` output grid,
+        e.g. a single `(4, 4)` matrix or a `(b, 1, 1, 1, 4, 4)` batch.
+    interpolation : Literal["nearest", "trilinear"]
+        Interpolation mode used to sample `image`.
+    output_shape : tuple | None, optional
+        `(d, h, w)` shape of the output grid. Defaults to the shape of `image`.
+    zyx_matrices : bool, optional
+        If `True`, `matrices` act on `[z, y, x, 1]` coordinates (array dimension
+        order). If `False` (the default), they act on `[x, y, z, 1]`
+        coordinates and are reordered to `zyx` internally; the input tensor is
+        not modified.
+
+    Returns
+    -------
+    torch.Tensor
+        `(..., d, h, w)` transformed image, or `(..., d, h, w, c)` for a
+        multichannel input, where `...` are the batch dimensions of `matrices`.
+    """
     # grab image dimensions
     if output_shape:
         d, h, w = output_shape
@@ -50,8 +82,7 @@ def rotate_then_shift_image_3d(
     shift_zyx: list[float | int] | tuple[float | int, ...] = (0, 0, 0),
     interpolation: Literal["trilinear", "nearest"] = "trilinear",
 ) -> torch.Tensor:
-    """
-    This is a wrapper function to easily rotate and shift a 3D image.
+    """Wrapper function to easily rotate and shift a 3D image.
 
     Image is first rotated by the specified number of degrees, according
     to the right hand rule, around the center of the image. Then, image
@@ -118,8 +149,7 @@ def shift_then_rotate_image_3d(
     shift_zyx: list[float | int] | tuple[float | int, ...] = (0, 0, 0),
     interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> torch.Tensor:
-    """
-    This is a wrapper function to easily shift and rotate a 3D image.
+    """Wrapper function to easily shift and rotate a 3D image.
 
     Image is first shifted by the specified number of pixels (see note
     about shift conventions below). Then, image is rotated by the specified

@@ -95,7 +95,7 @@ def _sinc_sin_over_x(x: torch.Tensor) -> torch.Tensor:
     Returns
     -------
     torch.Tensor
-        Same shape as ``x``.
+        Same shape as `x`.
     """
     return torch.sinc(x / torch.pi)
 
@@ -116,7 +116,7 @@ def _ctf_from_thickness(
         sin(pi*lambda*|g|^2*t/2)/(...)*sin(chi). If True, expected power-spectrum
         form 0.5*(1 - sin(pi*lambda*|g|^2*t)/(...)*cos(2*chi)).
     lambda_angstrom : torch.Tensor
-        Electron wavelength in Angstroms; broadcastable to ``g_squared_angstrom_inv2``.
+        Electron wavelength in Angstroms; broadcastable to `g_squared_angstrom_inv2`.
     g_squared_angstrom_inv2 : torch.Tensor
         Squared spatial frequency |g|^2 in Angstroms^-2.
     chi_radians : torch.Tensor
@@ -181,7 +181,7 @@ def calculate_ctf_thickness_1d(
     n_samples : int
         Number of samples along the 1D frequency axis.
     oversampling_factor : int
-        Factor by which to oversample before averaging back to ``n_samples``.
+        Factor by which to oversample before averaging back to `n_samples`.
 
     Returns
     -------
@@ -333,9 +333,9 @@ def calculate_ctf_thickness_2d(
 ) -> torch.Tensor:
     """2D CTF including sample thickness (amplitude or Thon-ring power spectrum).
 
-    NOTE: The device of the input tensors is inferred from the ``defocus`` tensor.
+    NOTE: The device of the input tensors is inferred from the `defocus` tensor.
 
-    Odd Zernikes and beam tilt are applied only when ``return_power_spectrum`` is
+    Odd Zernikes and beam tilt are applied only when `return_power_spectrum` is
     False; they are ignored for the power-spectrum form.
 
     Parameters
@@ -347,12 +347,12 @@ def calculate_ctf_thickness_2d(
         Sample thickness in Angstroms.
     defocus : float | torch.Tensor
         Defocus in micrometers, positive is underfocused.
-        ``(defocus_u + defocus_v) / 2``
+        `(defocus_u + defocus_v) / 2`
     astigmatism : float | torch.Tensor
         Amount of astigmatism in micrometers.
-        ``(defocus_u - defocus_v) / 2``
+        `(defocus_u - defocus_v) / 2`
     astigmatism_angle : float | torch.Tensor
-        Angle of astigmatism in degrees. 0 places ``defocus_u`` along the y-axis.
+        Angle of astigmatism in degrees. 0 places `defocus_u` along the y-axis.
     voltage : float | torch.Tensor
         Acceleration voltage in kilovolts (kV).
     spherical_aberration : float | torch.Tensor
@@ -364,28 +364,28 @@ def calculate_ctf_thickness_2d(
     pixel_size : float | torch.Tensor
         Pixel size in Angstroms per pixel (Angstrom px^-1).
     image_shape : tuple[int, int]
-        Shape ``(H, W)`` of 2D images onto which the CTF is applied.
+        Shape `(H, W)` of 2D images onto which the CTF is applied.
     rfft : bool
-        If True, CTF matches the non-redundant half-grid of an ``rfft``.
+        If True, CTF matches the non-redundant half-grid of an `rfft`.
     fftshift : bool
         Whether frequency grids use fftshift layout.
     beam_tilt_mrad : torch.Tensor | None
-        Beam tilt in milliradians ``[bx, by]``. Only used if
-        ``return_power_spectrum`` is False.
+        Beam tilt in milliradians `[bx, by]`. Only used if
+        `return_power_spectrum` is False.
     even_zernike_coeffs : dict | None
         Even Zernike coefficients.
-        Example: ``{"Z44c": 0.1, "Z44s": 0.2, "Z60": 0.3}``
+        Example: `{"Z44c": 0.1, "Z44s": 0.2, "Z60": 0.3}`
     odd_zernike_coeffs : dict | None
-        Odd Zernike coefficients. Only used if ``return_power_spectrum`` is False.
-        Example: ``{"Z31c": 0.1, "Z31s": 0.2, "Z33c": 0.3, "Z33s": 0.4}``
+        Odd Zernike coefficients. Only used if `return_power_spectrum` is False.
+        Example: `{"Z31c": 0.1, "Z31s": 0.2, "Z33c": 0.3, "Z33s": 0.4}`
     transform_matrix : torch.Tensor | None
-        Optional 2x2 real-space transformation matrix ``A``; frequency grid uses
-        ``(A^-1)^T``.
+        Optional 2x2 real-space transformation matrix `A`; frequency grid uses
+        `(A^-1)^T`.
 
     Returns
     -------
     ctf : torch.Tensor
-        Thickness-modulated 2D CTF. Real if ``return_power_spectrum`` or no odd
+        Thickness-modulated 2D CTF. Real if `return_power_spectrum` or no odd
         aberrations; otherwise complex.
 
     """
@@ -444,10 +444,10 @@ def calculate_ctf_thickness_lpp(
 ) -> torch.Tensor:
     """Laser phase plate (LPP) 2D CTF with sample thickness.
 
-    Same geometry and laser arguments as :func:`calc_LPP_ctf_2D`, plus thickness.
-    NOTE: The device of the input tensors is inferred from the ``defocus`` tensor.
+    Same geometry and laser arguments as `calc_LPP_ctf_2D`, plus thickness.
+    NOTE: The device of the input tensors is inferred from the `defocus` tensor.
 
-    Odd Zernikes and beam tilt apply only when ``return_power_spectrum`` is False.
+    Odd Zernikes and beam tilt apply only when `return_power_spectrum` is False.
 
     Parameters
     ----------
@@ -458,9 +458,9 @@ def calculate_ctf_thickness_lpp(
         Sample thickness in Angstroms.
     defocus : float | torch.Tensor
         Defocus in micrometers, positive is underfocused.
-        ``(defocus_u + defocus_v) / 2``
+        `(defocus_u + defocus_v) / 2`
     astigmatism : float | torch.Tensor
-        Astigmatism in micrometers. ``(defocus_u - defocus_v) / 2``
+        Astigmatism in micrometers. `(defocus_u - defocus_v) / 2`
     astigmatism_angle : float | torch.Tensor
         Astigmatism angle in degrees.
     voltage : float | torch.Tensor
@@ -472,9 +472,9 @@ def calculate_ctf_thickness_lpp(
     pixel_size : float | torch.Tensor
         Pixel size in Angstroms per pixel (Angstrom px^-1).
     image_shape : tuple[int, int]
-        Shape ``(H, W)`` of 2D images.
+        Shape `(H, W)` of 2D images.
     rfft : bool
-        If True, CTF for ``rfft`` half-grid.
+        If True, CTF for `rfft` half-grid.
     fftshift : bool
         fftshift layout for frequency grids.
     NA : float
@@ -498,13 +498,13 @@ def calculate_ctf_thickness_lpp(
     dual_laser : bool, optional
         If True, add a second perpendicular laser in xy. Default False.
     beam_tilt_mrad : torch.Tensor | None
-        Beam tilt ``[bx, by]`` in mrad. Only if ``return_power_spectrum`` is False.
+        Beam tilt `[bx, by]` in mrad. Only if `return_power_spectrum` is False.
     even_zernike_coeffs : dict | None
         Even Zernike coefficients.
     odd_zernike_coeffs : dict | None
-        Odd Zernike coefficients. Only if ``return_power_spectrum`` is False.
+        Odd Zernike coefficients. Only if `return_power_spectrum` is False.
     transform_matrix : torch.Tensor | None
-        Optional 2x2 real-space matrix ``A`` for anisotropic magnification.
+        Optional 2x2 real-space matrix `A` for anisotropic magnification.
 
     Returns
     -------
@@ -557,7 +557,7 @@ def calculate_ctf_with_thickness(
     sample_thickness_angstrom: float | torch.Tensor,
     **kwargs: Any,
 ) -> torch.Tensor:
-    """Dispatch to :func:`calculate_ctf_thickness_1d`, ``_2d``, or ``_lpp``.
+    """Dispatch to `calculate_ctf_thickness_1d`, `_2d`, or `_lpp`.
 
     Parameters
     ----------
@@ -569,8 +569,8 @@ def calculate_ctf_with_thickness(
     sample_thickness_angstrom : float | torch.Tensor
         Sample thickness in Angstroms.
     **kwargs
-        Arguments for the selected function (same as ``calculate_ctf_1d`` /
-        ``calculate_ctf_2d`` / ``calc_LPP_ctf_2D`` for the corresponding geometry,
+        Arguments for the selected function (same as `calculate_ctf_1d` /
+        `calculate_ctf_2d` / `calc_LPP_ctf_2D` for the corresponding geometry,
         excluding the thickness-specific leading parameters).
 
     Returns
@@ -581,7 +581,7 @@ def calculate_ctf_with_thickness(
     Raises
     ------
     ValueError
-        If ``geometry`` is not ``"1d"``, ``"2d"``, or ``"lpp"``.
+        If `geometry` is not `"1d"`, `"2d"`, or `"lpp"`.
 
     """
     if geometry not in ("1d", "2d", "lpp"):

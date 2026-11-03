@@ -83,6 +83,7 @@ line-length = 88
 target-version = "py38"
 
 [tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
 extend-select = [
     "E",    # style errors
     "F",    # flakes
@@ -104,6 +105,7 @@ extend-ignore = [
     "D213", # Multi-line docstring summary should start at the second line
     "D413", # Missing blank line after last section
     "D416", # Section name should end with a colon
+    "D401", # First line should be in imperative mood
 ]
 
 [tool.ruff.lint.per-file-ignores]

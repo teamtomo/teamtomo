@@ -125,6 +125,12 @@ examples = [
     "ipykernel",
     "matplotlib",
 ]
+docs = [
+    "zensical==0.0.74",
+    "mkdocstrings>=1.0.8",
+    "mkdocstrings-python>=2.0.10",
+    "nbconvert>=7.16",
+]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not slow'"

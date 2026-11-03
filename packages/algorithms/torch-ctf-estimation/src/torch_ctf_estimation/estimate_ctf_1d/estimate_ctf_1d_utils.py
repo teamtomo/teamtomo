@@ -517,7 +517,7 @@ def grid_search_defocus_and_envelope_1d(
     defocus_step : float
         Defocus grid step in microns.
     optimize_phase_shift : bool
-        If True, also grid over phase shift within ``phase_shift_range`` (or a
+        If True, also grid over phase shift within `phase_shift_range` (or a
         wide internal range when bounds are None).
     phase_shift_step : float
         Phase shift grid step in degrees when optimize_phase_shift is True. Default 5.0.
@@ -750,8 +750,8 @@ def refine_defocus_and_b_factor_1d(
     phase_shift_range : tuple[float, float] or None
         (low, high) phase shift bounds in degrees. If None, phase is unbounded.
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback. Default None (run all
-        ``n_iterations``).
+        Stateful `(loss) -> should_stop` callback. Default None (run all
+        `n_iterations`).
 
     Returns
     -------

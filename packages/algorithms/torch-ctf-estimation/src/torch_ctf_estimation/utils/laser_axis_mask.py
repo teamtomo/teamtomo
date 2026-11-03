@@ -16,20 +16,20 @@ def build_laser_axis_mask(
 ) -> torch.Tensor:
     """Build a 2D rFFT-layout mask that zeros strips along the laser axis.
 
-    A strip through the FFT origin at ``laser_xy_angle_deg`` is zeroed out.
-    When ``dual_laser`` is True a second orthogonal strip at
-    ``laser_xy_angle_deg + 90°`` is also zeroed.
+    A strip through the FFT origin at `laser_xy_angle_deg` is zeroed out.
+    When `dual_laser` is True a second orthogonal strip at
+    `laser_xy_angle_deg + 90°` is also zeroed.
 
     Parameters
     ----------
     image_shape : tuple[int, int]
-        Real-space patch shape ``(H, W)``. The mask will have shape
-        ``(H, W // 2 + 1)`` matching the rFFT output.
+        Real-space patch shape `(H, W)`. The mask will have shape
+        `(H, W // 2 + 1)` matching the rFFT output.
     laser_xy_angle_deg : float
         Angle of the first laser axis in degrees, measured from the x-axis
         (column direction) in the image plane.
     dual_laser : bool
-        If True, also mask the orthogonal axis at ``laser_xy_angle_deg + 90°``.
+        If True, also mask the orthogonal axis at `laser_xy_angle_deg + 90°`.
     mask_width : float
         Width of each strip in fftfreq units (range [0, 0.5]).  A value of 0.1
         masks ±0.05 around the axis, corresponding to 10 % of the image
@@ -40,7 +40,7 @@ def build_laser_axis_mask(
     Returns
     -------
     torch.Tensor
-        Float mask of shape ``(H, W // 2 + 1)``.  Pixels inside a masked strip
+        Float mask of shape `(H, W // 2 + 1)`.  Pixels inside a masked strip
         are 0.0; all others are 1.0.
     """
     h, w = image_shape
@@ -81,9 +81,9 @@ def apply_laser_axis_mask(
     Parameters
     ----------
     patch_ps : torch.Tensor
-        Patch power spectra, last two dims are rFFT ``(ph, pw_rfft)``.
+        Patch power spectra, last two dims are rFFT `(ph, pw_rfft)`.
     mean_ps : torch.Tensor
-        Mean power spectrum, shape ``(ph, pw_rfft)``.
+        Mean power spectrum, shape `(ph, pw_rfft)`.
     laser_xy_angle_deg : float
         Laser axis angle in degrees.
     dual_laser : bool
@@ -98,7 +98,7 @@ def apply_laser_axis_mask(
     mean_ps : torch.Tensor
         Masked mean power spectrum.
     axis_mask : torch.Tensor
-        The applied mask, shape ``(ph, pw_rfft)``.
+        The applied mask, shape `(ph, pw_rfft)`.
     """
     axis_mask = build_laser_axis_mask(
         image_shape=(patch_ps.shape[-2], (patch_ps.shape[-1] - 1) * 2),

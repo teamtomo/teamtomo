@@ -1,22 +1,66 @@
 """Pydantic input models for local resolution estimation.
 
-:class:`ComputeResolutionInput` is built by ``estimate_local_resolution`` and
+`ComputeResolutionInput` is built by `estimate_local_resolution` and
 validated here so invalid configs fail before GPU or FFT work.
 """
 
 from __future__ import annotations
 
+from typing import Self
+
 import torch  # runtime: arbitrary_types_allowed + Tensor fields
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
-from typing_extensions import Self
 
 
 class ComputeResolutionInput(BaseModel):
-    """Validated bundle passed to ``compute_resolution``.
+    """Validated bundle passed to `compute_resolution`.
 
-    Field constraints enforce positive physical parameters; ``model_validator``
-    ties ``windows_radii`` to ``resolutions``, checks ``(B,Z,Y,X)`` tensors, and
-    validates ``gpu_id`` against CUDA when set.
+    Field constraints enforce positive physical parameters; `model_validator`
+    ties `windows_radii` to `resolutions`, checks `(B,Z,Y,X)` tensors, and
+    validates `gpu_id` against CUDA when set.
+
+    Attributes
+    ----------
+    apix : float
+        Voxel size in Å per pixel. Must be > 0.
+    windows_radii : list[float]
+        Local window radii in voxels, one per resolution shell. Must be
+        non-empty, positive and the same length as `resolutions`.
+    resolutions : list[float]
+        Target resolutions in Å, one per entry of `windows_radii`. Must be
+        positive.
+    batch_half_map1 : torch.Tensor
+        First half-maps, shape `(B, Z, Y, X)` with `B >= 1`. Use `Z = 1` for 2D.
+    batch_half_map2 : torch.Tensor
+        Second half-maps, same shape as `batch_half_map1`.
+    step_size : int
+        Stride in voxels between correlation samples on the output grid.
+        Must be >= 1. Default 3.
+    gpu_id : int or None
+        CUDA device index, or None to run on CPU. Must be a valid device index
+        when set. Default None.
+    n_random_maps : int
+        Number of surrogate (permuted) maps used to build the null distribution.
+        0 means estimate the number from `reference_dist_size`, the largest
+        window radius and the map size (`compute_resolution` writes the
+        estimate back to this field). Default 0.
+    reference_dist_size : int
+        Target number of random window samples in the null distribution.
+        Must be >= 1. Default 10000.
+    do_phase_permutation : bool
+        If True, build surrogates by permuting the Fourier phases of half-map 2;
+        if False, shuffle its voxels in real space. Default True.
+    batch_size : int
+        Number of grid positions processed together in the local correlation
+        scan (memory vs throughput). Must be >= 1. Default 4096.
+    shell_size : float
+        Bandpass shell half-width as a fraction of Nyquist: each shell spans
+        `1 / resolution ± 0.5 * shell_size / apix` in 1/Å. Must be > 0.
+        Default 0.05.
+    falloff : float
+        Falloff of the hyperbolic-tangent bandpass filter
+        (`torch_fourier_filter.bandpass.bandpass_filter_hyptan`). Must be > 0.
+        Default 1.5.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -98,7 +142,7 @@ class ComputeResolutionInput(BaseModel):
 
     @computed_field
     def device(self) -> torch.device:
-        """``cpu`` if ``gpu_id`` is ``None``, else ``cuda:{gpu_id}``."""
+        """`cpu` if `gpu_id` is `None`, else `cuda:{gpu_id}`."""
         if self.gpu_id is None:
             return torch.device("cpu")
         return torch.device(f"cuda:{self.gpu_id}")

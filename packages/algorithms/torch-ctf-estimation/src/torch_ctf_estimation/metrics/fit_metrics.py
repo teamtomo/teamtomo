@@ -44,7 +44,7 @@ def pearson_r_flat(
     """
     Pearson correlation coefficient r between two flattened tensors of equal length.
 
-    Uses ``torch.corrcoef`` on stacked [y, m]. Returns NaN if undefined
+    Uses `torch.corrcoef` on stacked [y, m]. Returns NaN if undefined
     (e.g. zero variance).
     """
     y_flat = y_flat.reshape(-1).float()

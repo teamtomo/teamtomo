@@ -1,6 +1,8 @@
+"""Fiducial probability and mask prediction with the pretrained model."""
+
 import warnings
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import einops
 import torch
@@ -17,20 +19,29 @@ def predict_fiducial_mask(
     pixel_spacing: float,
     probability_threshold: float,
     model_checkpoint_file: Optional[Path] = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     """Predict fiducial masks for a batch of arbitrarily sized images.
+
+    Runs `predict_fiducial_probabilities` and thresholds the result; no
+    connected-component size filtering is applied.
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(..., h, w)` array containing image dataset.
-    pixel_spacing: float
+    pixel_spacing : float
         Isotropic pixel spacing in Angstroms per pixel.
+    probability_threshold : float
+        Pixels with a fiducial probability strictly greater than this value
+        are included in the mask.
+    model_checkpoint_file : Optional[Path]
+        Model checkpoint file to load. If None, the pretrained checkpoint is
+        fetched from the local cache or downloaded from Zenodo.
 
     Returns
     -------
-    mask: torch.Tensor
-        `(..., h, w)` masks of each detected fiducial.
+    mask : torch.Tensor
+        `(..., h, w)` boolean mask, True for pixels belonging to a fiducial.
     """
     # grab original image dimensions
     h, w = image.shape[-2:]
@@ -57,18 +68,24 @@ def predict_fiducial_probabilities(
 ) -> torch.Tensor:
     """Predict fiducial probabilities for a set of images.
 
+    Each image is Fourier-rescaled to the model's training pixel spacing
+    (8 Å/px), segmented by tiled inference (Lightning `Trainer` with
+    `accelerator="auto"`, so a GPU is used if available), then rescaled back
+    to `(h, w)` with bicubic interpolation and clamped to `[0, 1]`.
+
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(..., h, w)` array containing image(s).
-    pixel_spacing: float
+    pixel_spacing : float
         Isotropic pixel spacing in Angstroms per pixel.
-    model_checkpoint_file: Optional[Path]
-        Model checkpoint file to load.
+    model_checkpoint_file : Optional[Path]
+        Model checkpoint file to load. If None, the pretrained checkpoint is
+        fetched from the local cache or downloaded from Zenodo.
 
     Returns
     -------
-    probabilities: torch.Tensor
+    probabilities : torch.Tensor
         `(..., h, w)` array containing the probability of each pixel belonging
         to a fiducial.
     """
@@ -107,6 +124,7 @@ def _predict_fiducial_probabilities_single_image(
     pixel_spacing: float,
     model: ResidualUNet18,
 ) -> torch.Tensor:
+    """Predict fiducial probabilities for one `(h, w)` image."""
     # grab original image dims
     h, w = image.shape[-2:]
 

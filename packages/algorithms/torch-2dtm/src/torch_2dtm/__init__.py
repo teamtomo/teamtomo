@@ -1,4 +1,4 @@
-"""2D template matching in pytorch"""
+"""2D template matching in pytorch."""
 
 __version__ = "0.1.0"
 __author__ = "Josh Dickerson"

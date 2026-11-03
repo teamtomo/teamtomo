@@ -1,3 +1,5 @@
+"""Image rescaling, normalisation and mask post-processing helpers."""
+
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -21,14 +23,16 @@ def rescale_2d_bicubic(
     Parameters
     ----------
     image: torch.Tensor
-        `(b, c, h, w)` array of image(s).
+        `(b, c, h, w)` or `(h, w)` array of image(s).
     factor: float
-        factor by which to rescale image(s).
+        factor by which to rescale image(s). Takes precedence over `size`.
+    size: tuple[int, int]
+        `(h, w)` output size.
 
     Returns
     -------
     rescaled_image: torch.Tensor
-        `(b, c, h, w)` array of rescaled image(s).
+        `(b, c, h, w)` or `(h, w)` array of rescaled image(s).
     """
     # handle simple 2d image input
     image_had_ndim_2 = False
@@ -61,7 +65,9 @@ def rescale_2d_nearest(
     image: torch.Tensor
         `(b, c, h, w)` array of image(s).
     factor: float
-        factor by which to rescale image(s).
+        factor by which to rescale image(s). Takes precedence over `size`.
+    size: tuple[int, int]
+        `(h, w)` output size.
 
     Returns
     -------
@@ -95,6 +101,7 @@ def central_crop_2d(image: torch.Tensor, percentage: float = 25) -> torch.Tensor
         `(b, h, w)` or `(h, w)` array of 2D images.
     percentage: float
         percentage of image height and width for cropped region.
+
     Returns
     -------
     cropped_image: torch.Tensor
@@ -118,6 +125,7 @@ def estimate_background_std(image: torch.Tensor, mask: torch.Tensor):
         will be estimated.
     mask: torch.Tensor of 0 or 1
         Binary mask separating foreground and background.
+
     Returns
     -------
     standard_deviation: float
@@ -129,6 +137,7 @@ def estimate_background_std(image: torch.Tensor, mask: torch.Tensor):
 
 
 def get_pixel_spacing_from_header(image: Path) -> float:
+    """Read the x voxel size, in Angstroms, from an MRC file header."""
     with mrcfile.open(image, header_only=True, permissive=True) as mrc:
         return float(mrc.voxel_size.x)
 
@@ -145,7 +154,10 @@ def pixel_count_map_2d(mask: torch.Tensor):
 
     Returns
     -------
-
+    pixel_count_map : torch.Tensor
+        `(h, w)` array where each pixel holds the size, in pixels, of the
+        connected component it belongs to (background pixels hold the size
+        of the background).
     """
     labels, n = ndi.label(mask.cpu().numpy())
     labels = torch.tensor(labels, dtype=torch.long)

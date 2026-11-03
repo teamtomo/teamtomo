@@ -1,10 +1,9 @@
 # torch-so3
 
-[![License](https://img.shields.io/pypi/l/torch-so3.svg?color=green)](https://github.com/teamtomo/torch-so3/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-so3.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-so3/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-so3.svg?color=green)](https://pypi.org/project/torch-so3)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-so3.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-so3/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-so3/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-so3/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-so3)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 Generate uniform sets of proper Euler angles (ZYZ format) over the SO(3) group using PyTorch.
 Note that Euler angles are returned in the order of $(\phi, \theta, \psi)$.
@@ -20,22 +19,15 @@ Install via pip
 pip install torch-so3
 ```
 
-Install via source by first cloning the repository then running.
-```zsh
-git clone https://github.com/teamtomo/torch-so3.git
-cd torch-so3
-pip install -e .
-```
-And for development and testing use
-```zsh
-pip install -e ".[dev,test]"
+To install from source, clone the [TeamTomo monorepo](https://github.com/teamtomo/teamtomo), where this package is developed:
+
+```bash
+git clone https://github.com/teamtomo/teamtomo.git
+cd teamtomo
+uv sync --all-packages
 ```
 
-For those contributing make sure to run tests before, and to adhere to the pre-commit hooks.
-```zsh
-python -m pytest
-pre-commit run
-```
+See the [contributing guide](../../../CONTRIBUTING.md) for the development setup.
 
 ## Usage
 

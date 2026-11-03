@@ -43,15 +43,18 @@ def match_template_dft_2d(
         `(b, 3, 3)` batched rotation matrices to rotate slices sampled from the
         template fourier transform.
     filters : torch.Tensor
-        `(..., h, w // 2 + 1)` filters applied to FFT slices which are fftshifted
-        results of a rfft.
+        `(..., h, w // 2 + 1)` filters (e.g. a CTF per defocus value)
+        multiplied with each Fourier slice. The slices are in standard,
+        non-fftshifted rfft layout (DC at index `[0, 0]`) at this point, so
+        the filters must be too. Leading dimensions broadcast against the
+        orientation batch.
 
     Returns
     -------
     torch.Tensor
-        Cross-correlation of the image with the template volume for each
-        orientation and defocus value. Will have shape
-        (orientations, defocus_batch, H, W).
+        `(..., b, h_im, w_im)` cross-correlation of the image with the
+        template projection for each filter (leading dimensions of `filters`,
+        e.g. defocus values) and orientation `b`.
     """
     # Grab relevant dimensions
     _, h, w = template_dft.shape

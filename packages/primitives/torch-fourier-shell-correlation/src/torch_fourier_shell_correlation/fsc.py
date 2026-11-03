@@ -19,14 +19,30 @@ def fourier_ring_correlation(
 
     Supports both square and rectangular images using weighted interpolation.
 
-    Args:
-        a: Input tensor of shape (..., h, w)
-        b: Input tensor of shape (..., h, w)
-        fft_mask: Optional mask for fft, shape should match fft output
+    Parameters
+    ----------
+    a : torch.Tensor
+        `(..., h, w)` real-space image(s).
+    b : torch.Tensor
+        `(..., h, w)` real-space image(s). Batch dimensions must broadcast with
+        those of `a`.
+    fft_mask : torch.Tensor | None, optional
+        Boolean mask selecting which Fourier components contribute, with the same
+        shape as the (non-fftshifted) rfft of the spatial dimensions,
+        `(h, w // 2 + 1)`. If `None` (default), all components are used.
 
     Returns
     -------
-        Correlation values of shape (broadcast(...), min(h, w) // 2 + 1)
+    torch.Tensor
+        `(..., min(h, w) // 2 + 1)` array of correlation values for rings at
+        frequencies `torch.fft.rfftfreq(min(h, w))` (cycles per pixel). The
+        first (DC) value is always 1.
+
+    Raises
+    ------
+    ValueError
+        If the inputs have fewer than 2 dimensions, their last 2 dimensions
+        differ, or `fft_mask` has the wrong shape.
     """
     # Input validation
     if a.ndim < 2:
@@ -59,14 +75,30 @@ def fourier_shell_correlation(
 
     Supports both cubic and rectangular volumes using weighted interpolation.
 
-    Args:
-        a: Input tensor of shape (..., d, h, w)
-        b: Input tensor of shape (..., d, h, w)
-        fft_mask: Optional mask for fft, shape should match fft output
+    Parameters
+    ----------
+    a : torch.Tensor
+        `(..., d, h, w)` real-space volume(s).
+    b : torch.Tensor
+        `(..., d, h, w)` real-space volume(s). Batch dimensions must broadcast
+        with those of `a`.
+    fft_mask : torch.Tensor | None, optional
+        Boolean mask selecting which Fourier components contribute, with the same
+        shape as the (non-fftshifted) rfft of the spatial dimensions,
+        `(d, h, w // 2 + 1)`. If `None` (default), all components are used.
 
     Returns
     -------
-        Correlation values of shape (broadcast(...), min(d, h, w) // 2 + 1)
+    torch.Tensor
+        `(..., min(d, h, w) // 2 + 1)` array of correlation values for shells
+        at frequencies `torch.fft.rfftfreq(min(d, h, w))` (cycles per pixel).
+        The first (DC) value is always 1.
+
+    Raises
+    ------
+    ValueError
+        If the inputs have fewer than 3 dimensions, their last 3 dimensions
+        differ, or `fft_mask` has the wrong shape.
     """
     # Input validation
     if a.ndim < 3:
@@ -101,17 +133,39 @@ def fourier_correlation(
 ) -> torch.Tensor:
     """Compute fourier correlation from FFT data supporting rectangular shapes.
 
-    Args:
-        a_fft: (..., *fft_shape) tensor containing FFT of a (..., *image_shape) tensor
-        b_fft: (..., *fft_shape) tensor containing FFT of a (..., *image_shape) tensor
-        image_shape: Size of spatial dimensions before FFT (e.g. (h, w) or (d, h, w))
-            Note: For real FFTs, fft_shape = (*image_shape[:-1], image_shape[-1]//2 + 1)
-        fft_mask: Optional mask for fft indices
-        rfft: Whether the FFT data is from rfft (True) or fft (False)
+    Components contribute to the two nearest shells with linear interpolation
+    weights based on their frequency magnitude.
+
+    Parameters
+    ----------
+    a_fft : torch.Tensor
+        `(..., *fft_shape)` (non-fftshifted) DFT of a `(..., *image_shape)`
+        tensor. For an rfft, `fft_shape` is
+        `(*image_shape[:-1], image_shape[-1] // 2 + 1)`.
+    b_fft : torch.Tensor
+        `(..., *fft_shape)` (non-fftshifted) DFT of a `(..., *image_shape)`
+        tensor. Must be broadcastable with `a_fft`.
+    image_shape : Sequence[int]
+        Shape of the spatial dimensions before the FFT, `(h, w)` or `(d, h, w)`.
+    fft_mask : torch.Tensor | None, optional
+        Boolean mask with shape `fft_shape` selecting which Fourier components
+        contribute. If `None` (default), all components are used.
+    rfft : bool, optional
+        Whether the DFTs are the output of an `rfft` (`True`, default) or a full
+        `fft` (`False`).
 
     Returns
     -------
-        Fourier correlation values with shape (..., n_shells)
+    torch.Tensor
+        `(..., min(image_shape) // 2 + 1)` array of real-valued correlation
+        values for shells at frequencies `torch.fft.rfftfreq(min(image_shape))`
+        (cycles per pixel). The first (DC) value is always 1.
+
+    Raises
+    ------
+    ValueError
+        If `a_fft` and `b_fft` do not broadcast, `fft_mask` has the wrong shape,
+        or `image_shape` is not 2D or 3D.
     """
     # Input validation - check that FFT tensors can be broadcast together
     try:
@@ -177,14 +231,27 @@ def fsc(
     .. deprecated::
         Use `fourier_ring_correlation` for 2D or `fourier_shell_correlation` for 3D.
 
-    Args:
-        a: Input tensor (2D or 3D)
-        b: Input tensor (2D or 3D), same shape as a
-        fft_mask: Optional mask for fft indices
+    Parameters
+    ----------
+    a : torch.Tensor
+        `(h, w)` image or `(d, h, w)` volume.
+    b : torch.Tensor
+        Image or volume with the same shape as `a`.
+    fft_mask : torch.Tensor | None, optional
+        Boolean mask with the shape of the (non-fftshifted) rfft of `a`
+        selecting which Fourier components contribute. If `None` (default), all
+        components are used.
 
     Returns
     -------
-        Correlation values of shape (n_shells,)
+    torch.Tensor
+        `(min(a.shape) // 2 + 1, )` array of correlation values, one per
+        ring/shell.
+
+    Raises
+    ------
+    ValueError
+        If `a` is not 2D or 3D.
     """
     if a.ndim == 2:
         return fourier_ring_correlation(a, b, fft_mask)

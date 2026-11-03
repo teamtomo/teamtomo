@@ -1,3 +1,5 @@
+"""Erase masked image regions by inpainting with matched gaussian noise."""
+
 from typing import Tuple
 
 import numpy as np
@@ -18,23 +20,23 @@ def erase_region_2d(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(..., h, w)` or `(h, w)` array containing image data for erase.
-    mask: torch.Tensor
+    mask : torch.Tensor
         `(..., h, w)` or `(h, w)` binary mask.
         Foreground pixels (1) will be erased.
-    background_intensity_model_resolution: Tuple[int, int]
-        Number of points in each image dimension for the background mean model.
-        Minimum of two points in each dimension.
-    background_intensity_model_samples: int
-        Number of sample points used to determine the model of the background mean.
+    background_intensity_model_resolution : Tuple[int, int]
+        Number of spline knots in each image dimension for the
+        background mean model. Minimum of two points in each dimension.
+    background_intensity_model_samples : int
+        Number of background pixels sampled to fit the background mean model.
 
     Returns
     -------
-    erased_image: torch.Tensor
+    erased_image : torch.Tensor
         `(..., h, w)` or `(h, w)` array containing image data inpainted in the
         foreground pixels of the mask with gaussian noise matching the local mean
-        and global standard deviation of the image for background pixels.
+        and standard deviation of the background pixels.
     """
     # coerce to tensor
     image = torch.as_tensor(image)
@@ -76,20 +78,20 @@ def _erase_single_image(
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(h, w)` array containing image data for erase.
-    mask: torch.Tensor
+    mask : torch.Tensor
         `(h, w)` binary mask separating foreground from background pixels.
         Foreground pixels (value == 1) will be erased.
-    background_model_resolution: Tuple[int, int]
+    background_model_resolution : Tuple[int, int]
         Number of points in each image dimension for the background mean model.
         Minimum of two points in each dimension.
-    n_background_samples: int
+    n_background_samples : int
         Number of sampling points for background mean estimation.
 
     Returns
     -------
-    inpainted_image: torch.Tensor
+    inpainted_image : torch.Tensor
         `(h, w)` array containing image data inpainted in the foreground pixels of
         the mask with gaussian noise matching the local mean and global standard
         deviation of the image for background pixels.
