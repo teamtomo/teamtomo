@@ -204,6 +204,19 @@ class TestEstimateMotionCrossCorrelationPatches:
         assert result.shape[0] == 2
         assert patch_positions is not None
 
+    def test_integer_peaks_with_outlier_rejection(self, sample_image, pixel_spacing):
+        """Integer peaks (no sub-pixel refinement) go through outlier rejection."""
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            refinement=XCRefinementConfig(
+                sub_pixel_refinement=False, outlier_rejection=True
+            ),
+            device=torch.device("cpu"),
+        )
+        assert torch.isfinite(result.data).all()
+
     def test_with_initial_deformation_field(self, sample_image, pixel_spacing):
         """Test with initial deformation field."""
         t = sample_image.shape[0]

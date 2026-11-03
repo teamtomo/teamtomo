@@ -365,9 +365,9 @@ def estimate_motion_cross_correlation_patches(
                 cross_corr_flat, peak_indices, ph, pw
             )
         else:
-            # Use integer peak finding
-            peak_y = peak_indices // pw
-            peak_x = peak_indices % pw
+            # Use integer peak finding (as floats, like the sub-pixel peaks)
+            peak_y = (peak_indices // pw).to(cross_corr.dtype)
+            peak_x = (peak_indices % pw).to(cross_corr.dtype)
 
         # Convert to shifts (handle wraparound)
         shift_y = torch.where(peak_y <= ph // 2, peak_y, peak_y - ph)
