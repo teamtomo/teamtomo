@@ -89,6 +89,7 @@ nav = [
     { "torch-so3" = [
       { "Overview" = "primitives/torch-so3/index.md" },
       { "API reference" = "primitives/torch-so3/api.md" },
+      { "Examples" = [{ "Hierarchical S2 Grid Demo" = "primitives/torch-so3/examples/hierarchical_s2_grid_demo.md" }] },
     ] },
     { "torch-structure-manipulation" = [
       { "Overview" = "primitives/torch-structure-manipulation/index.md" },
