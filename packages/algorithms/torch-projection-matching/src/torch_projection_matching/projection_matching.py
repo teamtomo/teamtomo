@@ -139,7 +139,7 @@ def align_by_projection_matching(
     search_shape = _volume_shape(tilt_series, thickness, (h, w), cover_all_tilts)
     z_center, volume_shape = 0.0, search_shape
 
-    geometry = _copy(tilt_series)
+    geometry = tilt_series.copy()
     updates = []
     correlation = torch.ones(n_tilts, device=device)
     for _ in range(n_iterations):
@@ -350,20 +350,3 @@ def _remove_tomogram_translation(
     t = torch.linalg.lstsq(a, b).solution
     rigid = (a @ t).reshape(shifts.shape)
     return shifts - rigid.to(shifts.dtype).to(shifts.device)
-
-
-def _copy(tilt_series: TiltSeries) -> TiltSeries:
-    return TiltSeries(
-        tilt_angles=tilt_series.tilt_angles.clone(),
-        tilt_axis_angle=tilt_series.tilt_axis_angle.clone(),
-        sample_translations=tilt_series.sample_translations.clone(),
-        x_tilts=tilt_series.x_tilts.clone(),
-        sample2levelled=tilt_series.sample2levelled.clone(),
-        levelled2tomo=tilt_series.levelled2tomo.clone(),
-        local_shifts=tilt_series.local_shifts,
-        local_shifts_2d=tilt_series.local_shifts_2d,
-        image_path=tilt_series.image_path,
-        image_indices=tilt_series.image_indices,
-        pixel_spacing=tilt_series._pixel_spacing,
-        device=tilt_series.device,
-    )

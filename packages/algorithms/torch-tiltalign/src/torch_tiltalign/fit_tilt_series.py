@@ -133,7 +133,7 @@ def fit_tilt_series(
     if not observed.any():
         raise ValueError("no point is observed in at least `min_observations` tilts")
 
-    ts = _copy_tilt_series(tilt_series)
+    ts = tilt_series.copy()
     tilt_angles0 = ts.tilt_angles.clone()
     axis0 = ts.tilt_axis_angle.clone()
     shifts0 = ts.sample_translations.clone()
@@ -249,21 +249,3 @@ def _fix_translation_gauge(
     t = t.to(points.dtype).to(points.device)[:, 0]
     points += t
     ts.sample_translations = ts.sample_translations - matrices @ t
-
-
-def _copy_tilt_series(tilt_series: TiltSeries) -> TiltSeries:
-    """A new TiltSeries with cloned, detached geometry tensors."""
-    return TiltSeries(
-        tilt_angles=tilt_series.tilt_angles.detach().clone(),
-        tilt_axis_angle=tilt_series.tilt_axis_angle.detach().clone(),
-        sample_translations=tilt_series.sample_translations.detach().clone(),
-        x_tilts=tilt_series.x_tilts.detach().clone(),
-        sample2levelled=tilt_series.sample2levelled.detach().clone(),
-        levelled2tomo=tilt_series.levelled2tomo.detach().clone(),
-        local_shifts=tilt_series.local_shifts,
-        local_shifts_2d=tilt_series.local_shifts_2d,
-        image_path=tilt_series.image_path,
-        image_indices=tilt_series.image_indices,
-        pixel_spacing=tilt_series._pixel_spacing,
-        device=tilt_series.device,
-    )

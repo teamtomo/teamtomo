@@ -234,7 +234,7 @@ def _seed_depths(
     max_tilt: float = 40.0,
 ) -> torch.Tensor:
     """3D position of each seed: the depth along its ray that scores best."""
-    n_tilts, h, w = maps.shape
+    _, h, w = maps.shape
     device = maps.device
     spacing = tilt_series.pixel_spacing
     center = torch.tensor([h // 2, w // 2], device=device).float()
@@ -268,7 +268,7 @@ def _tilt_offsets(
     Sums the (positive) correlation around every valid predicted position
     and takes the peak. Returns `(t, 2)` yx offsets in pixels.
     """
-    n, t, _ = predicted.shape
+    _, t, _ = predicted.shape
     half = math.ceil(window)
     size = 2 * half + 1
     rounded = torch.round(torch.nan_to_num(predicted))
