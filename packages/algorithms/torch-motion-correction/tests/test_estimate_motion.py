@@ -9,6 +9,7 @@ from torch_motion_correction.estimate_motion_optimizer import (
     estimate_local_motion,
 )
 from torch_motion_correction.estimate_motion_xc import (
+    _apply_outlier_rejection,
     estimate_global_motion,
     estimate_motion_cross_correlation_patches,
 )
@@ -395,6 +396,49 @@ class TestEstimateMotionCrossCorrelationPatches:
             dim=(1, 2, 3), keepdim=True
         )
         assert torch.allclose(result.data, expected_field, atol=1e-4)
+
+
+class TestOutlierRejection:
+    """Tests for the per-frame patch outlier rejection."""
+
+    @pytest.mark.parametrize("grid_shape", [(1, 3), (2, 2), (3, 3), (4, 4)])
+    def test_rejects_single_outlier_in_small_grid(self, grid_shape):
+        """One far-off patch is replaced, however few patches there are.
+
+        With the standard deviation as the spread, a lone outlier among n patches
+        scores sqrt(n), so at the default threshold of 3 nothing was rejected with
+        nine or fewer patches.
+        """
+        n = grid_shape[0] * grid_shape[1]
+        shift_y = torch.linspace(-0.3, 0.3, n).view(grid_shape)
+        shift_x = torch.linspace(0.2, -0.2, n).view(grid_shape)
+        shift_y[0, 0] = 100.0
+        corrected_y, corrected_x = _apply_outlier_rejection(
+            shift_y, shift_x.clone(), outlier_threshold=3.0, frame_idx=0
+        )
+        inliers = torch.ones(grid_shape, dtype=torch.bool)
+        inliers[0, 0] = False
+        assert corrected_y[0, 0] == pytest.approx(float(shift_y[inliers].mean()))
+        assert corrected_x[0, 0] == pytest.approx(float(shift_x[inliers].mean()))
+        torch.testing.assert_close(corrected_y[inliers], shift_y[inliers])
+        torch.testing.assert_close(corrected_x[inliers], shift_x[inliers])
+
+    @pytest.mark.parametrize(
+        "shifts",
+        [
+            [[5.0]],  # one patch: nothing to compare against
+            [[0.0, 50.0]],  # two patches: no way to tell which is wrong
+            [[0.0] * 9 + [1.0] * 7],  # integer peaks, one pixel apart
+        ],
+    )
+    def test_leaves_undecidable_shifts_alone(self, shifts):
+        """Shifts are kept when no patch stands out from the others."""
+        shift_y = torch.tensor(shifts)
+        corrected_y, corrected_x = _apply_outlier_rejection(
+            shift_y, shift_y.clone(), outlier_threshold=3.0, frame_idx=0
+        )
+        torch.testing.assert_close(corrected_y, shift_y)
+        torch.testing.assert_close(corrected_x, shift_y)
 
 
 class TestEstimateLocalMotion:

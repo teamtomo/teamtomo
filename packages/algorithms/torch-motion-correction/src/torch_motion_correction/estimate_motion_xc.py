@@ -551,12 +551,19 @@ def _apply_temporal_smoothing(
 def _apply_outlier_rejection(
     shift_y: torch.Tensor,  # (gh, gw) y shifts
     shift_x: torch.Tensor,  # (gh, gw) x shifts
-    outlier_threshold: float,  # standard deviations from median
+    outlier_threshold: float,  # robust standard deviations from median
     frame_idx: int,  # For logging
     verbose: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Apply outlier rejection to patch shifts using standard deviation from median.
+    Apply outlier rejection to patch shifts using a robust spread about the median.
+
+    The spread is 1.4826 times the median absolute deviation, which estimates the
+    standard deviation for normally distributed shifts. Unlike the standard
+    deviation it is barely moved by the outliers themselves, so it still finds a
+    lone outlier in a small patch grid. A patch within one pixel of the median is
+    never an outlier: when most patches agree exactly, as integer peaks often do
+    without sub-pixel refinement, the spread is zero.
 
     If either X or Y shift for a patch is an outlier, both X and Y shifts
     for that patch are replaced with the mean of valid patches.
@@ -564,11 +571,12 @@ def _apply_outlier_rejection(
     Parameters
     ----------
     shift_y: torch.Tensor
-        Y shifts for all patches in the frame (gh, gw)
+        Y shifts in pixels for all patches in the frame (gh, gw)
     shift_x: torch.Tensor
-        X shifts for all patches in the frame (gh, gw)
+        X shifts in pixels for all patches in the frame (gh, gw)
     outlier_threshold: float
-        Threshold in standard deviations from median for outlier detection
+        Threshold in robust standard deviations from the median for outlier
+        detection
     frame_idx: int
         Frame index for logging purposes
     verbose: bool
@@ -581,33 +589,21 @@ def _apply_outlier_rejection(
     corrected_shift_x: torch.Tensor
         X shifts with outliers replaced by mean (gh, gw)
     """
-    # A single patch has no spread to judge outliers against
-    if shift_y.numel() < 2:
-        return shift_y, shift_x
-
     # Flatten for easier processing
     shift_y_flat = shift_y.flatten()
     shift_x_flat = shift_x.flatten()
 
-    # Calculate medians
-    median_y = torch.median(shift_y_flat)
-    median_x = torch.median(shift_x_flat)
-
-    # Calculate standard deviations
-    std_y = torch.std(shift_y_flat)
-    std_x = torch.std(shift_x_flat)
-
-    # Avoid division by zero
-    std_y = torch.max(std_y, torch.tensor(1e-6, device=shift_y.device))
-    std_x = torch.max(std_x, torch.tensor(1e-6, device=shift_x.device))
-
-    # Calculate z-scores (standard deviations from median)
-    z_score_y = torch.abs(shift_y_flat - median_y) / std_y
-    z_score_x = torch.abs(shift_x_flat - median_x) / std_x
+    # Interpolated medians, so two patches that disagree are judged symmetrically
+    median_y = torch.quantile(shift_y_flat, 0.5)
+    median_x = torch.quantile(shift_x_flat, 0.5)
+    deviation_y = torch.abs(shift_y_flat - median_y)
+    deviation_x = torch.abs(shift_x_flat - median_x)
+    spread_y = 1.4826 * torch.quantile(deviation_y, 0.5)
+    spread_x = 1.4826 * torch.quantile(deviation_x, 0.5)
 
     # Identify outliers in either direction
-    outliers_y = z_score_y > outlier_threshold
-    outliers_x = z_score_x > outlier_threshold
+    outliers_y = (deviation_y > outlier_threshold * spread_y) & (deviation_y > 1.0)
+    outliers_x = (deviation_x > outlier_threshold * spread_x) & (deviation_x > 1.0)
 
     # If either X or Y is an outlier, mark the entire patch as outlier
     outliers_combined = outliers_y | outliers_x
