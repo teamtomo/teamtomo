@@ -49,7 +49,7 @@ def test_load_tilt_series_images_requires_image_path():
         load_tilt_series_images(tilt_series)
 
 
-def _warp_xml(n_tilts=3, use_tilt=None, grid_x_value="0"):
+def _warp_xml(n_tilts=3, use_tilt=None, grid_x_value="0", level_x="0", level_y="0"):
     """Minimal Warp-style tilt-series XML: per-tilt lists, CTF block, 1x1xT grids."""
     angles = [-30.0, 0.0, 30.0][:n_tilts]
     use_tilt = use_tilt or ["True"] * n_tilts
@@ -62,7 +62,8 @@ def _warp_xml(n_tilts=3, use_tilt=None, grid_x_value="0"):
     )
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
-        '<TiltSeries ImageDimensionsAngstrom="4000, 4000">\n'
+        '<TiltSeries ImageDimensionsAngstrom="4000, 4000" '
+        f'LevelAngleX="{level_x}" LevelAngleY="{level_y}">\n'
         f"<Angles>{lines(angles)}</Angles>\n"
         f"<UseTilt>{lines(use_tilt)}</UseTilt>\n"
         f"<AxisAngle>{lines([85.0] * n_tilts)}</AxisAngle>\n"
@@ -103,6 +104,17 @@ def test_from_warp_xml_reads_global_alignment(tmp_path):
     assert torch.equal(tilt_series.levelled2tomo, z_flip)
     assert tilt_series.local_shifts_2d is None
     assert TiltSeries.from_warp_xml(path).tilt_angles.shape == (3,)
+
+
+def test_from_warp_xml_maps_level_angles(tmp_path):
+    pytest.importorskip("warpxmlfile")
+    path = tmp_path / "TS_1.xml"
+    path.write_text(_warp_xml(level_x="2", level_y="-1"))
+
+    tilt_series = from_warp_xml(path)
+    # Warp: tilt = Angles + LevelAngleY; Rx(LevelAngleX) -> x_tilts, sign flipped
+    assert torch.allclose(tilt_series.tilt_angles, torch.tensor([-31.0, -1.0, 29.0]))
+    assert torch.allclose(tilt_series.x_tilts, torch.tensor(-2.0))
 
 
 def test_from_warp_xml_drops_unused_tilts(tmp_path):

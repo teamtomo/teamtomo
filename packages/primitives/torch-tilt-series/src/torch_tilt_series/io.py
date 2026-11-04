@@ -129,20 +129,26 @@ def from_warp_xml(
     """Initialize TiltSeries from a Warp / M tilt-series XML file.
 
     Reads the global alignment: `Angles`, `AxisAngle`, `AxisOffsetX/Y`
-    (Angstroms) and `UseTilt`. The alignment is in Angstroms and is used as
-    is; `pixel_spacing` only describes the images at `image_path`. It
-    defaults to the CTF `PixelSize` of the XML (the raw-frame pixel) - pass
-    it explicitly when `image_path` is a binned tilt stack. Warp's tomogram z axis
-    points the opposite way to this package's sample z axis, so
-    `levelled2tomo` is set to a z flip: points given in Warp tomogram
-    coordinates (Angstroms, relative to the tomogram centre) project to
-    Warp image coordinates (Angstroms, relative to the image centre).
+    (Angstroms), `UseTilt` and the root attributes `LevelAngleX/Y` (Warp's
+    sample levelling, 0 when absent): `LevelAngleY` is added to every tilt
+    angle and `LevelAngleX` becomes `x_tilts` with the sign flipped, the same
+    convention the etomo loader uses for IMOD's x-axis tilt. The alignment is
+    in Angstroms and is used as is; `pixel_spacing` only describes the images
+    at `image_path`. It defaults to the CTF `PixelSize` of the XML (the
+    raw-frame pixel) - pass it explicitly when `image_path` is a binned tilt
+    stack. Warp's tomogram z axis points the opposite way to this package's
+    sample z axis, so `levelled2tomo` is set to a z flip: points given in Warp
+    tomogram coordinates (Angstroms, relative to the tomogram centre) project
+    to Warp image coordinates (Angstroms, relative to the image centre).
 
     Warp's per-tilt local deformation grids (`GridMovementX/Y`, cubic
     B-splines through the node values) are applied by default: each tilt
     becomes a `CubicBSplineGrid2d` passing through its nodes, evaluated at the
-    projected position (normalised by `ImageDimensionsAngstrom`, clamped to
-    the image) and subtracted, as Warp does. Set `apply_local_shifts=False`
+    projected position (normalised by `ImageDimensionsAngstrom`) and
+    subtracted, as Warp does. The position is clamped to the image, whereas
+    Warp evaluates the spline's last cell beyond the edge, so points that
+    project outside the image differ by 1-2 Angstrom.
+    Set `apply_local_shifts=False`
     to keep the global model only, or pass `local_shifts_2d` to supply your
     own callable instead. The 4-D `GridVolumeWarp` of M has no equivalent in
     `TiltSeries` and is ignored.
@@ -152,7 +158,9 @@ def from_warp_xml(
     xml_path = Path(xml_path)
     xml = warpxmlfile.read(xml_path)
 
-    tilt_angles = np.asarray(xml.angles)
+    level_x = float(xml.attributes.get("LevelAngleX", 0.0))
+    level_y = float(xml.attributes.get("LevelAngleY", 0.0))
+    tilt_angles = np.asarray(xml.angles) + level_y  # Warp: tilt = Angles + LevelAngleY
     tilt_axis_angle = np.asarray(xml.axis_angle)
     offset_x = np.asarray(xml.axis_offset_x)
     offset_y = np.asarray(xml.axis_offset_y)
@@ -188,6 +196,7 @@ def from_warp_xml(
         tilt_axis_angle=tilt_axis_angle[idx_valid],
         sample_translations=sample_translations[idx_valid],
         levelled2tomo=z_flip,
+        x_tilts=-level_x,
         local_shifts_2d=local_shifts_2d,
         image_path=image_path,
         image_indices=idx_valid,
