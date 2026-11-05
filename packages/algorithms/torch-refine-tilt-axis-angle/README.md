@@ -13,11 +13,13 @@ Tilt-axis angle optimization for tilt series using common lines.
 torch-refine-tilt-axis-angle finds the tilt-axis angle of a translationally
 aligned tilt series from its common line: the line through the origin of
 Fourier space that all tilt images share, oriented perpendicular to the tilt
-axis. Each image's Fourier transform is coherently summed across the stack,
-and a two-stage angular grid search (coarse, then a finer search around the
-coarse optimum) locates the orientation of highest power in the summed power
-spectrum. The whole search is evaluated as batched tensor operations, so
-every candidate angle is scored in parallel rather than in a Python loop.
+axis. The coherence of the images' Fourier transforms (the power of their
+coherent sum, normalized by the sum of their individual powers) is computed
+across the stack, and a two-stage angular grid search (coarse, then a finer
+search around the coarse optimum) locates the orientation of highest total
+coherence, sampled with bilinear interpolation. The whole search is evaluated
+as batched tensor operations, so every candidate angle is scored in parallel
+rather than in a Python loop.
 
 Rectangular images are handled natively, without cropping to square, so no
 image data is discarded.
