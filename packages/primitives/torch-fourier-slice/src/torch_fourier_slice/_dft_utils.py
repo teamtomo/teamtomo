@@ -1,5 +1,4 @@
 import torch
-from torch_grid_utils import rfft_shape
 
 
 def _fftfreq_to_dft_coordinates(
@@ -8,8 +7,12 @@ def _fftfreq_to_dft_coordinates(
     """Convert DFT sample frequencies into array coordinates in a fftshifted DFT.
 
     Specifically:
-    - `delta_fftfreq` is the step size in frequency space between adjacent DFT samples.
-    - normalized DFT sample frequencies span `[-0.5, 0.5 - delta_fftfreq]`
+    - `delta_fftfreq` is the step size in frequency space between adjacent DFT samples,
+      `1 / n` for a dimension of length `n`.
+    - after fftshift, DC sits at array index `n // 2` of each full dimension. This is
+      `n / 2` for even `n` but `(n - 1) / 2` for odd `n`.
+    - in the non-redundant half transform from `rfft`, DC sits at array index `0` of the
+      last dimension.
     - we specify continuous coordinates in the DFT array coordinate system `[0, n - 1]`
       for subsequent sampling
 
@@ -23,7 +26,8 @@ def _fftfreq_to_dft_coordinates(
     frequencies: torch.Tensor
         `(..., d)` array of multidimensional DFT sample frequencies
     image_shape: tuple[int, ...]
-        Length `d` array of image dimensions.
+        Length `d` array of image dimensions. For an rfft, the last dimension is the
+        length of the full (real space) dimension, not the half transform.
     rfft: bool
         Whether output should be compatible with an rfft (`True`) or a
         full DFT (`False`)
@@ -37,36 +41,37 @@ def _fftfreq_to_dft_coordinates(
     image_shape_tensor: torch.Tensor = torch.as_tensor(
         image_shape, device=frequencies.device, dtype=frequencies.dtype
     )
-    _rfft_shape = torch.as_tensor(
-        rfft_shape(image_shape_tensor),
-        device=frequencies.device,
-        dtype=frequencies.dtype,
-    )
 
-    # define step size in each dimension
-    delta_fftfreq = 1 / image_shape_tensor
-
-    # calculate total width of DFT interval in cycles/sample per dimension
-    # last dim is only non-redundant half in rfft case
-    fftfreq_interval_width = 1 - delta_fftfreq
+    # array index of DC in each dimension
+    # last dim is only non-redundant half in rfft case, which starts at DC
+    dc_index = torch.div(image_shape_tensor, 2, rounding_mode="floor")
     if rfft is True:
-        fftfreq_interval_width[-1] = 0.5
+        dc_index[-1] = 0
 
-    # allocate for continuous output dft sample coordinates
-    coordinates = torch.empty_like(frequencies)
+    # adjacent DFT samples are `1 / n` apart, so frequency `f` is `f * n` samples
+    # away from DC
+    return frequencies * image_shape_tensor + dc_index
 
-    # transform frequency coordinates into array coordinates
-    if rfft is True:
-        # full dimensions span `[-0.5, 0.5 - delta_fftfreq]`
-        coordinates[..., :-1] = (frequencies[..., :-1] + 0.5) / fftfreq_interval_width[
-            :-1
-        ]
-        coordinates[..., :-1] = coordinates[..., :-1] * (image_shape_tensor[:-1] - 1)
 
-        # half transform dimension (interval width 0.5)
-        coordinates[..., -1] = (frequencies[..., -1] * 2) * (_rfft_shape[-1] - 1)
-    else:
-        # all dims are full and span `[-0.5, 0.5 - delta_fftfreq]`
-        coordinates[..., :] = (frequencies[..., :] + 0.5) / fftfreq_interval_width
-        coordinates[..., :] = coordinates[..., :] * (image_shape_tensor - 1)
-    return coordinates
+def _rfft_full_width(h: int, w_rfft: int) -> int:
+    """Recover the real space width of a square/cubic array from its rfft.
+
+    The rfft halves the last dimension to `w // 2 + 1`, which is the same for an
+    even `w` and for `w + 1`, so `w` can't be recovered from the half transform
+    alone. Take it from the full dimension `h` before it when the two agree, which
+    they do for square/cubic arrays of either parity, and fall back to the even
+    width otherwise.
+
+    Parameters
+    ----------
+    h: int
+        Length of the full dimension before the half transformed one.
+    w_rfft: int
+        Length of the half transformed last dimension, `w // 2 + 1`.
+
+    Returns
+    -------
+    w: int
+        Length of the last dimension of the real space array.
+    """
+    return h if h // 2 + 1 == w_rfft else 2 * (w_rfft - 1)
