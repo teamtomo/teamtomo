@@ -54,6 +54,7 @@ dependencies = [
     "torch-transform-image",
     "torch-fourier-rescale",
     "torch-tilt-series",
+    "torch-subpixel-crop",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies

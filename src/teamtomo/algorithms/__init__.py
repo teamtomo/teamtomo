@@ -46,6 +46,21 @@ try:
 except ImportError:
     torch_reconstruct_tomogram = None  # type: ignore[assignment]
 
+try:
+    import torch_tsa_fit_to_tracks
+except ImportError:
+    torch_tsa_fit_to_tracks = None  # type: ignore[assignment]
+
+try:
+    import torch_tsa_fiducial_tracking
+except ImportError:
+    torch_tsa_fiducial_tracking = None  # type: ignore[assignment]
+
+try:
+    import torch_tsa_projection_matching
+except ImportError:
+    torch_tsa_projection_matching = None  # type: ignore[assignment]
+
 __all__ = [
     "torch_2dtm",
     "torch_motion_correction",
@@ -56,4 +71,7 @@ __all__ = [
     "torch_tiltxcorr",
     "torch_local_resolution",
     "torch_reconstruct_tomogram",
+    "torch_tsa_fit_to_tracks",
+    "torch_tsa_fiducial_tracking",
+    "torch_tsa_projection_matching",
 ]
