@@ -22,6 +22,39 @@ There are also some lower order layers in the package that run directly on Fouri
 
 The package also provides a use case for extracting common lines from 2D images with `project_2d_to_1d` which can be useful for tilt-axis angle optimization in cryo-ET.
 
+## Rotation convention
+
+The two layers interpret a rotation matrix `R` in opposite directions.
+
+* **Real-space functions** (`project_3d_to_2d()`, `backproject_2d_to_3d()`, their
+  multichannel versions, `project_2d_to_1d()`, and the real-space functions in
+  `torch_fourier_slice.experimental`) take an **active** rotation. The projection is
+  of the volume rotated by `R`, viewed along z (or along y for `project_2d_to_1d`).
+  Backprojection takes the same matrices that produced the images.
+* **Fourier-space functions** (`extract_central_slices_rfft_*()`,
+  `insert_central_slices_rfft_*()`, and their experimental equivalents) take a
+  **passive** rotation. `R` rotates the central slice's frequency coordinates from
+  the image frame into the volume frame, so the slice extracted with `R` is that
+  of the volume rotated by `R.T`.
+
+For the same image, the Fourier-space functions therefore need the transpose of the
+matrix the real-space functions take:
+
+```python
+project_3d_to_2d(volume, R)  # volume rotated by R, projected along z
+extract_central_slices_rfft_3d(volume_rfft, R.mT)  # the same projection, in Fourier space
+```
+
+Matrices left-multiply column vectors containing xyz coordinates (zyx with
+`zyx_matrices=True`; the experimental Mojo functions only take zyx matrices). If you
+build `R` from ZYZ Euler angles, e.g. with
+`scipy.spatial.transform.Rotation.from_euler("ZYZ", (phi, theta, psi))`, then
+`R.T` corresponds to `("ZYZ", (-psi, -theta, -phi))`.
+
+> **Changed in 0.7:** the real-space functions used to take the passive rotation,
+> the same as the Fourier-space functions. To keep results from older code, pass
+> `R.mT` (the transpose) to the real-space functions.
+
 ## Installation
 
 ```bash

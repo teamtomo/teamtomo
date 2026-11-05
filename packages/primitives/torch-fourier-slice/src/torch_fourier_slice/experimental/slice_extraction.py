@@ -14,7 +14,10 @@ Two rank forms share one Mojo kernel; the Python layer only squeezes / transpose
 Shared parameters (both forms):
 
 - ``rotations``: ``(3, 3)`` / ``(bp, 3, 3)`` zyx matrices (single volume) or also
-  ``(bv, bp, 3, 3)`` for per-volume poses (multi-volume).
+  ``(bv, bp, 3, 3)`` for per-volume poses (multi-volume). Each matrix rotates the
+  slice's frequency coordinates (image frame) into the volume frame, a passive
+  rotation: the slice extracted with R is that of the volume rotated by R^T. The
+  real-space :func:`.project_3d_to_2d` takes the active rotation R.
 - ``shifts_3d``: optional ``(..., bp, 3)`` zyx shifts in the volume frame (before
   rotation); ``shifts_2d``: optional ``(..., bp, 2)`` yx shifts in the projection
   plane (after rotation).
