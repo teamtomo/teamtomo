@@ -3,18 +3,18 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("torch-tsa-fiducials")
+    __version__ = version("torch-tsa-fiducial-tracking")
 except PackageNotFoundError:
     __version__ = "uninstalled"
 
 __author__ = "Josh Dickerson"
 __email__ = "jdickerson@mrc-lmb.cam.ac.uk"
 
-from torch_tsa_fiducials.bead_correlation import (
+from torch_tsa_fiducial_tracking.bead_correlation import (
     bead_correlation_maps,
     bead_template,
 )
-from torch_tsa_fiducials.track_fiducials import FiducialTracks, track_fiducials
+from torch_tsa_fiducial_tracking.track_fiducials import FiducialTracks, track_fiducials
 
 __all__ = [
     "FiducialTracks",

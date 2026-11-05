@@ -6,16 +6,16 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "^torch-tsa-fiducials@v(?P<version>.+)$"
+tag-pattern = "^torch-tsa-fiducial-tracking@v(?P<version>.+)$"
 fallback-version = "0.1.0"
 
 [tool.hatch.version.raw-options]
 search_parent_directories = true
 # Parse tags of the form: <package-name>@v<semver>
-tag_regex = "^torch-tsa-fiducials@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+tag_regex = "^torch-tsa-fiducial-tracking@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 # Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
 # See https://github.com/ofek/hatch-vcs/issues/71
-git_describe_command = "git describe --dirty --tags --long --match 'torch-tsa-fiducials@v[0-9]*.[0-9]*.[0-9]*'"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-tsa-fiducial-tracking@v[0-9]*.[0-9]*.[0-9]*'"
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -25,7 +25,7 @@ sources = ["src"]
 
 # https://peps.python.org/pep-0621/
 [project]
-name = "torch-tsa-fiducials"
+name = "torch-tsa-fiducial-tracking"
 dynamic = ["version"]
 description = "Gold fiducial tracking through cryo-ET tilt series in PyTorch"
 readme = "README.md"
@@ -47,7 +47,7 @@ classifiers = [
 dependencies = [
     "torch",
     "torch-tilt-series",
-    "torch-tsa-fit",
+    "torch-tsa-fit-to-tracks",
     "torch-subpixel-crop",
     "torch-find-peaks",
 ]
@@ -74,10 +74,10 @@ repository = "https://github.com/teamtomo/teamtomo"
 # https://peps.python.org/pep-0621/#entry-points
 # same as console_scripts entry point
 # [project.scripts]
-# torch-tsa-fiducials-cli = "torch_tsa_fiducials:main_cli"
+# torch-tsa-fiducial-tracking-cli = "torch_tsa_fiducial_tracking:main_cli"
 
 # [project.entry-points."some.group"]
-# tomatoes = "torch_tsa_fiducials:main_tomatoes"
+# tomatoes = "torch_tsa_fiducial_tracking:main_tomatoes"
 
 
 # https://docs.pytest.org/
@@ -100,7 +100,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["torch_tsa_fiducials"]
+source = ["torch_tsa_fiducial_tracking"]
 
 # https://github.com/mgedmin/check-manifest#configuration
 # add files that you want check-manifest to explicitly ignore here

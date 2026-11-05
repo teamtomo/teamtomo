@@ -47,14 +47,14 @@ except ImportError:
     torch_reconstruct_tomogram = None  # type: ignore[assignment]
 
 try:
-    import torch_tsa_fit
+    import torch_tsa_fit_to_tracks
 except ImportError:
-    torch_tsa_fit = None  # type: ignore[assignment]
+    torch_tsa_fit_to_tracks = None  # type: ignore[assignment]
 
 try:
-    import torch_tsa_fiducials
+    import torch_tsa_fiducial_tracking
 except ImportError:
-    torch_tsa_fiducials = None  # type: ignore[assignment]
+    torch_tsa_fiducial_tracking = None  # type: ignore[assignment]
 
 try:
     import torch_tsa_projection_matching
@@ -71,7 +71,7 @@ __all__ = [
     "torch_tiltxcorr",
     "torch_local_resolution",
     "torch_reconstruct_tomogram",
-    "torch_tsa_fit",
-    "torch_tsa_fiducials",
+    "torch_tsa_fit_to_tracks",
+    "torch_tsa_fiducial_tracking",
     "torch_tsa_projection_matching",
 ]

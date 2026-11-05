@@ -1,12 +1,12 @@
-# torch-tsa-fit
+# torch-tsa-fit-to-tracks
 
 Fit tilt-series alignment to tracked 2D positions of 3D points in PyTorch.
 
-`torch-tsa-fit` is the model-fitting step of fiducial (or patch) based
+`torch-tsa-fit-to-tracks` is the model-fitting step of fiducial (or patch) based
 tilt-series alignment, the equivalent of IMOD's `tiltalign`. Given the
 detector positions of points tracked through a tilt series, it finds the 3D
 position of every point and the per-tilt alignment that best explain them.
-The points can be gold fiducials (see `torch-tsa-fiducials`), patch centers
+The points can be gold fiducials (see `torch-tsa-fiducial-tracking`), patch centers
 (see `torch_tiltxcorr.tiltxcorr_patches`), or anything else tracked through
 the series.
 
@@ -31,7 +31,7 @@ geometry put it.
 ## Usage
 
 ```python
-from torch_tsa_fit import fit_tilt_series
+from torch_tsa_fit_to_tracks import fit_tilt_series
 
 # tracks_yx: (n_points, n_tilts, 2) detector positions in Angstroms,
 #            relative to the detector center (NaN where not tracked)

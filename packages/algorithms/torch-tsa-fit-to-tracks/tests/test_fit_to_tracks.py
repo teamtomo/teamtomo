@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch_tilt_series import TiltSeries
 
-from torch_tsa_fit import fit_tilt_series, triangulate_points
+from torch_tsa_fit_to_tracks import fit_tilt_series, triangulate_points
 
 TILT_ANGLES = torch.arange(-60.0, 61.0, 3.0)
 AXIS = 175.6

@@ -121,10 +121,10 @@ give the predicted positions.
 
 A patch is a column through the specimen rather than a point, so cut the
 tracks into short pieces with `chop_tracks` (as IMOD's imodchopconts does)
-before fitting them with `torch_tsa_fit.fit_tilt_series`.
+before fitting them with `torch_tsa_fit_to_tracks.fit_tilt_series`.
 
 ```python
-from torch_tsa_fit import fit_tilt_series
+from torch_tsa_fit_to_tracks import fit_tilt_series
 from torch_tiltxcorr import chop_tracks, tiltxcorr, tiltxcorr_patches
 
 shifts = tiltxcorr(tilt_series, tilt_angles, tilt_axis_angle, 10, 40)

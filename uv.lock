@@ -38,8 +38,8 @@ members = [
     "torch-tilt-series",
     "torch-tiltxcorr",
     "torch-transform-image",
-    "torch-tsa-fiducials",
-    "torch-tsa-fit",
+    "torch-tsa-fiducial-tracking",
+    "torch-tsa-fit-to-tracks",
     "torch-tsa-projection-matching",
 ]
 overrides = [{ name = "torch-fourier-filter", editable = "packages/primitives/torch-fourier-filter" }]
@@ -3977,8 +3977,8 @@ dependencies = [
     { name = "torch-tilt-series" },
     { name = "torch-tiltxcorr" },
     { name = "torch-transform-image" },
-    { name = "torch-tsa-fiducials" },
-    { name = "torch-tsa-fit" },
+    { name = "torch-tsa-fiducial-tracking" },
+    { name = "torch-tsa-fit-to-tracks" },
     { name = "torch-tsa-projection-matching" },
 ]
 
@@ -4037,8 +4037,8 @@ requires-dist = [
     { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
     { name = "torch-tiltxcorr", editable = "packages/algorithms/torch-tiltxcorr" },
     { name = "torch-transform-image", editable = "packages/primitives/torch-transform-image" },
-    { name = "torch-tsa-fiducials", editable = "packages/algorithms/torch-tsa-fiducials" },
-    { name = "torch-tsa-fit", editable = "packages/algorithms/torch-tsa-fit" },
+    { name = "torch-tsa-fiducial-tracking", editable = "packages/algorithms/torch-tsa-fiducial-tracking" },
+    { name = "torch-tsa-fit-to-tracks", editable = "packages/algorithms/torch-tsa-fit-to-tracks" },
     { name = "torch-tsa-projection-matching", editable = "packages/algorithms/torch-tsa-projection-matching" },
 ]
 
@@ -5818,14 +5818,14 @@ test = [
 ]
 
 [[package]]
-name = "torch-tsa-fiducials"
-source = { editable = "packages/algorithms/torch-tsa-fiducials" }
+name = "torch-tsa-fiducial-tracking"
+source = { editable = "packages/algorithms/torch-tsa-fiducial-tracking" }
 dependencies = [
     { name = "torch" },
     { name = "torch-find-peaks" },
     { name = "torch-subpixel-crop" },
     { name = "torch-tilt-series" },
-    { name = "torch-tsa-fit" },
+    { name = "torch-tsa-fit-to-tracks" },
 ]
 
 [package.dev-dependencies]
@@ -5849,7 +5849,7 @@ requires-dist = [
     { name = "torch-find-peaks", editable = "packages/primitives/torch-find-peaks" },
     { name = "torch-subpixel-crop", editable = "packages/primitives/torch-subpixel-crop" },
     { name = "torch-tilt-series", editable = "packages/primitives/torch-tilt-series" },
-    { name = "torch-tsa-fit", editable = "packages/algorithms/torch-tsa-fit" },
+    { name = "torch-tsa-fit-to-tracks", editable = "packages/algorithms/torch-tsa-fit-to-tracks" },
 ]
 
 [package.metadata.requires-dev]
@@ -5868,8 +5868,8 @@ test = [
 ]
 
 [[package]]
-name = "torch-tsa-fit"
-source = { editable = "packages/algorithms/torch-tsa-fit" }
+name = "torch-tsa-fit-to-tracks"
+source = { editable = "packages/algorithms/torch-tsa-fit-to-tracks" }
 dependencies = [
     { name = "torch" },
     { name = "torch-tilt-series" },

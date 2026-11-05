@@ -5,7 +5,10 @@ from dataclasses import dataclass
 import torch
 from torch_tilt_series import TiltSeries
 
-from torch_tsa_fit.triangulate_points import affine_projection, triangulate_points
+from torch_tsa_fit_to_tracks.triangulate_points import (
+    affine_projection,
+    triangulate_points,
+)
 
 # Tukey biweight cutoff, in units of the robust residual scale
 _TUKEY_C = 4.685

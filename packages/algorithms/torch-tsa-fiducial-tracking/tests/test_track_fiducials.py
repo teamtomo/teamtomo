@@ -3,7 +3,7 @@ import torch
 from torch_image_interpolation import insert_into_image_2d
 from torch_tilt_series import TiltSeries
 
-from torch_tsa_fiducials import bead_correlation_maps, track_fiducials
+from torch_tsa_fiducial_tracking import bead_correlation_maps, track_fiducials
 
 SIZE = 256
 SPACING = 10.0  # A per pixel

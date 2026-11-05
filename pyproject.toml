@@ -39,8 +39,8 @@ dependencies = [
     "teamtomo-basemodel",
     "torch-calculate-electrostatic-potential",
     "torch-structure-manipulation",
-    "torch-tsa-fit",
-    "torch-tsa-fiducials",
+    "torch-tsa-fit-to-tracks",
+    "torch-tsa-fiducial-tracking",
     "torch-tsa-projection-matching",
 ]
 
@@ -78,8 +78,8 @@ torch-ctf-estimation = { workspace = true }
 teamtomo-basemodel = { workspace = true }
 torch-calculate-electrostatic-potential = { workspace = true }
 torch-structure-manipulation = { workspace = true }
-torch-tsa-fit = { workspace = true }
-torch-tsa-fiducials = { workspace = true }
+torch-tsa-fit-to-tracks = { workspace = true }
+torch-tsa-fiducial-tracking = { workspace = true }
 torch-tsa-projection-matching = { workspace = true }
 
 [tool.uv.workspace]
