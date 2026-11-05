@@ -1,7 +1,9 @@
-"""Compatibility adapter from the historical AtomStack API to AtomicStructure."""
+"""Deprecated adapter from the historical AtomStack API to AtomicStructure."""
 
 from __future__ import annotations
 
+import inspect
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import gemmi
@@ -17,9 +19,33 @@ from .utils.peng_model import get_peng_scattering_parameters
 if TYPE_CHECKING:
     from .grid import GridConfig
 
+_DEPRECATION_MESSAGE = (
+    "AtomStack is deprecated and will be removed in a future version. Please use "
+    "torch_structure_manipulation.AtomicStructure.from_atomic_numbers with "
+    "potential_from_structure_3d or potential_from_structure_2d instead."
+)
+
+
+def _warn_deprecated() -> None:
+    # Attribute the warning to the first frame outside this module, so it names the
+    # caller's line for AtomStack(...) and the from_* constructors alike.
+    frame = inspect.currentframe()
+    stacklevel = 1
+    while frame is not None and frame.f_globals.get("__name__") == __name__:
+        frame = frame.f_back
+        stacklevel += 1
+    warnings.warn(_DEPRECATION_MESSAGE, FutureWarning, stacklevel=stacklevel)
+
 
 class AtomStack:
-    """Expose the historical atom-stack API over an ``AtomicStructure``."""
+    """Expose the historical atom-stack API over an ``AtomicStructure``.
+
+    Deprecated: build an ``AtomicStructure`` with
+    :meth:`~torch_structure_manipulation.AtomicStructure.from_atomic_numbers`
+    and pass it to :func:`potential_from_structure_3d` or
+    :func:`potential_from_structure_2d`, which also support bonded scattering
+    factors.
+    """
 
     def __init__(
         self,
@@ -30,30 +56,14 @@ class AtomStack:
         atom_names: list[str] | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
-        resolved_device = torch.device(device)
-        positions = atom_pos_zyx.to(resolved_device)
-        numbers = torch.as_tensor(
-            atomic_numbers, dtype=torch.int64, device=resolved_device
-        )
-        b_factors = torch.as_tensor(
-            atom_bfactors, dtype=torch.float32, device=resolved_device
-        )
-        occupancies = torch.as_tensor(
-            atom_occupancies, dtype=torch.float32, device=resolved_device
-        )
-
-        num_atoms = positions.shape[-2] if positions.ndim >= 2 else 0
-        names = ("",) * num_atoms if atom_names is None else tuple(atom_names)
-        elements = tuple(
-            gemmi.Element(int(number)).name for number in numbers.detach().cpu()
-        )
-        self._structure = AtomicStructure(
-            positions_zyx=positions,
-            atomic_numbers=numbers,
-            elements=elements,
-            atom_names=names,
-            b_factors=b_factors,
-            occupancies=occupancies,
+        _warn_deprecated()
+        self._structure = AtomicStructure.from_atomic_numbers(
+            atom_pos_zyx,
+            atomic_numbers,
+            b_factors=atom_bfactors,
+            occupancies=atom_occupancies,
+            atom_names=atom_names,
+            device=device,
         )
         self._has_atom_names = atom_names is not None
         self._atom_params: tuple[torch.Tensor, torch.Tensor] | None = None
