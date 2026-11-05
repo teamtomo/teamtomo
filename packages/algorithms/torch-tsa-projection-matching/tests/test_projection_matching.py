@@ -2,7 +2,11 @@ import torch
 from torch_image_interpolation import insert_into_image_2d
 from torch_tilt_series import TiltSeries
 
-from torch_projection_matching import align_by_projection_matching, backproject, splat
+from torch_tsa_projection_matching import (
+    align_by_projection_matching,
+    backproject,
+    splat,
+)
 
 SIZE = 128
 SPACING = 20.0

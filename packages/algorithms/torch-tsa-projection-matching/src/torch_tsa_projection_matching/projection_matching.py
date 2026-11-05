@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch_tilt_series import TiltSeries, preprocess_tilt_series_images
 
-from torch_projection_matching.backprojection import (
+from torch_tsa_projection_matching.backprojection import (
     affine_projection,
     backproject,
     splat,

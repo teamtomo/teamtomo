@@ -40,7 +40,7 @@ def tiltxcorr_patches(
 
     A patch is a column through the specimen rather than a point, so its
     tracked center drifts with tilt as material enters and leaves it. To fit
-    the tracks with `torch_tiltalign.fit_tilt_series`, cut them into short
+    the tracks with `torch_tsa_fit.fit_tilt_series`, cut them into short
     pieces with `chop_tracks`, as IMOD does with imodchopconts.
 
     Parameters

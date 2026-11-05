@@ -6,16 +6,16 @@ build-backend = "hatchling.build"
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "^torch-projection-matching@v(?P<version>.+)$"
+tag-pattern = "^torch-tsa-fit@v(?P<version>.+)$"
 fallback-version = "0.1.0"
 
 [tool.hatch.version.raw-options]
 search_parent_directories = true
 # Parse tags of the form: <package-name>@v<semver>
-tag_regex = "^torch-projection-matching@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+tag_regex = "^torch-tsa-fit@v(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 # Constrain git-describe so it only considers TeamTomo's own tags, not other workspace tags.
 # See https://github.com/ofek/hatch-vcs/issues/71
-git_describe_command = "git describe --dirty --tags --long --match 'torch-projection-matching@v[0-9]*.[0-9]*.[0-9]*'"
+git_describe_command = "git describe --dirty --tags --long --match 'torch-tsa-fit@v[0-9]*.[0-9]*.[0-9]*'"
 
 # read more about configuring hatch at:
 # https://hatch.pypa.io/latest/config/build/
@@ -25,9 +25,9 @@ sources = ["src"]
 
 # https://peps.python.org/pep-0621/
 [project]
-name = "torch-projection-matching"
+name = "torch-tsa-fit"
 dynamic = ["version"]
-description = "Marker-free tilt-series alignment by projection matching in PyTorch"
+description = "Fit tilt-series alignment to tracked 2D positions of 3D points in PyTorch"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "BSD-3-Clause" }
@@ -53,7 +53,7 @@ dependencies = [
 # "extras" (e.g. for `pip install .[test]`)
 [dependency-groups]
 # add dependencies used for testing here
-test = ["pytest", "pytest-cov", "torch-image-interpolation"]
+test = ["pytest", "pytest-cov"]
 
 # add anything else you like to have in your dev environment here
 dev = [
@@ -71,10 +71,10 @@ repository = "https://github.com/teamtomo/teamtomo"
 # https://peps.python.org/pep-0621/#entry-points
 # same as console_scripts entry point
 # [project.scripts]
-# torch-projection-matching-cli = "torch_projection_matching:main_cli"
+# torch-tsa-fit-cli = "torch_tsa_fit:main_cli"
 
 # [project.entry-points."some.group"]
-# tomatoes = "torch_projection_matching:main_tomatoes"
+# tomatoes = "torch_tsa_fit:main_tomatoes"
 
 
 # https://docs.pytest.org/
@@ -97,7 +97,7 @@ exclude_lines = [
 ]
 
 [tool.coverage.run]
-source = ["torch_projection_matching"]
+source = ["torch_tsa_fit"]
 
 # https://github.com/mgedmin/check-manifest#configuration
 # add files that you want check-manifest to explicitly ignore here

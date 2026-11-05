@@ -1,8 +1,8 @@
-# torch-projection-matching
+# torch-tsa-projection-matching
 
 Marker-free tilt-series alignment by projection matching in PyTorch.
 
-`torch-projection-matching` refines the per-tilt shifts of a
+`torch-tsa-projection-matching` refines the per-tilt shifts of a
 `torch_tilt_series.TiltSeries` by matching each tilt image to a reprojection
 of the tomogram reconstructed from all the other tilts, the fine-alignment
 approach of AreTomo. It needs no fiducials.
@@ -30,7 +30,7 @@ approach of AreTomo. It needs no fiducials.
 ## Usage
 
 ```python
-from torch_projection_matching import align_by_projection_matching
+from torch_tsa_projection_matching import align_by_projection_matching
 
 # images: (n_tilts, h, w) at low resolution (about 20 A pixels), in the order of
 # tilt_series.tilt_angles; tilt_series.pixel_spacing is the images' spacing

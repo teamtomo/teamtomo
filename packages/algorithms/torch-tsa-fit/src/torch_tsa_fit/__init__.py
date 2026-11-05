@@ -3,15 +3,15 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("torch-tiltalign")
+    __version__ = version("torch-tsa-fit")
 except PackageNotFoundError:
     __version__ = "uninstalled"
 
 __author__ = "Josh Dickerson"
 __email__ = "jdickerson@mrc-lmb.cam.ac.uk"
 
-from torch_tiltalign.fit_tilt_series import TiltAlignResult, fit_tilt_series
-from torch_tiltalign.triangulate_points import affine_projection, triangulate_points
+from torch_tsa_fit.fit_tilt_series import TiltAlignResult, fit_tilt_series
+from torch_tsa_fit.triangulate_points import affine_projection, triangulate_points
 
 __all__ = [
     "TiltAlignResult",

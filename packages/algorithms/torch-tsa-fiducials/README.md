@@ -1,10 +1,10 @@
-# torch-track-fiducials
+# torch-tsa-fiducials
 
 Gold fiducial tracking through cryo-ET tilt series in PyTorch.
 
-`torch-track-fiducials` finds gold beads and tracks them through a tilt
+`torch-tsa-fiducials` finds gold beads and tracks them through a tilt
 series, starting from a coarse alignment (e.g. from `torch-tiltxcorr`). The
-tracks are fitted with `torch-tiltalign`, so the result is a refined
+tracks are fitted with `torch-tsa-fit`, so the result is a refined
 `torch_tilt_series.TiltSeries` together with the bead tracks: the TeamTomo
 equivalent of IMOD's seeding, beadtrack and tiltalign steps.
 
@@ -25,14 +25,14 @@ equivalent of IMOD's seeding, beadtrack and tiltalign steps.
    - take each bead's correlation peak within the search radius, dropping
      weak peaks, overlapping beads and beads near the image edge;
    - fit the geometry and 3D bead positions with
-     `torch_tiltalign.fit_tilt_series`.
+     `torch_tsa_fit.fit_tilt_series`.
 4. Beads tracked in too few tilts, or mostly rejected by the robust fit, are
    dropped and the final tracks are fitted again.
 
 ## Usage
 
 ```python
-from torch_track_fiducials import track_fiducials
+from torch_tsa_fiducials import track_fiducials
 
 # images: (n_tilts, h, w) in the order of tilt_series.tilt_angles, raw
 # contrast; tilt_series.pixel_spacing is the images' pixel spacing

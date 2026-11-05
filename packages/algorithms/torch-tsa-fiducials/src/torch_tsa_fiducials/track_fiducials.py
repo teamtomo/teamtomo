@@ -9,9 +9,9 @@ import torch.nn.functional as F
 from torch_find_peaks import find_peaks_2d
 from torch_subpixel_crop import subpixel_crop_2d
 from torch_tilt_series import TiltSeries
-from torch_tiltalign import TiltAlignResult, affine_projection, fit_tilt_series
+from torch_tsa_fit import TiltAlignResult, affine_projection, fit_tilt_series
 
-from torch_track_fiducials.bead_correlation import bead_correlation_maps, sample_maps
+from torch_tsa_fiducials.bead_correlation import bead_correlation_maps, sample_maps
 
 # (largest |tilt angle| tracked, search radius in bead diameters) per round
 DEFAULT_SCHEDULE: tuple[tuple[float, float], ...] = (
@@ -39,7 +39,7 @@ class FiducialTracks:
         position, in units of the correlation map's robust standard
         deviation; NaN where not tracked.
     alignment : TiltAlignResult
-        `torch_tiltalign.fit_tilt_series` fitted to the final tracks.
+        `torch_tsa_fit.fit_tilt_series` fitted to the final tracks.
     """
 
     tracks_yx: torch.Tensor
@@ -73,7 +73,7 @@ def track_fiducials(
        all its fiducials (the peak of the summed correlation around their
        predicted positions), take each fiducial's correlation peak within
        the search radius, then fit the geometry and 3D positions to
-       the tracks with `torch_tiltalign.fit_tilt_series`. Rounds widen the
+       the tracks with `torch_tsa_fit.fit_tilt_series`. Rounds widen the
        tilt range and shrink the search radius.
 
     Observations are dropped where the peak is weak, where another
