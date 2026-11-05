@@ -576,7 +576,8 @@ def calc_LPP_ctf_2D(
         Amount of astigmatism in micrometers.
         `(defocus_u - defocus_v) / 2`
     astigmatism_angle : float | torch.Tensor
-        Angle of astigmatism in degrees. 0 places `defocus_u` along the y-axis.
+        Angle of astigmatism in degrees. 0 places `defocus_u` along the x-axis,
+        and positive angles rotate it towards +y (increasing row index).
     voltage : float | torch.Tensor
         Acceleration voltage in kilovolts (kV).
     spherical_aberration : float | torch.Tensor

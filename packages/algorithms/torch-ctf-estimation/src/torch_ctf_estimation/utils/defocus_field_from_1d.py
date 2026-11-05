@@ -8,11 +8,16 @@ import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
 
 from torch_ctf_estimation.estimate_ctf_1d import estimate_ctf_1d
+from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
+    _fold_gradient_direction,
+    _principal_defocus,
+)
 from torch_ctf_estimation.models import (
     Defocus2DResults,
     LaserParams,
     LinearDefocusModel,
 )
+from torch_ctf_estimation.utils.fitting_bounds import resolve_defocus_bounds
 
 
 def defocus_field_from_1d_fits(
@@ -41,6 +46,7 @@ def defocus_field_from_1d_fits(
     defocus_range_microns: tuple[float, float] | None = None,
     phase_shift_range_degrees: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float | None = None,
+    defocus_search_window_microns: float = 1.0,
 ) -> Defocus2DResults:
     """
     Build defocus field from per-patch 1D fits; fit grid or linear to those values.
@@ -48,10 +54,21 @@ def defocus_field_from_1d_fits(
     Runs estimate_ctf_1d on each patch, then fits either a 3D spline grid or
     a linear (defocus_0 + gradient) model to the (position, defocus_1d) data.
     Astigmatism and envelope come from result_1x1.
+
+    Each patch's 1D fit runs a defocus grid search within
+    ``defocus_search_window_microns`` of the whole-image defocus (clipped to
+    ``defocus_range_microns``) before refining. Refining from the whole-image
+    defocus alone cannot follow a tilted specimen: the Thon rings move by a full
+    period for ~0.1 µm at high resolution, so patches stay near the start.
     """
     t, gh, gw, _ph, _pw = patch_power_spectra.shape
     nt, nh, nw = defocus_grid_resolution
     defocus_2d_center = float(result_1x1.defocus_model.data.mean().cpu().item())
+    lower, upper = resolve_defocus_bounds(defocus_range_microns)
+    patch_defocus_range = (
+        max(lower, defocus_2d_center - defocus_search_window_microns),
+        min(upper, defocus_2d_center + defocus_search_window_microns),
+    )
     if fixed_phase_shift_deg is not None:
         equiphase_phase_shift = fixed_phase_shift_deg
         patch_initial_phase = fixed_phase_shift_deg
@@ -75,7 +92,7 @@ def defocus_field_from_1d_fits(
                     power_spectrum=ps,
                     image_sidelength=image_sidelength,
                     frequency_fit_range_angstroms=frequency_fit_range_angstroms,
-                    defocus_range_microns=defocus_range_microns,
+                    defocus_range_microns=patch_defocus_range,
                     voltage_kev=voltage_kev,
                     spherical_aberration_mm=spherical_aberration_mm,
                     amplitude_contrast=amplitude_contrast_fraction,
@@ -84,7 +101,6 @@ def defocus_field_from_1d_fits(
                     b_range=b_range_1d,
                     b_step=b_step_1d,
                     refine_steps=refine_steps_1d,
-                    initial_defocus=defocus_2d_center,
                     background_result=background_result,
                     optimize_phase_shift=optimize_phase_shift,
                     initial_phase_shift=patch_initial_phase,
@@ -145,8 +161,9 @@ def defocus_field_from_1d_fits(
                 stacklevel=2,
             )
         else:
-            angle_rad = math.atan2(v, u)
-            angle_deg = (angle_rad * 180.0 / math.pi + 180.0) % 180.0
+            angle_deg, grad_mag = _fold_gradient_direction(
+                math.degrees(math.atan2(v, u)), grad_mag
+            )
             if math.isnan(angle_deg):
                 angle_deg = 0.0
                 warnings.warn(
@@ -160,6 +177,7 @@ def defocus_field_from_1d_fits(
             defocus_gradient_angle=angle_deg,
         )
         mean_defocus = defocus_0
+        defocus_u, defocus_v = _principal_defocus(mean_defocus, astig)
         return Defocus2DResults(
             defocus_model_type="linear",
             defocus_model=linear_model,
@@ -167,8 +185,8 @@ def defocus_field_from_1d_fits(
             astigmatism=astig,
             astigmatism_angle=result_1x1.astigmatism_angle or 0.0,
             envelope_B=envelope_B,
-            defocus_u=mean_defocus + astig / 2.0,
-            defocus_v=mean_defocus - astig / 2.0,
+            defocus_u=defocus_u,
+            defocus_v=defocus_v,
         )
     # grid: fit 3D spline to (positions, defocus_flat)
     grid_data = (
@@ -185,6 +203,7 @@ def defocus_field_from_1d_fits(
         loss.backward()
         optimiser.step()
     mean_defocus = float(grid_model.data.mean().cpu().item())
+    defocus_u, defocus_v = _principal_defocus(mean_defocus, astig)
     return Defocus2DResults(
         defocus_model_type="grid",
         defocus_model=grid_model,
@@ -192,8 +211,8 @@ def defocus_field_from_1d_fits(
         astigmatism=astig,
         astigmatism_angle=result_1x1.astigmatism_angle or 0.0,
         envelope_B=envelope_B,
-        defocus_u=mean_defocus + astig / 2.0,
-        defocus_v=mean_defocus - astig / 2.0,
+        defocus_u=defocus_u,
+        defocus_v=defocus_v,
     )
 
 
