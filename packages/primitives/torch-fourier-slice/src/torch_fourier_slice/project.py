@@ -34,8 +34,11 @@ def project_3d_to_2d(
     volume: torch.Tensor
         `(d, d, d)` volume.
     rotation_matrices: torch.Tensor
-        `(..., 3, 3)` array of rotation matrices for extraction of `images`.
-        Rotation matrices left-multiply column vectors containing xyz coordinates.
+        `(..., 3, 3)` array of rotation matrices, one per projection. Each
+        projection is of the volume rotated by its matrix (an active rotation),
+        viewed along z. Rotation matrices left-multiply column vectors
+        containing xyz coordinates. These are the transpose of the matrices
+        `extract_central_slices_rfft_3d` takes for the same projection.
     pad_factor: float
         Factor determining how much padding to apply to each side of the volume.
         Using `pad_factor=2.0` means going from `(d, d, d)` to `(2d, 2d, 2d)` and
@@ -102,10 +105,11 @@ def project_3d_to_2d(
     # fftshift the transformed volume so DC is at center
     dft = torch.fft.fftshift(dft, dim=(-3, -2))
 
-    # make projections by taking central slices
+    # make projections by taking central slices, the slice extractor takes the
+    # inverse (image -> volume) rotation of the active rotation we accept here
     projections = extract_central_slices_rfft_3d(
         volume_rfft=dft,
-        rotation_matrices=rotation_matrices,
+        rotation_matrices=rotation_matrices.transpose(-1, -2),
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
         apply_ewald_curvature=apply_ewald_curvature,
@@ -163,8 +167,12 @@ def project_3d_to_2d_multichannel(
     volume: torch.Tensor
         `(c, d, d, d)` volume.
     rotation_matrices: torch.Tensor
-        `(..., 3, 3)` array of rotation matrices for extraction of `images`.
-        Rotation matrices left-multiply column vectors containing xyz coordinates.
+        `(..., 3, 3)` array of rotation matrices, one per projection. Each
+        projection is of the volume rotated by its matrix (an active rotation),
+        viewed along z. Rotation matrices left-multiply column vectors
+        containing xyz coordinates. These are the transpose of the matrices
+        `extract_central_slices_rfft_3d_multichannel` takes for the same
+        projection.
     pad_factor: float
         Factor determining the size after padding relative to the original size.
         A pad_factor of 2.0 doubles the box size, 3.0 triples it, etc.
@@ -228,10 +236,11 @@ def project_3d_to_2d_multichannel(
     # actual fftshift of 3D rfft
     dft = torch.fft.fftshift(dft, dim=(-3, -2))
 
-    # make projections by taking central slices
+    # make projections by taking central slices, the slice extractor takes the
+    # inverse (image -> volume) rotation of the active rotation we accept here
     projections = extract_central_slices_rfft_3d_multichannel(
         volume_rfft=dft,
-        rotation_matrices=rotation_matrices,
+        rotation_matrices=rotation_matrices.transpose(-1, -2),
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
         apply_ewald_curvature=apply_ewald_curvature,
@@ -286,8 +295,11 @@ def project_2d_to_1d(
     image: torch.Tensor
         `(d, d)` image.
     rotation_matrices: torch.Tensor
-        `(..., 2, 2)` array of rotation matrices for extraction of `lines`.
-        Rotation matrices left-multiply column vectors containing xy coordinates.
+        `(..., 2, 2)` array of rotation matrices, one per projection. Each
+        projection is of the image rotated by its matrix (an active rotation),
+        projected along y. Rotation matrices left-multiply column vectors
+        containing xy coordinates. These are the transpose of the matrices
+        `extract_central_slices_rfft_2d` takes for the same projection.
     pad_factor: float
         Factor determining the size after padding relative to the original size.
         A pad_factor of 2.0 doubles the box size, 3.0 triples it, etc.
@@ -332,11 +344,12 @@ def project_2d_to_1d(
     dft = torch.fft.rfftn(dft, dim=(-2, -1))
     dft = torch.fft.fftshift(dft, dim=(-2,))  # actual fftshift of 2D rfft
 
-    # make projections by taking central slices
+    # make projections by taking central lines, the line extractor takes the
+    # inverse (line -> image) rotation of the active rotation we accept here
     projections = extract_central_slices_rfft_2d(
         image_rfft=dft,
         image_shape=image_shape,
-        rotation_matrices=rotation_matrices,
+        rotation_matrices=rotation_matrices.transpose(-1, -2),
         fftfreq_max=fftfreq_max,
         yx_matrices=yx_matrices,
     )  # (..., w) rfft stack

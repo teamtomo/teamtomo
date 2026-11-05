@@ -13,7 +13,14 @@ def extract_central_slices_rfft_2d(
     fftfreq_max: float | None = None,
     yx_matrices: bool = False,
 ) -> torch.Tensor:
-    """Extract central slice from an fftshifted rfft."""
+    """Extract central slice from an fftshifted rfft.
+
+    Each rotation matrix rotates the line's frequency coordinates (line frame)
+    into the image frame, a passive rotation: the line extracted with R is that
+    of the image rotated by R^T. `project_2d_to_1d` takes the active rotation R.
+    Rotation matrices left-multiply xy column vectors unless `yx_matrices` is
+    True.
+    """
     rotation_matrices = rotation_matrices.to(torch.float32)
 
     # generate grid of DFT sample frequencies for a central slice spanning the x-plane
