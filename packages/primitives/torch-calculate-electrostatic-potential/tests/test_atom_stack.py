@@ -3,7 +3,52 @@ import pytest
 import torch
 from torch_structure_manipulation import AtomicStructure
 
-from torch_calculate_electrostatic_potential import AtomStack, GridConfig
+from torch_calculate_electrostatic_potential import (
+    AtomStack,
+    GridConfig,
+    potential_from_structure_3d,
+)
+
+pytestmark = pytest.mark.filterwarnings("ignore:AtomStack is deprecated:FutureWarning")
+
+
+class TestAtomStackDeprecation:
+    @pytest.mark.parametrize(
+        "construct",
+        [
+            lambda: AtomStack(torch.zeros(2, 3), torch.tensor([6, 8])),
+            lambda: AtomStack.from_coords_and_names(torch.zeros(2, 3), ["C", "O"]),
+            lambda: AtomStack.from_coords_and_atomic_numbers(
+                torch.zeros(2, 3), torch.tensor([6, 8])
+            ),
+        ],
+        ids=["init", "from_coords_and_names", "from_coords_and_atomic_numbers"],
+    )
+    def test_construction_warns_at_caller(self, construct):
+        with pytest.warns(FutureWarning, match="AtomStack is deprecated") as record:
+            construct()
+        assert len(record) == 1
+        assert record[0].filename == __file__
+
+    def test_matches_atomic_structure_replacement(self):
+        coords = torch.tensor([[0.0, 0.0, 0.0], [1.5, 0.3, -0.7], [-1.2, 2.0, 0.5]])
+        numbers = torch.tensor([6, 7, 8])
+        grid3d = GridConfig.from_voxel_size_and_corner_points(
+            voxel_size=(1.0, 1.0, 1.0),
+            left_bottom_point=(-5.0, -5.0, -5.0),
+            right_upper_point=(5.0, 5.0, 5.0),
+            sublattice_radius=5.0,
+        )
+        stack = AtomStack.from_coords_and_atomic_numbers(
+            coords, numbers, atom_bfactors=20.0
+        )
+
+        structure = AtomicStructure.from_atomic_numbers(coords, numbers, b_factors=20.0)
+
+        assert torch.equal(
+            stack.to_scattering_potential_3d(grid3d),
+            potential_from_structure_3d(structure, grid3d),
+        )
 
 
 class TestAtomStackConstruction:

@@ -120,6 +120,77 @@ def test_from_dataframe_validates_columns_and_elements():
         )
 
 
+def test_from_atomic_numbers_derives_elements_and_defaults():
+    positions = torch.tensor([[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]], requires_grad=True)
+
+    structure = AtomicStructure.from_atomic_numbers(positions, [6, 26])
+
+    assert structure.positions_zyx is positions
+    assert structure.atomic_numbers.dtype == torch.int64
+    assert structure.atomic_numbers.tolist() == [6, 26]
+    assert structure.elements == ("C", "FE")
+    assert structure.atom_names == ("", "")
+    assert structure.b_factors.shape == ()
+    assert structure.b_factors.item() == 0.0
+    assert structure.occupancies.item() == 1.0
+    assert structure.bonded_environments is None
+
+
+def test_from_atomic_numbers_matches_from_dataframe():
+    df = pd.DataFrame(
+        {
+            "x": [1.0, 4.0],
+            "y": [2.0, 5.0],
+            "z": [3.0, 6.0],
+            "element": ["C", "Fe"],
+            "atom": ["CA", "FE"],
+            "b_isotropic": [10.0, 20.0],
+            "occupancy": [1.0, 0.5],
+        }
+    )
+    expected = AtomicStructure.from_dataframe(df)
+
+    structure = AtomicStructure.from_atomic_numbers(
+        torch.tensor([[3.0, 2.0, 1.0], [6.0, 5.0, 4.0]]),
+        torch.tensor([6, 26]),
+        b_factors=torch.tensor([10.0, 20.0]),
+        occupancies=torch.tensor([1.0, 0.5]),
+        atom_names=["CA", "FE"],
+    )
+
+    for name in ("positions_zyx", "atomic_numbers", "b_factors", "occupancies"):
+        assert torch.equal(getattr(structure, name), getattr(expected, name)), name
+    assert structure.elements == expected.elements
+    assert structure.atom_names == expected.atom_names
+
+
+def test_from_atomic_numbers_supports_batched_positions_and_dtype():
+    positions = torch.zeros(4, 3, 3, dtype=torch.float64)
+
+    structure = AtomicStructure.from_atomic_numbers(
+        positions,
+        torch.tensor([1, 7, 8]),
+        b_factors=torch.tensor([5.0, 6.0, 7.0]),
+        occupancies=0.5,
+        device="cpu",
+    )
+
+    assert structure.batch_shape == (4,)
+    assert structure.positions_zyx.dtype == torch.float64
+    assert structure.b_factors.dtype == torch.float64
+    assert structure.occupancies.dtype == torch.float64
+
+
+def test_from_atomic_numbers_validates_atomic_numbers():
+    positions = torch.zeros(2, 3)
+    with pytest.raises(ValueError, match="unknown atomic numbers"):
+        AtomicStructure.from_atomic_numbers(positions, [6, 0])
+    with pytest.raises(ValueError, match="shape \\(n_atoms,\\)"):
+        AtomicStructure.from_atomic_numbers(positions, torch.ones(2, 2, dtype=int))
+    with pytest.raises(ValueError, match="atomic_numbers"):
+        AtomicStructure.from_atomic_numbers(positions, [6, 7, 8])
+
+
 def test_from_annotated_dataframe_adds_bonding_metadata():
     df = pd.DataFrame(
         [
