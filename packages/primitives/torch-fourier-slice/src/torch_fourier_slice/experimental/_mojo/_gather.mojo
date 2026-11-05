@@ -13,7 +13,15 @@ from std.math import floor
 
 from layout import TensorLayout, TileTensor
 
-from _common import C2, CUBIC, _cubic_kernel, _load_c2, _load_c2_line
+from _common import (
+    C2,
+    CUBIC,
+    _cubic_kernel,
+    _in_nyquist_cube,
+    _load_c2,
+    _load_c2_line,
+    _rfft_voxel,
+)
 
 
 @always_inline
@@ -25,36 +33,17 @@ def _sample_rfft_3d[
     y_in: Int,
     x_in: Int,
 ) -> C2:
-    """Sample a complex voxel with Friedel symmetry; out-of-range voxels read as 0.
-    Negative kx (x < 0) is folded onto positive kx with conjugation. Zero-padding
-    beyond the grid is the exact read-side mirror of `_accumulate_3d` (which
-    discards such corners), so every gather is the exact adjoint of the scatter;
-    it also matches the canonical layer's zero-padding.
+    """Read the DFT value at an integer frequency from the rfft volume.
+
+    Frequencies past the stored grid are read periodically and negative kx is
+    folded onto the stored half with conjugation (`_rfft_voxel`), so a stencil
+    reaching past the edge reads the true neighbour values. The read-side mirror
+    of `_accumulate_3d`, so every gather is the exact adjoint of the scatter.
     """
     comptime assert rec.flat_rank == 4, "volume view must be 4D [d, h, w, 2]"
-    var sidelength = Int(rec.dim[0]())
-    var sidelength_half = Int(rec.dim[2]())
-    var z = z_in
-    var y = y_in
-    var x = x_in
-    var need_conj = False
-    if x < 0:
-        x = -x
-        y = -y
-        z = -z
-        need_conj = True
-    if x >= sidelength_half:
-        return C2(0.0, 0.0)
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo or z > hi or z < lo:
-        return C2(0.0, 0.0)
-    var y_eff = sidelength + y if y < 0 else y
-    var z_eff = sidelength + z if z < 0 else z
-    if y_eff >= sidelength or z_eff >= sidelength:
-        return C2(0.0, 0.0)
-    var v = _load_c2(rec, z_eff, y_eff, x)
-    return C2(v[0], -v[1]) if need_conj else v
+    var v = _rfft_voxel(z_in, y_in, x_in, Int(rec.dim[0]()))
+    var val = _load_c2(rec, v.z, v.y, v.x)
+    return C2(val[0], -val[1]) if v.conj else val
 
 
 @always_inline
@@ -135,7 +124,11 @@ def _interp3d[
     kx: Float32,
 ) -> C2:
     """Interpolate the rfft volume (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
+
+    Points outside the Nyquist cube read as 0.
     """
+    if not _in_nyquist_cube(kz, ky, kx, Int(rec.dim[0]())):
+        return C2(0.0, 0.0)
     comptime if interp == CUBIC:
         return _interp3d_cubic(rec, kz, ky, kx)
     return _interp3d_linear(rec, kz, ky, kx)
@@ -153,31 +146,15 @@ def _interp3d[
 def _sample_rfft_2d[
     L: TensorLayout
 ](img: TileTensor[DType.float32, L, MutAnyOrigin], y_in: Int, x_in: Int,) -> C2:
-    """Sample a 2D rfft pixel with Friedel symmetry; out-of-range pixels read as 0.
+    """Read the DFT value at an integer frequency from the rfft image.
+
     The 2D analogue of `_sample_rfft_3d`: the exact read-side mirror of the
     2D scatter, so gather and scatter are exact adjoints.
     """
     comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
-    var sidelength = Int(img.dim[0]())
-    var sidelength_half = Int(img.dim[1]())
-    var y = y_in
-    var x = x_in
-    var need_conj = False
-    if x < 0:
-        x = -x
-        y = -y
-        need_conj = True
-    if x >= sidelength_half:
-        return C2(0.0, 0.0)
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo:
-        return C2(0.0, 0.0)
-    var y_eff = sidelength + y if y < 0 else y
-    if y_eff >= sidelength:
-        return C2(0.0, 0.0)
-    var v = _load_c2_line(img, y_eff, x)
-    return C2(v[0], -v[1]) if need_conj else v
+    var v = _rfft_voxel(0, y_in, x_in, Int(img.dim[0]()))
+    var val = _load_c2_line(img, v.y, v.x)
+    return C2(val[0], -val[1]) if v.conj else val
 
 
 @always_inline
@@ -237,7 +214,11 @@ def _interp2d[
     kx: Float32,
 ) -> C2:
     """Interpolate the rfft image (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
+
+    Points outside the Nyquist square read as 0.
     """
+    if not _in_nyquist_cube(0.0, ky, kx, Int(img.dim[0]())):
+        return C2(0.0, 0.0)
     comptime if interp == CUBIC:
         return _interp2d_cubic(img, ky, kx)
     return _interp2d_linear(img, ky, kx)

@@ -3,7 +3,11 @@ import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid, transform_fftfreq_grid
 from torch_image_interpolation import sample_image_2d, sample_image_3d
 
-from .._dft_utils import _fftfreq_to_dft_coordinates, _rfft_full_width
+from .._dft_utils import (
+    _fftfreq_to_dft_coordinates,
+    _resample_rfft_edge,
+    _rfft_full_width,
+)
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -244,12 +248,19 @@ def extract_central_slices_rfft_3d(
     )
 
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
+    dft_coords = _fftfreq_to_dft_coordinates(
         frequencies=rotated_coords, image_shape=volume_shape, rfft=True
     )
     samples = sample_image_3d(
-        image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
+        image=volume_rfft, coordinates=dft_coords, interpolation="trilinear"
     )  # (...) rfft
+
+    # the interpolator zeroes points whose stencil leaves the stored array, read
+    # those periodically instead (e.g. next to the Nyquist plane, which an
+    # fftshifted DFT stores only at -n/2)
+    samples = _resample_rfft_edge(
+        samples, volume_rfft, rotated_coords, dft_coords, volume_shape
+    )
 
     # take complex conjugate of values from redundant half transform
     samples[conjugate_mask] = torch.conj(samples[conjugate_mask])
@@ -427,12 +438,19 @@ def extract_central_slices_rfft_3d_multichannel(
     )
 
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
+    dft_coords = _fftfreq_to_dft_coordinates(
         frequencies=rotated_coords, image_shape=volume_shape, rfft=True
     )
     samples = sample_image_3d(
-        image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
+        image=volume_rfft, coordinates=dft_coords, interpolation="trilinear"
     )  # shape is (..., hw, c)
+
+    # the interpolator zeroes points whose stencil leaves the stored array, read
+    # those periodically instead (e.g. next to the Nyquist plane, which an
+    # fftshifted DFT stores only at -n/2)
+    samples = _resample_rfft_edge(
+        samples, volume_rfft, rotated_coords, dft_coords, volume_shape
+    )
 
     # take complex conjugate of values from redundant half transform
     samples[conjugate_mask] = torch.conj(samples[conjugate_mask])
