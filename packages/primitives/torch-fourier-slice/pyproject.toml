@@ -48,8 +48,8 @@ dependencies = [
     "torch",
     "numpy",
     "einops",
-    "torch_image_interpolation>=0.0.7",
-    "torch_grid_utils>=0.0.8",
+    "torch_image_interpolation",
+    "torch_grid_utils",
     "torch-ctf",
 ]
 
