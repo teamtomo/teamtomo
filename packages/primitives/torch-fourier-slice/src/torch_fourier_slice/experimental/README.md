@@ -412,5 +412,18 @@ slices = extract_central_slices_rfft_3d(rfft.contiguous(), rotations)
 slices = torch.fft.fftshift(slices, dim=-2)             # back to teamtomo layout
 ```
 
-Within the Nyquist band the two are identical (bit-exact for non-interpolating
-rotations); both zero-pad out-of-range samples, so results agree to interpolation precision.
+The two backends sample the DFT by the same rules, so they agree to float precision
+everywhere, the Nyquist edge included:
+
+- an interpolation stencil that reaches past the stored rfft reads it periodically
+  (the DFT of a sampled volume repeats every `n` samples), and negative kx as the
+  conjugate at `-k`. For even `n` this fills in the Nyquist plane, which each layout
+  stores on one side only (`+n/2` with DC at the origin, `-n/2` when fftshifted);
+- sample points outside the Nyquist box (`|k_i| > n/2` on any axis) read as 0, or
+  are dropped when backprojecting;
+- for even `n` the slice's own Nyquist row samples frequency `-n/2`, as in
+  `torch.fft.fftfreq`.
+
+Backprojections differ only in the Friedel bookkeeping of self-conjugate voxels on
+the kx = 0 plane (DC and, for even `n`, the Nyquist voxels). The reconstructions,
+after dividing by the weights, are the same.

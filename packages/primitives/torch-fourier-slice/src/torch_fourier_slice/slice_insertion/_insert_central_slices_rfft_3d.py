@@ -2,7 +2,7 @@ import einops
 import torch
 from torch_grid_utils.fftfreq_grid import rfft_shape
 
-from .._dft_utils import _fftfreq_to_dft_coordinates
+from .._dft_utils import _fftfreq_to_dft_coordinates, _in_nyquist_box
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -121,6 +121,7 @@ def insert_central_slices_rfft_3d(
         values=valid_data,
         coordinates=rotated_coordinates,
         image=dft_3d,
+        volume_shape=volume_shape,
         weights=weights,
     )
     return dft_3d, weights
@@ -245,6 +246,7 @@ def insert_central_slices_rfft_3d_multichannel(
         values=valid_data,
         coordinates=rotated_coordinates,
         image=dft_3d,
+        volume_shape=volume_shape,
         weights=weights,
     )
     return dft_3d, weights
@@ -254,6 +256,7 @@ def _insert_into_3d_dft(
     values: torch.Tensor,
     coordinates: torch.Tensor,
     image: torch.Tensor,
+    volume_shape: tuple[int, int, int],
     weights: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert values into a 3D image using trilinear interpolation.
@@ -268,8 +271,10 @@ def _insert_into_3d_dft(
         dimensions respectively.
         - Coordinates span the range `[0, N-1]` for a dimension of length N.
     image: torch.Tensor
-        `(d, h, w)` or `(c, d, h, w)` array containing the image into which data will
-        be inserted.
+        `(d, h, w)` or `(c, d, h, w)` fftshifted rfft into which data will be
+        inserted.
+    volume_shape: tuple[int, int, int]
+        Real space shape of the volume `image` is the rfft of.
     weights: torch.Tensor | None
         `(d, h, w)` array containing weights associated with each voxel in `image`.
         This is useful for tracking weights across multiple calls to this function.
@@ -307,15 +312,25 @@ def _insert_into_3d_dft(
     coordinates, _ = einops.pack([coordinates], pattern="* zyx")
     coordinates = coordinates.float()
 
-    # only keep data and coordinates inside the image
-    image_shape = torch.tensor((d, h, w), device=image.device, dtype=torch.float32)
-    upper_bound = image_shape - 1
-    idx_inside = (coordinates >= 0) & (coordinates <= upper_bound)
-    idx_inside = torch.all(idx_inside, dim=-1)
-    values, coordinates = values[idx_inside], coordinates[idx_inside]
-
     # splat data onto grid using trilinear interpolation
-    image, weights = _insert_into_3d_dft_linear(values, coordinates, image, weights)
+    upper_bound = torch.tensor((d, h, w), device=image.device) - 1
+    in_array = torch.all((coordinates >= 0) & (coordinates <= upper_bound), dim=-1)
+    image, weights = _insert_into_3d_dft_linear(
+        values[in_array], coordinates[in_array], image, weights
+    )
+
+    # Points past the stored array but inside the Nyquist box (e.g. next to the
+    # Nyquist plane, which an fftshifted DFT stores only at -n/2) are splatted with
+    # their corners wrapped periodically back onto it. Points outside the box are
+    # dropped.
+    shape = torch.tensor(volume_shape, device=image.device, dtype=torch.float32)
+    dc_index = torch.div(shape, 2, rounding_mode="floor")
+    dc_index[-1] = 0
+    edge = torch.nonzero(~in_array).squeeze(-1)
+    edge = edge[_in_nyquist_box((coordinates[edge] - dc_index) / shape, volume_shape)]
+    image, weights = _insert_into_3d_dft_linear(
+        values[edge], coordinates[edge], image, weights, wrap_shape=volume_shape
+    )
 
     # ensure correct output image shape
     # single channel input -> (d, h, w)
@@ -331,7 +346,10 @@ def _insert_into_3d_dft_linear(
     coordinates: torch.Tensor,  # (b, zyx)
     image: torch.Tensor,  # (c, d, h, w)
     weights: torch.Tensor,  # (d, h, w)
+    wrap_shape: tuple[int, int, int] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
+    # wrap_shape: real space shape of the volume, to wrap corners which fall past
+    # the stored array periodically back onto it. None if all corners are inside.
     # b is number of data points to insert per channel, c is number of channels
     b, c = data.shape
 
@@ -353,6 +371,22 @@ def _insert_into_3d_dft_linear(
     idx_z[:, 1, 0, 1], idx_y[:, 1, 0, 1], idx_x[:, 1, 0, 1] = z1, y0, x1  # C101
     idx_z[:, 1, 1, 0], idx_y[:, 1, 1, 0], idx_x[:, 1, 1, 0] = z1, y1, x0  # C110
     idx_z[:, 1, 1, 1], idx_y[:, 1, 1, 1], idx_x[:, 1, 1, 1] = z1, y1, x1  # C111
+
+    # The DFT is periodic, so a corner past the stored array is the stored voxel one
+    # period away. The rfft x index is the frequency itself: wrap it into one period,
+    # and store negative x frequencies as the conjugate at -k. Full dims are
+    # fftshifted, so -k sits at 2 * (n // 2) - i.
+    corner_conj = None
+    if wrap_shape is not None:
+        n_z, n_y, n_x = wrap_shape
+        x_min = n_x // 2 - n_x + 1
+        idx_x = torch.remainder(idx_x - x_min, n_x) + x_min
+        corner_conj = idx_x < 0
+        idx_x = idx_x.abs()
+        idx_z = torch.where(corner_conj, 2 * (n_z // 2) - idx_z, idx_z)
+        idx_y = torch.where(corner_conj, 2 * (n_y // 2) - idx_y, idx_y)
+        idx_z = torch.remainder(idx_z, n_z)
+        idx_y = torch.remainder(idx_y, n_y)
 
     # calculate trilinear interpolation weights for each corner
     z, y, x = coordinates
@@ -378,9 +412,13 @@ def _insert_into_3d_dft_linear(
     # insert weighted data and weight values at each corner
     data = einops.rearrange(data, "b c -> b c 1 1 1")
     w = einops.rearrange(w, "b z y x -> b 1 z y x")
+    corner_values = data * w.to(data.dtype)
+    if corner_conj is not None:
+        corner_conj = einops.rearrange(corner_conj, "b z y x -> b 1 z y x")
+        corner_values = torch.where(corner_conj, corner_values.conj(), corner_values)
     image.index_put_(
         indices=(idx_c, idx_z, idx_y, idx_x),
-        values=data * w.to(data.dtype),
+        values=corner_values,
         accumulate=True,
     )
     weights.index_put_(indices=(idx_z, idx_y, idx_x), values=w, accumulate=True)
@@ -394,10 +432,11 @@ def _insert_into_3d_dft_linear(
     x0_mask = idx_x == 0  # (b, 1, 2, 2, 2) boolean mask
 
     if torch.any(x0_mask):
-        # Calculate mirrored indices for Friedel symmetry
-        # Mirror: (z, y, 0) -> ((d - z) % d, (d - y) % d, 0)
-        idx_z_mirror = (d - idx_z) % d
-        idx_y_mirror = (h - idx_y) % h
+        # Calculate mirrored indices for Friedel symmetry about DC at (d//2, h//2)
+        # Mirror: (z, y, 0) -> ((2 * (d//2) - z) % d, (2 * (h//2) - y) % h, 0)
+        # For even sizes this is (d - z) % d, for odd sizes d - 1 - z
+        idx_z_mirror = (2 * (d // 2) - idx_z) % d
+        idx_y_mirror = (2 * (h // 2) - idx_y) % h
 
         # Only insert conjugate at mirrored positions when original is at x=0
         # Exclude the origin (d//2, h//2, 0) to avoid double insertion at DC

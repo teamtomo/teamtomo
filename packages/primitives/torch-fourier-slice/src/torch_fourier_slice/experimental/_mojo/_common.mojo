@@ -465,8 +465,114 @@ def _atomic_add_at[
 
 @always_inline
 def _fourier_coord(i: Int, n: Int) -> Float32:
-    """rfft frequency for array index `i` (DC at 0): positive then negative."""
-    return Float32(i) if i <= n // 2 else Float32(i - n)
+    """rfft frequency for array index `i` (DC at 0): positive then negative.
+
+    Matches `torch.fft.fftfreq`, so for even `n` the Nyquist row `i = n // 2` is
+    `-n/2`, as in the torch backend. In the image's own DFT `+n/2` is the same row,
+    but once the slice is rotated the two lie a full period apart along a rotated
+    axis and sample different points of the volume, so the backends must agree.
+    """
+    return Float32(i) if i <= (n - 1) // 2 else Float32(i - n)
+
+
+# Sample points further than this past the Nyquist cube read as 0 / are dropped. A
+# small tolerance (in voxels) so rounding in the rotation doesn't drop points that
+# lie exactly on the Nyquist plane, e.g. under a float32 90 degree rotation.
+comptime NYQUIST_TOLERANCE: Float32 = 1e-3
+
+
+@always_inline
+def _in_nyquist_cube(kz: Float32, ky: Float32, kx: Float32, n: Int) -> Bool:
+    """Whether a sample coordinate lies inside the Nyquist cube `|k_i| <= n / 2`.
+
+    Points outside it are past the sampled band and read as 0 (gather) or are
+    dropped (scatter). Inside it, the stencil reads the DFT periodically (see
+    `_rfft_voxel`), so neighbours past the stored grid hold their true values.
+    For a 2D image pass `kz = 0`.
+    """
+    var edge = Float32(n) * 0.5 + NYQUIST_TOLERANCE
+    return abs(kz) <= edge and abs(ky) <= edge and abs(kx) <= edge
+
+
+@always_inline
+def _wrap_frequency(i: Int, n: Int) -> Int:
+    """Periodic image of DFT frequency `i` in the stored range `[n//2 - n + 1, n//2]`.
+
+    The DFT of a sampled volume repeats every `n`, so a frequency past the stored
+    grid has the value of the stored one `n` away. For even `n` this maps `-n/2`
+    onto the Nyquist plane `+n/2`, which the grid only stores once.
+
+    Only valid within two periods of the stored range. Stencil neighbours of points
+    inside the Nyquist cube are at most 3 voxels past it, so that's enough for any
+    cube edge `n >= 2`. Branch-free selects rather than `%` or loops, which cost a
+    lot in the 64-voxel cubic stencil.
+    """
+    var hi = n // 2
+    var lo = hi - n + 1
+    var r = i - n if i > hi else i
+    r = r - n if r > hi else r
+    r = r + n if r < lo else r
+    return r + n if r < lo else r
+
+
+@fieldwise_init
+struct RfftVoxel(Copyable, Movable):
+    """Where the DFT value at an integer frequency is stored in an rfft volume.
+
+    `(z, y)` are array indices (DC at 0), `x` is the rfft index, and `conj` says
+    the stored value is the conjugate of the requested one (Hermitian symmetry).
+    """
+
+    var z: Int
+    var y: Int
+    var x: Int
+    var conj: Bool
+
+
+@no_inline
+def _rfft_voxel_wrapped(
+    z_in: Int, y_in: Int, x_in: Int, conj_in: Bool, n: Int
+) -> RfftVoxel:
+    """Slow path of `_rfft_voxel` for a voxel past the stored grid (`x_in >= 0`).
+
+    Kept out of line so the inlined fast path stays small: the 64-voxel cubic
+    stencil inlines `_rfft_voxel` 64 times and almost never takes this path.
+    """
+    var z = z_in
+    var y = y_in
+    var x = _wrap_frequency(x_in, n)
+    var conj = conj_in
+    if x < 0:
+        x = -x
+        y = -y
+        z = -z
+        conj = not conj
+    z = _wrap_frequency(z, n)
+    y = _wrap_frequency(y, n)
+    return RfftVoxel(n + z if z < 0 else z, n + y if y < 0 else y, x, conj)
+
+
+@always_inline
+def _rfft_voxel(z_in: Int, y_in: Int, x_in: Int, n: Int) -> RfftVoxel:
+    """Stored rfft voxel for DFT frequency `(z, y, x)` of a cube with edge `n`.
+
+    A negative `x` is folded onto the stored half by Hermitian symmetry,
+    `V(z, y, x) = conj(V(-z, -y, -x))`, then each frequency is wrapped periodically
+    into the stored range, folding again if `x` wrapped negative. Every integer
+    frequency maps to a stored voxel, so the stencil never reads or writes outside
+    the grid. Folding before wrapping stores `x = -n/2` as the conjugate at
+    `(-z, -y, +n/2)`, as the torch backend (which flips whole points) does. For a 2D
+    image pass `z_in = 0`.
+    """
+    var conj = x_in < 0
+    var x = -x_in if conj else x_in
+    var y = -y_in if conj else y_in
+    var z = -z_in if conj else z_in
+    var hi = n // 2
+    var lo = hi - n + 1
+    if x > hi or y < lo or y > hi or z < lo or z > hi:
+        return _rfft_voxel_wrapped(z, y, x, conj, n)
+    return RfftVoxel(n + z if z < 0 else z, n + y if y < 0 else y, x, conj)
 
 
 @always_inline
