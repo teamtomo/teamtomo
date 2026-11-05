@@ -578,9 +578,9 @@ def _insert_backward_taps[
         var gi = grad_img.unsafe_load[width=W](offset=base + st.offset[i]() * W)
         acc += gi * SIMD[DType.float32, W](st.weight[i]())
         comptime if grad_coords_needed:
-            var giv = (gi * v).reduce_add()
+            var gi_dot_v = (gi * v).reduce_add()
             comptime for a in range(ndim):
-                gc[a] += giv * st.dweight[i, a]()
+                gc[a] += gi_dot_v * st.dweight[i, a]()
     comptime if grad_values_needed:
         grad_values.unsafe_store(offset=vo, val=acc)
 
