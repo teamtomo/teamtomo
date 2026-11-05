@@ -54,9 +54,11 @@ def _project(
     volume_rfft = torch.fft.rfftn(
         torch.fft.fftshift(volume, dim=(-3, -2, -1)), dim=(-3, -2, -1)
     )
+    # the rfft layer takes the inverse (image -> volume) rotation of the active
+    # rotation the real-space layer accepts
     slices = extract_fn(
         volume_rfft.contiguous(),
-        rotations,
+        rotations.transpose(-1, -2),
         shifts_3d=shifts_3d,
         shifts_2d=shifts_2d,
         fourier_radius_cutoff=fourier_radius_cutoff,
@@ -89,7 +91,12 @@ def project_3d_to_2d(
         Real cubic volume ``(d, d, d)`` with an even side length. Its device
         selects the CPU/GPU backend.
     rotations : torch.Tensor
-        Real ``(3, 3)`` or ``(bp, 3, 3)`` **zyx** rotation matrices.
+        Real ``(3, 3)`` or ``(bp, 3, 3)`` **zyx** rotation matrices. Each image
+        is a projection along z of the volume rotated by its matrix (an active
+        rotation), the same convention as
+        :func:`torch_fourier_slice.project_3d_to_2d`. These are the transpose of
+        the matrices :func:`.extract_central_slices_rfft_3d` takes for the same
+        image.
     shifts_3d : torch.Tensor | None
         Optional ``(..., bp, 3)`` zyx shifts in the volume frame, applied before
         the rotation.
