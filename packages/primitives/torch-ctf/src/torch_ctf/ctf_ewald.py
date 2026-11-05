@@ -106,7 +106,10 @@ def calculate_ctfp_and_ctfq_2d(
     -----
     Same sign convention as :func:`calculate_ctf_2d`: ``(ctfp + ctfq) / 2`` is
     the real CTF, so positive potential at underfocus gives a dark image. ``ctfp``
-    and ``ctfq`` are the negatives of RELION's CTFP and CTFQ.
+    and ``ctfq`` are the negatives of RELION's CTFP and CTFQ. In terms of the
+    complex CTF ``H`` from ``calculate_ctf_2d(..., return_complex_ctf=True)``,
+    ``ctfq = i H(k)`` and ``ctfp = -i conj(H(-k))`` (away from the ``kx = 0``
+    column, where Friedel symmetry is enforced).
 
     Changed in 0.7.0: ``ctfp`` and ``ctfq`` used to have the opposite sign.
     Multiply both by -1 to reproduce earlier results.

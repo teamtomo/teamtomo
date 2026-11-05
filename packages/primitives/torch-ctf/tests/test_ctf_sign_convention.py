@@ -154,8 +154,34 @@ def test_complex_ctf_dc():
         fftshift=False,
         return_complex_ctf=True,
     )
-    assert ctf_c[0, 0].imag.item() == pytest.approx(-0.07, abs=1e-6)
+    assert -ctf_c[0, 0].imag.item() == pytest.approx(-0.07, abs=1e-6)
     assert ctf_c[0, 0].real.item() == pytest.approx(math.sqrt(1 - 0.07**2), abs=1e-6)
+
+
+def test_complex_ctf_exit_wave_is_dark_at_underfocus():
+    """The complex CTF applied to an exit wave exp(+i sigma V) gives a dark blob."""
+    size, sigma = 129, 6.0
+    coords = torch.arange(size) - size // 2
+    yy, xx = torch.meshgrid(coords, coords, indexing="ij")
+    potential = torch.exp(-(xx**2 + yy**2) / (2 * sigma**2))
+    exit_wave = torch.exp(1j * 0.05 * torch.fft.ifftshift(potential))
+
+    ctf_c = calculate_ctf_2d(
+        defocus=1.0,
+        astigmatism=0.0,
+        astigmatism_angle=0.0,
+        voltage=300.0,
+        spherical_aberration=2.7,
+        amplitude_contrast=0.0,
+        phase_shift=0.0,
+        pixel_size=1.0,
+        image_shape=(size, size),
+        rfft=False,
+        fftshift=False,
+        return_complex_ctf=True,
+    )
+    image = torch.fft.ifftn(torch.fft.fftn(exit_wave) * ctf_c).abs() ** 2
+    assert image[0, 0] < image[size // 2, size // 2]  # centre vs background
 
 
 @pytest.mark.parametrize(
@@ -167,7 +193,10 @@ def test_complex_ctf_dc():
     ],
 )
 def test_complex_ctf_consistent_with_real_ctf(odd_aberrations):
-    """ctf(k) = (H(k) - conj(H(-k))) / 2i for complex CTF H, odd terms included."""
+    """ctf(k) = i (H(k) - conj(H(-k))) / 2 for complex CTF H, odd terms included.
+
+    This is the weak-phase transfer of an exit wave exp(+i sigma V) through H.
+    """
     kwargs = {
         **ISSUE_PARAMS,
         "astigmatism": 0.2,
@@ -180,12 +209,12 @@ def test_complex_ctf_consistent_with_real_ctf(odd_aberrations):
     }
     ctf = calculate_ctf_2d(**kwargs)
     ctf_c = calculate_ctf_2d(**kwargs, return_complex_ctf=True)
-    from_complex = (ctf_c - _negate_frequency(ctf_c).conj()) / 2j
+    from_complex = 1j * (ctf_c - _negate_frequency(ctf_c).conj()) / 2
     assert torch.allclose(
         torch.as_tensor(ctf, dtype=from_complex.dtype), from_complex, atol=1e-5
     )
     if not odd_aberrations:
-        assert torch.allclose(ctf_c.imag, ctf, atol=1e-6)
+        assert torch.allclose(-ctf_c.imag, ctf, atol=1e-6)
 
 
 def test_odd_aberrations_keep_relion_phase_factor():
@@ -261,6 +290,28 @@ def test_ewald_matches_ctf_2d_with_beam_tilt():
     ctf = calculate_ctf_2d(**kwargs)
     # _enforce_symmetry edits the kx = 0 column, so compare elsewhere
     assert torch.allclose(((ctfp + ctfq) / 2)[:, 1:], ctf[:, 1:], atol=1e-5)
+
+
+def test_ewald_ctfp_ctfq_from_complex_ctf():
+    """ctfq = i H(k) and ctfp = -i conj(H(-k)), odd aberrations included."""
+    kwargs = {
+        **ISSUE_PARAMS,
+        "astigmatism": 0.2,
+        "astigmatism_angle": 30.0,
+        "pixel_size": 2.0,
+        "image_shape": (11, 11),
+        "fftshift": False,
+        "beam_tilt_mrad": torch.tensor([[1.0, -2.0]]),
+    }
+    ctfp, ctfq = calculate_ctfp_and_ctfq_2d(**kwargs, rfft=True)
+    ctf_c = calculate_ctf_2d(**kwargs, rfft=False, return_complex_ctf=True)
+
+    n_rfft = ctfp.shape[-1]
+    expected_q = (1j * ctf_c)[:, :n_rfft]
+    expected_p = (-1j * _negate_frequency(ctf_c).conj())[:, :n_rfft]
+    # _enforce_symmetry edits the kx = 0 column, so compare elsewhere
+    assert torch.allclose(ctfq[:, 1:], expected_q[:, 1:], atol=1e-5)
+    assert torch.allclose(ctfp[:, 1:], expected_p[:, 1:], atol=1e-5)
 
 
 def test_lpp_ctf_is_dark_at_low_frequency():

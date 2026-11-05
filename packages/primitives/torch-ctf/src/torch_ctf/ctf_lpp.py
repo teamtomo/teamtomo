@@ -626,8 +626,8 @@ def calc_LPP_ctf_2D(
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
     return_complex_ctf: bool = False,
-        Whether to return the complex CTF e^(i*chi), where chi includes the
-        antisymmetric phase.
+        Whether to return the complex CTF ``exp(-i (chi_s - chi_a))``, the wave
+        aberration function to apply to an exit wave ``exp(+i sigma V)``.
 
     Returns
     -------
@@ -639,8 +639,9 @@ def calc_LPP_ctf_2D(
     Same sign convention as :func:`calculate_ctf_2d`: positive electrostatic
     potential multiplied by the CTF at underfocus gives a dark image.
 
-    Changed in 0.7.0: the CTF used to have the opposite sign. Multiply by -1 to
-    reproduce earlier results, or take the complex conjugate of the complex CTF.
+    Changed in 0.7.0: the real CTF used to have the opposite sign. Multiply by -1
+    to reproduce earlier results. The complex CTF is unchanged without odd
+    aberrations; with them it used to be ``exp(-i (chi_s + chi_a))``.
     """
     (
         defocus,

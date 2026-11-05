@@ -36,8 +36,8 @@ Every CTF in the package follows it:
 | Function | Output |
 | --- | --- |
 | `calculate_ctf_1d`, `calculate_ctf_2d`, `calc_LPP_ctf_2D` | `sin(chi_s)`, times `exp(i chi_a)` when beam tilt or odd Zernikes are given |
-| `return_complex_ctf=True` | `H = exp(i chi)` with `chi = chi_s + chi_a`. The real CTF is `(H(k) - conj(H(-k))) / 2i`, which is `imag(H)` without odd aberrations |
-| `calculate_ctfp_and_ctfq_2d` | `ctfp = sin(chi_s) - i cos(chi_s)` and `ctfq = sin(chi_s) + i cos(chi_s)`, both times `exp(i chi_a)`. `(ctfp + ctfq) / 2` is the real CTF |
+| `return_complex_ctf=True` | `H = exp(-i (chi_s - chi_a))`, the wave aberration function. Applied to an exit wave `exp(+i sigma V)` (multislice simulation, Ewald sphere correction) it gives dark particles at underfocus. The real CTF is `i (H(k) - conj(H(-k))) / 2`, which is `-imag(H)` without odd aberrations |
+| `calculate_ctfp_and_ctfq_2d` | `ctfp = sin(chi_s) - i cos(chi_s)` and `ctfq = sin(chi_s) + i cos(chi_s)`, both times `exp(i chi_a)`. `(ctfp + ctfq) / 2` is the real CTF, `ctfq = i H(k)` and `ctfp = -i conj(H(-k))` |
 | `calculate_ctf_thickness_*` with `return_power_spectrum=False` | the CTF times `sinc(pi * lambda * k^2 * t / 2)`, so equal to the CTF at zero thickness |
 | `calculate_ctf_thickness_*` with `return_power_spectrum=True` | not affected by the sign |
 
@@ -54,13 +54,15 @@ earlier results:
 
 ```python
 ctf = -calculate_ctf_2d(...)  # also for calculate_ctf_1d and calc_LPP_ctf_2D
-ctf_complex = calculate_ctf_2d(..., return_complex_ctf=True).conj()
 ctfp, ctfq = calculate_ctfp_and_ctfq_2d(...)
 ctfp, ctfq = -ctfp, -ctfq
 ```
 
-The thickness amplitude CTF already used the new sign and has not changed; it now
-agrees with `calculate_ctf_1d` and `calculate_ctf_2d`. The phase helpers
+The complex CTF (`return_complex_ctf=True`) already gave dark particles and is
+unchanged without odd aberrations. With beam tilt or odd Zernikes it used to be
+`exp(-i (chi_s + chi_a))`; the odd phase now has the sign that matches the real
+CTF and `ctfp`/`ctfq`. The thickness amplitude CTF already used the new sign and
+has not changed; it now agrees with `calculate_ctf_1d` and `calculate_ctf_2d`. The phase helpers
 (`calculate_total_phase_shift`, `calculate_defocus_phase_aberration`, the Zernike
 functions) are unchanged. If you multiplied projections by -1 before applying the
 CTF to get dark particles, drop that flip.

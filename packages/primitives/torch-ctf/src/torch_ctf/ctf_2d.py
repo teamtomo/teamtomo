@@ -71,8 +71,9 @@ def calculate_ctf_2d(
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
     return_complex_ctf : bool
-        Whether to return the complex CTF e^(i chi), where chi includes the
-        antisymmetric phase.
+        Whether to return the complex CTF ``exp(-i (chi_s - chi_a))``, the wave
+        aberration function to apply to an exit wave ``exp(+i sigma V)``, e.g. for
+        multislice simulation or Ewald sphere correction.
 
     Returns
     -------
@@ -91,9 +92,14 @@ def calculate_ctf_2d(
     particles. Odd aberrations multiply the real CTF by ``exp(i chi_a)``, as in
     RELION.
 
-    Changed in 0.7.0: the CTF used to be ``-sin(chi)`` (``+amplitude_contrast``
-    at zero frequency). Multiply by -1 to reproduce earlier results. The complex
-    CTF used to be ``exp(-i chi)``; take the complex conjugate to reproduce it.
+    The complex CTF ``H`` gives a dark image of positive potential at underfocus
+    when applied to an exit wave ``exp(+i sigma V)``. The real CTF is
+    ``i (H(k) - conj(H(-k))) / 2``, which is ``-imag(H)`` without odd aberrations.
+
+    Changed in 0.7.0: the real CTF used to be ``-sin(chi)``
+    (``+amplitude_contrast`` at zero frequency). Multiply by -1 to reproduce
+    earlier results. The complex CTF is unchanged without odd aberrations; with
+    them it used to be ``exp(-i (chi_s + chi_a))``.
     """
     (
         defocus,

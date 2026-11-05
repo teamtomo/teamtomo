@@ -621,7 +621,7 @@ def test_2d_ctf_with_beam_tilt_only():
 
 
 def test_calculate_ctf_2d_return_complex_ctf_symmetric_path():
-    """e^(i*chi) has unit modulus; imag equals WPOA CTF if antisymmetric phase is 0."""
+    """e^(-i*chi) has unit modulus; -imag equals WPOA CTF if chi_a is 0."""
     common = {
         "defocus": 1.5,
         "astigmatism": 0.0,
@@ -642,7 +642,7 @@ def test_calculate_ctf_2d_return_complex_ctf_symmetric_path():
     assert ctf_c.shape == ctf_real.shape
     assert torch.all(torch.isfinite(ctf_c))
     assert torch.allclose(torch.abs(ctf_c), torch.ones_like(ctf_c.real), atol=1e-5)
-    assert torch.allclose(ctf_c.imag, ctf_real, atol=1e-5)
+    assert torch.allclose(-ctf_c.imag, ctf_real, atol=1e-5)
 
 
 def test_calculate_ctf_2d_return_complex_ctf_rfft_shape_and_unit_modulus():
@@ -667,7 +667,7 @@ def test_calculate_ctf_2d_return_complex_ctf_rfft_shape_and_unit_modulus():
 
 
 def test_calculate_ctf_2d_return_complex_ctf_beam_tilt_matches_manual_phase():
-    """return_complex_ctf includes antisymmetric phase in e^(i*(chi_s+chi_a))."""
+    """return_complex_ctf includes antisymmetric phase in e^(-i*(chi_s-chi_a))."""
     from torch_ctf._ctf_core import _setup_ctf_context_2d
 
     kwargs = {
@@ -726,5 +726,5 @@ def test_calculate_ctf_2d_return_complex_ctf_beam_tilt_matches_manual_phase():
         spherical_aberration_mm=spherical_aberration,
         beam_tilt_mrad=kwargs["beam_tilt_mrad"],
     )
-    expected = torch.exp(1j * (total_phase_shift + antisymmetric_phase_shift))
+    expected = torch.exp(-1j * (total_phase_shift - antisymmetric_phase_shift))
     assert torch.allclose(out, expected, atol=1e-5)
