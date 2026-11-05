@@ -6,6 +6,9 @@ Typed, in-memory utilities for atomic structures:
   device-aware tensors, with positions stored in `(z, y, x)` array order.
 - `AtomicStructure.from_annotated_dataframe` annotates bonding metadata and
   then constructs the structure in one step.
+- `AtomicStructure.from_atomic_numbers` builds a structure from coordinate and
+  atomic-number tensors when there is no DataFrame. It replaces the deprecated
+  `torch_calculate_electrostatic_potential.AtomStack`.
 - `annotate_bonding_environments` adds template-derived bonding and
   `protein`/`rna`/`other` molecule annotations without reading files.
 - `classify_structure_composition` and `get_scattering_provider_keys` expose
