@@ -626,12 +626,21 @@ def calc_LPP_ctf_2D(
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
     return_complex_ctf: bool = False,
-        Whether to return the complex CTF e^(-i*chi)
+        Whether to return the complex CTF e^(i*chi), where chi includes the
+        antisymmetric phase.
 
     Returns
     -------
     ctf : torch.Tensor
         The Laser Phase Plate modified Contrast Transfer Function.
+
+    Notes
+    -----
+    Same sign convention as :func:`calculate_ctf_2d`: positive electrostatic
+    potential multiplied by the CTF at underfocus gives a dark image.
+
+    Changed in 0.7.0: the CTF used to have the opposite sign. Multiply by -1 to
+    reproduce earlier results, or take the complex conjugate of the complex CTF.
     """
     (
         defocus,

@@ -379,6 +379,13 @@ def _render_ctf(
 ) -> torch.Tensor:
     """Render output CTF tensor for selected output mode.
 
+    This is where the sign convention of the CTF is set: positive potential
+    multiplied by the CTF at underfocus gives a dark image. With
+    ``chi = chi_s + chi_a`` (symmetric + antisymmetric phase), the real CTF is
+    ``sin(chi_s) * exp(i chi_a)`` and the complex CTF is ``exp(i chi)``. The two
+    are related by ``ctf(k) = (H(k) - conj(H(-k))) / 2i``, which reduces to
+    ``ctf = imag(H)`` when there is no antisymmetric phase.
+
     Parameters
     ----------
     symmetric_phase_shift : torch.Tensor
@@ -395,9 +402,9 @@ def _render_ctf(
     """
     if return_complex_ctf:
         total_phase = symmetric_phase_shift + antisymmetric_phase_shift
-        return torch.exp(-1j * total_phase)
+        return torch.exp(1j * total_phase)
 
-    ctf = -torch.sin(symmetric_phase_shift)
+    ctf = torch.sin(symmetric_phase_shift)
     if not include_antisymmetric_phase:
         return ctf
     return ctf * torch.exp(1j * antisymmetric_phase_shift)

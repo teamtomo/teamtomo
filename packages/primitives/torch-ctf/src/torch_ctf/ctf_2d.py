@@ -71,12 +71,29 @@ def calculate_ctf_2d(
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
     return_complex_ctf : bool
-        Whether to return the complex CTF e^(-ichi)
+        Whether to return the complex CTF e^(i chi), where chi includes the
+        antisymmetric phase.
 
     Returns
     -------
     ctf : torch.Tensor
-        The Contrast Transfer Function for the given parameters.
+        The Contrast Transfer Function for the given parameters. With no phase
+        shift it is ``-amplitude_contrast`` at zero frequency and, at underfocus,
+        its first extremum is -1.
+
+    Notes
+    -----
+    Sign convention: positive electrostatic potential multiplied by the CTF at
+    underfocus (``defocus > 0``) gives a dark image, as in a raw micrograph. The
+    CTF is ``sin(chi)``, with ``chi`` from :func:`calculate_total_phase_shift`,
+    which is negative at low frequency for underfocus. This matches CTFFIND4 and
+    cisTEM, and is the negative of RELION's CTF, which assumes contrast-inverted
+    particles. Odd aberrations multiply the real CTF by ``exp(i chi_a)``, as in
+    RELION.
+
+    Changed in 0.7.0: the CTF used to be ``-sin(chi)`` (``+amplitude_contrast``
+    at zero frequency). Multiply by -1 to reproduce earlier results. The complex
+    CTF used to be ``exp(-i chi)``; take the complex conjugate to reproduce it.
     """
     (
         defocus,
