@@ -148,3 +148,50 @@ def test_backproject_2d_to_3d_matches_real_space(
             images, _tensor(rotations), pad_factor=pad_factor
         )
     assert _cc(reconstruction, volume) > min_cc
+
+
+def _float32_rotation(axis: str, degrees: float) -> np.ndarray:
+    """Rotation about x, y or z with its trig done in float32, as is common in torch.
+
+    In float32, cos(90°) is -4.4e-8 rather than 0, which is above the extractor's
+    default `rot_tolerance` of 1e-8, so it isn't zeroed.
+    """
+    theta = torch.deg2rad(torch.tensor(degrees, dtype=torch.float32))
+    c, s = torch.cos(theta).item(), torch.sin(theta).item()
+    i, j = {"x": (1, 2), "y": (2, 0), "z": (0, 1)}[axis]
+    matrix = np.eye(3, dtype=np.float32)
+    matrix[i, i], matrix[i, j], matrix[j, i], matrix[j, j] = c, -s, s, c
+    return matrix
+
+
+RIGHT_ANGLE_ROTATIONS = [
+    *[[(axis, degrees)] for axis in "xyz" for degrees in (90, -90, 180, 270)],
+    [("x", 90), ("y", 90)],
+    [("y", 90), ("z", 90)],
+]
+
+
+def _rotation_id(rotations: list[tuple[str, float]]) -> str:
+    return "@".join(f"R{axis}({degrees})" for axis, degrees in rotations)
+
+
+@pytest.mark.parametrize("multichannel", [False, True])
+@pytest.mark.parametrize("rotations", RIGHT_ANGLE_ROTATIONS, ids=_rotation_id)
+def test_project_3d_to_2d_float32_right_angles_match_real_space(
+    rotations, multichannel
+):
+    # e.g. a view along x leaves every point of the slice ~1e-8 below the x=0 plane
+    # of the rfft, too close to flip into the non-redundant half, and samples taken
+    # outside the array are zero
+    rotation = np.eye(3, dtype=np.float32)
+    for axis, degrees in rotations:
+        rotation = rotation @ _float32_rotation(axis, degrees)
+    volume = _gaussian_blobs(32, ndim=3, n_blobs=12)
+    if multichannel:
+        channels = np.stack([volume, volume[::-1]])
+        projection = project_3d_to_2d_multichannel(
+            _tensor(channels), _tensor(rotation)
+        )[0]
+    else:
+        projection = project_3d_to_2d(_tensor(volume), _tensor(rotation))
+    assert _cc(projection, _project(volume, rotation.astype(np.float64))) > 0.998

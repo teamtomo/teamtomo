@@ -235,6 +235,14 @@ def extract_central_slices_rfft_3d(
 
     rotated_coords[conjugate_mask, ...] *= -1
 
+    # Points within x_tolerance of the x=0 plane which weren't flipped can still sit
+    # just below it, e.g. every point of a view along x from a float32 matrix, where
+    # cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp them onto it.
+    # (out of place: clamp needs its input to compute gradients)
+    rotated_coords = torch.cat(
+        [rotated_coords[..., :2], torch.clamp(rotated_coords[..., 2:], min=0)], dim=-1
+    )
+
     # convert frequencies to array coordinates in fftshifted DFT
     rotated_coords = _fftfreq_to_dft_coordinates(
         frequencies=rotated_coords, image_shape=volume_shape, rfft=True
@@ -409,6 +417,14 @@ def extract_central_slices_rfft_3d_multichannel(
     conjugate_mask = conjugate_mask | near_zero_conj_mask
 
     rotated_coords[conjugate_mask, ...] *= -1
+
+    # Points within x_tolerance of the x=0 plane which weren't flipped can still sit
+    # just below it, e.g. every point of a view along x from a float32 matrix, where
+    # cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp them onto it.
+    # (out of place: clamp needs its input to compute gradients)
+    rotated_coords = torch.cat(
+        [rotated_coords[..., :2], torch.clamp(rotated_coords[..., 2:], min=0)], dim=-1
+    )
 
     # convert frequencies to array coordinates in fftshifted DFT
     rotated_coords = _fftfreq_to_dft_coordinates(
