@@ -1,10 +1,9 @@
 # torch-image-interpolation
 
-[![License](https://img.shields.io/pypi/l/torch-image-interpolation.svg?color=green)](https://github.com/teamtomo/torch-image-interpolation/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-image-interpolation.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-image-interpolation/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-image-interpolation.svg?color=green)](https://pypi.org/project/torch-image-interpolation)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-image-interpolation.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-image-interpolation/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-image-interpolation/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-image-interpolation/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-image-interpolation)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 1D/2D/3D image interpolation routines in PyTorch.
 

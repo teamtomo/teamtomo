@@ -53,24 +53,24 @@ def fit_map_in_map(
     """Fit *mobile_map* into *reference_map* via exhaustive SO(3) search + refinement.
 
     Both volumes must share the same voxel size.  Call
-    :func:`normalise_voxel_sizes` first if they differ (the
-    ``torch-fit-in-map-cli`` file wrappers handle this automatically).
+    `normalise_voxel_sizes` first if they differ (the
+    `torch-fit-in-map-cli` file wrappers handle this automatically).
 
     Parameters
     ----------
     mobile_map : torch.Tensor
-        ``(d, h, w)`` mobile volume to be fitted.
+        `(d, h, w)` mobile volume to be fitted.
     reference_map : torch.Tensor
-        ``(d, h, w)`` reference volume.
+        `(d, h, w)` reference volume.
     exhaustive_config : ExhaustiveSearchConfig or None
         Parameters for the exhaustive SO(3) grid search.
     gradient_config : GradientRefinementConfig or None
-        Parameters for gradient-based local refinement.  Pass ``None`` to
+        Parameters for gradient-based local refinement.  Pass `None` to
         return the exhaustive result without further refinement.
     mask : torch.Tensor or None
-        Optional ``(d, h, w)`` soft mask in ``[0, 1]``.
+        Optional `(d, h, w)` soft mask in `[0, 1]`.
     pixel_size_angstroms : float or None
-        When given, ``AlignmentResult.translation_angstroms`` is populated.
+        When given, `AlignmentResult.translation_angstroms` is populated.
     verbose : bool
         Show search and refinement progress.
 
@@ -185,21 +185,21 @@ def apply_alignment(
     result: AlignmentResult,
     interpolation: Literal["nearest", "trilinear"] = "trilinear",
 ) -> torch.Tensor:
-    """Apply an :class:`AlignmentResult` transform to produce the aligned mobile volume.
+    """Apply an `AlignmentResult` transform to produce the aligned mobile volume.
 
     Parameters
     ----------
     mobile : torch.Tensor
-        ``(d, h, w)`` mobile volume.
+        `(d, h, w)` mobile volume.
     result : AlignmentResult
-        Alignment result from :func:`fit_map_in_map` or :func:`exhaustive_search`.
+        Alignment result from `fit_map_in_map` or `exhaustive_search`.
     interpolation : {"trilinear", "nearest"}
         Interpolation mode.
 
     Returns
     -------
     aligned : torch.Tensor
-        ``(d, h, w)`` mobile volume transformed to match the reference frame.
+        `(d, h, w)` mobile volume transformed to match the reference frame.
     """
     device = mobile.device
     d, h, w = mobile.shape[-3:]
@@ -280,34 +280,34 @@ def fit_map_in_structure(
     The atoms are simulated as a potential map, which serves as the **reference**.
     The experimental map *mobile_map* is the **mobile** being fitted.
     For the inverse (fit a structure into a map), use
-    :func:`fit_structure_in_map`.
+    `fit_structure_in_map`.
 
     Parameters
     ----------
     mobile_map : torch.Tensor
-        ``(d, h, w)`` experimental map to be fitted.
+        `(d, h, w)` experimental map to be fitted.
     reference_atoms : pandas.DataFrame
-        Atom table (columns ``x``, ``y``, ``z``, ``element``) that serves as
-        reference. Obtain one with ``mmdf.read("model.cif")``, for example.
+        Atom table (columns `x`, `y`, `z`, `element`) that serves as
+        reference. Obtain one with `mmdf.read("model.cif")`, for example.
     pixel_size_angstroms : float
         Voxel size for the simulated reference potential (Angstroms).
     box_size : int
         Cubic box size for the simulated reference potential (voxels).
     simulator : PotentialSimulator or None
-        Potential simulator.  See :class:`~torch_fit_in_map.PotentialSimulator`.
-        When ``None``, the default electrostatic-potential simulator is used.
+        Potential simulator.  See `PotentialSimulator`.
+        When `None`, the default electrostatic-potential simulator is used.
     simulator_config : PotentialSimulatorConfig or None
         Options for the default simulator (scattering factors, sublattice radius,
-        etc.).  Mutually exclusive with a custom ``simulator``.
+        etc.).  Mutually exclusive with a custom `simulator`.
     save_simulated : bool
         Store the simulated reference potential in
-        ``AlignmentResult.simulated_potential``.
+        `AlignmentResult.simulated_potential`.
     exhaustive_config : ExhaustiveSearchConfig or None
         Search parameters.
     gradient_config : GradientRefinementConfig or None
         Refinement parameters.
     mask : torch.Tensor or None
-        Optional ``(d, h, w)`` soft mask.
+        Optional `(d, h, w)` soft mask.
     verbose : bool
         Show search and refinement progress.
 
@@ -318,7 +318,7 @@ def fit_map_in_structure(
     Raises
     ------
     ValueError
-        If both ``simulator`` and ``simulator_config`` are supplied.
+        If both `simulator` and `simulator_config` are supplied.
     """
     simulated = _simulate_structure(
         reference_atoms,
@@ -366,32 +366,32 @@ def fit_structure_in_map(
 
     The atoms are simulated as a potential map, which is the **mobile** being
     fitted into *reference_map*.  For the inverse (fit a map into a
-    structure frame), use :func:`fit_map_in_structure`.
+    structure frame), use `fit_map_in_structure`.
 
     Parameters
     ----------
     mobile_atoms : pandas.DataFrame
-        Atom table (columns ``x``, ``y``, ``z``, ``element``) to be fitted.
-        Obtain one with ``mmdf.read("model.cif")``, for example.
+        Atom table (columns `x`, `y`, `z`, `element`) to be fitted.
+        Obtain one with `mmdf.read("model.cif")`, for example.
     reference_map : torch.Tensor
-        ``(d, h, w)`` experimental map that serves as reference.
+        `(d, h, w)` experimental map that serves as reference.
     pixel_size_angstroms : float
         Voxel size for the simulated potential (Angstroms).
     box_size : int
         Cubic box size for the simulated potential (voxels).
     simulator : PotentialSimulator or None
-        Potential simulator.  See :class:`~torch_fit_in_map.PotentialSimulator`.
+        Potential simulator.  See `PotentialSimulator`.
     simulator_config : PotentialSimulatorConfig or None
         Options for the default simulator.  Mutually exclusive with a custom
-        ``simulator``.
+        `simulator`.
     save_simulated : bool
-        Store the simulated potential in ``AlignmentResult.simulated_potential``.
+        Store the simulated potential in `AlignmentResult.simulated_potential`.
     exhaustive_config : ExhaustiveSearchConfig or None
         Search parameters.
     gradient_config : GradientRefinementConfig or None
         Refinement parameters.
     mask : torch.Tensor or None
-        Optional ``(d, h, w)`` soft mask.
+        Optional `(d, h, w)` soft mask.
     verbose : bool
         Show search and refinement progress.
 
@@ -402,7 +402,7 @@ def fit_structure_in_map(
     Raises
     ------
     ValueError
-        If both ``simulator`` and ``simulator_config`` are supplied.
+        If both `simulator` and `simulator_config` are supplied.
     """
     simulated = _simulate_structure(
         mobile_atoms,

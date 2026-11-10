@@ -5,7 +5,22 @@ import torch
 
 
 def normalize_on_central_crop(images: torch.Tensor) -> torch.Tensor:
-    """Normalize each image to zero mean / unit variance on its central 25% crop."""
+    """Normalize each image to zero mean / unit variance on its central 25% crop.
+
+    Mean and (population) standard deviation are computed over the central
+    crop spanning 37.5%-62.5% of each spatial axis, then applied to the whole
+    image.
+
+    Parameters
+    ----------
+    images : torch.Tensor
+        `(..., h, w)` images. Normalized independently per image.
+
+    Returns
+    -------
+    images : torch.Tensor
+        `(..., h, w)` normalized images.
+    """
     h, w = images.shape[-2:]
     h_crop = slice(int(0.375 * h), int(0.625 * h))
     w_crop = slice(int(0.375 * w), int(0.625 * w))
@@ -21,6 +36,16 @@ def subtract_plane(images: torch.Tensor) -> torch.Tensor:
     Removes low-order illumination/background gradients by least-squares
     fitting a plane to each `(h, w)` image and subtracting it. Batched over
     any leading dimensions; the plane is fit independently per image.
+
+    Parameters
+    ----------
+    images : torch.Tensor
+        `(..., h, w)` images.
+
+    Returns
+    -------
+    images : torch.Tensor
+        `(..., h, w)` images with the fitted plane subtracted.
     """
     h, w = images.shape[-2:]
     device, dtype = images.device, images.dtype

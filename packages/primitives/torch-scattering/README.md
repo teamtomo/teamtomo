@@ -1,10 +1,9 @@
 # torch-scattering
 
-[![License](https://img.shields.io/pypi/l/torch-scattering.svg?color=green)](https://github.com/joelyeois/torch-scattering/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-scattering.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-scattering/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-scattering.svg?color=green)](https://pypi.org/project/torch-scattering)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-scattering.svg?color=green)](https://python.org)
-[![CI](https://github.com/joelyeois/torch-scattering/actions/workflows/ci.yml/badge.svg)](https://github.com/joelyeois/torch-scattering/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/joelyeois/torch-scattering/branch/main/graph/badge.svg)](https://codecov.io/gh/joelyeois/torch-scattering)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 Multislice electron scattering simulation in PyTorch, for cryo-EM/cryo-ET forward modelling.
 

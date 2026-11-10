@@ -12,9 +12,24 @@ import torch
 def default_sublattice_radius(pixel_spacing: float) -> float:
     """Return the default per-atom stencil radius for a given voxel spacing.
 
-    The radius is ``max(5.0, 3.0 * pixel_spacing)`` Angstroms. This matches the
-    sizing used by ``torch-fit-in-map`` and ``ttsim3d`` when no explicit radius
+    The radius is `max(5.0, 3.0 * pixel_spacing)` Angstroms. This matches the
+    sizing used by `torch-fit-in-map` and `ttsim3d` when no explicit radius
     is supplied.
+
+    Parameters
+    ----------
+    pixel_spacing : float
+        Grid voxel spacing in Angstroms. Must be positive.
+
+    Returns
+    -------
+    float
+        Stencil radius in Angstroms.
+
+    Raises
+    ------
+    ValueError
+        If `pixel_spacing` is not positive.
     """
     if pixel_spacing <= 0:
         raise ValueError("pixel_spacing must be positive")
@@ -181,7 +196,20 @@ class GridConfig:
         return strides
 
     def convert_cubic_index_to_flat_index(self, indices: torch.Tensor) -> torch.Tensor:
-        """Convert (..., ndim) cubic indices to (...) flat indices."""
+        """Convert (..., ndim) cubic indices to (...) flat indices.
+
+        Parameters
+        ----------
+        indices : torch.Tensor
+            Integer voxel indices with shape `(..., ndim)`, in the grid's axis
+            order (zyx or yx). Values are cast to int64; no bounds checking is
+            done.
+
+        Returns
+        -------
+        torch.Tensor
+            Row-major (last axis fastest) flat indices with shape `(...)`.
+        """
         return (indices.to(torch.int64) * self._strides).sum(dim=-1)
 
     def _build_stencil(self) -> _Stencil:
@@ -330,8 +358,47 @@ class GridConfig:
     ) -> GridConfig:
         """Create a grid with optional explicit 3D or 2D center coordinates.
 
-        ``center_zyx`` and ``center_yx`` locate the center voxel for odd grid
+        `center_zyx` and `center_yx` locate the center voxel for odd grid
         dimensions and the midpoint between center voxels for even dimensions.
+
+        Parameters
+        ----------
+        grid_shape : tuple[int, ...]
+            Number of voxels along each axis, `(z, y, x)` or `(y, x)`.
+        voxel_size : tuple[float, ...] | torch.Tensor
+            Voxel size in Angstroms along each axis, same order as `grid_shape`.
+        left_bottom_point : tuple[float, ...] | torch.Tensor | None, optional
+            Coordinate in Angstroms of the first voxel center. Ignored unless
+            `right_upper_point` is also given; if either is None the grid starts
+            at the origin. Cannot be combined with a center coordinate.
+        right_upper_point : tuple[float, ...] | torch.Tensor | None, optional
+            Coordinate in Angstroms of the last voxel center. See
+            `left_bottom_point`.
+        center_zyx : tuple[float, float, float] | torch.Tensor | None, optional
+            Grid center in Angstroms for a 3D grid.
+        center_yx : tuple[float, float] | torch.Tensor | None, optional
+            Grid center in Angstroms for a 2D grid.
+        sublattice_radius : float, optional
+            Radius of the per-atom stencil in Angstroms. Default is 10.0.
+        equal_length : bool, optional
+            If True (default), pad every axis symmetrically to the longest axis
+            length (see `GridConfig`).
+        dtype : torch.dtype, optional
+            Data type for grid computations, by default torch.float32.
+        device : torch.device | None, optional
+            Device for grid computations, by default CPU.
+
+        Returns
+        -------
+        GridConfig
+            The configured grid.
+
+        Raises
+        ------
+        ValueError
+            If both `center_zyx` and `center_yx` are given, a center is combined
+            with corner points, or the center's length does not match the
+            dimensionality of `grid_shape`.
         """
         if device is None:
             device = torch.device("cpu")
@@ -376,7 +443,34 @@ class GridConfig:
         dtype: torch.dtype = torch.float32,
         device: torch.device | None = None,
     ) -> GridConfig:
-        """Helper to create a GridConfig from grid shape and corner points."""
+        """Helper to create a GridConfig from grid shape and corner points.
+
+        The voxel size is derived as
+        `(right_upper_point - left_bottom_point) / (grid_shape - 1)`.
+
+        Parameters
+        ----------
+        grid_shape : tuple[int, ...] | torch.Tensor
+            Number of voxels along each axis, `(z, y, x)` or `(y, x)`.
+        left_bottom_point : tuple[float, ...] | torch.Tensor
+            Coordinate in Angstroms of the first voxel center.
+        right_upper_point : tuple[float, ...] | torch.Tensor
+            Coordinate in Angstroms of the last voxel center.
+        sublattice_radius : float, optional
+            Radius of the per-atom stencil in Angstroms. Default is 10.0.
+        equal_length : bool, optional
+            If True (default), pad every axis symmetrically to the longest axis
+            length (see `GridConfig`).
+        dtype : torch.dtype, optional
+            Data type for grid computations, by default torch.float32.
+        device : torch.device | None, optional
+            Device for grid computations, by default CPU.
+
+        Returns
+        -------
+        GridConfig
+            The configured grid.
+        """
         if device is None:
             device = torch.device("cpu")
 
@@ -410,7 +504,38 @@ class GridConfig:
         dtype: torch.dtype = torch.float32,
         device: torch.device | None = None,
     ) -> GridConfig:
-        """Helper to create a GridConfig from voxel size and corner points."""
+        """Helper to create a GridConfig from voxel size and corner points.
+
+        The number of voxels per axis is
+        `ceil((right_upper_point - left_bottom_point) / voxel_size) + 1`, and the
+        voxel size is then recomputed so the corner points are exactly the first
+        and last voxel centers. The resulting voxel size can therefore be
+        slightly smaller than requested.
+
+        Parameters
+        ----------
+        voxel_size : tuple[float, ...]
+            Requested voxel size in Angstroms along each axis, `(z, y, x)` or
+            `(y, x)`.
+        left_bottom_point : tuple[float, ...]
+            Coordinate in Angstroms of the first voxel center.
+        right_upper_point : tuple[float, ...]
+            Coordinate in Angstroms of the last voxel center.
+        sublattice_radius : float, optional
+            Radius of the per-atom stencil in Angstroms. Default is 10.0.
+        equal_length : bool, optional
+            If True (default), pad every axis symmetrically to the longest axis
+            length (see `GridConfig`).
+        dtype : torch.dtype, optional
+            Data type for grid computations, by default torch.float32.
+        device : torch.device | None, optional
+            Device for grid computations, by default CPU.
+
+        Returns
+        -------
+        GridConfig
+            The configured grid.
+        """
         if device is None:
             device = torch.device("cpu")
 

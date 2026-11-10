@@ -172,7 +172,7 @@ def _ix_float_from_kx(
     w_rfft: int,
     pixel_spacing: float,
 ) -> torch.Tensor:
-    """Map kx (cycles/Å) to rFFT column index: ``ix = kx * N * Δx``."""
+    """Map kx (cycles/Å) to rFFT column index: `ix = kx * N * Δx`."""
     return (kx * image_sidelength * pixel_spacing).clamp(0.0, float(w_rfft - 1))
 
 
@@ -395,11 +395,11 @@ def equiphase_average_power_to_1d_rfft(
     defocus_um, astigmatism_um, astigmatism_angle_deg :
         torch_ctf 2D conventions (mean defocus, half-difference astigmatism).
     phase_shift_deg : float | torch.Tensor
-        Uniform phase plate shift; ignored for LPP when ``model_laser`` is True.
+        Uniform phase plate shift; ignored for LPP when `model_laser` is True.
     voltage_kev, spherical_aberration_mm, amplitude_contrast :
         Optics (same as estimate_ctf_1d).
     laser_params : LaserParams | None
-        If set and ``model_laser`` is True, chi uses LPP phase provider like
+        If set and `model_laser` is True, chi uses LPP phase provider like
         calc_LPP_ctf_2D.
     n_theta : int
         Number of azimuthal samples per shell.

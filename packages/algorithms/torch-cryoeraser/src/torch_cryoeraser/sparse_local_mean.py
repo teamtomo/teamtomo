@@ -1,3 +1,5 @@
+"""Smooth local mean estimation from sparse pixel samples."""
+
 import warnings
 from typing import Tuple, Optional
 
@@ -14,26 +16,27 @@ def estimate_local_mean(
 ):
     """Estimate local mean of an image with a bivariate cubic spline.
 
-    A mask can be provided to
+    A cubic spline is least-squares fit to a random sample of pixels and
+    evaluated over the whole image. A mask can be provided to restrict the
+    sampled pixels to those where the mask is 1.
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(h, w)` array containing image data.
-    mask: Optional[torch.Tensor]
-        `(h, w)` array containing a binary mask specifying foreground
-        and background pixels for the estimation.
-    resolution: Tuple[int, int]
-        Resolution of the local mean estimate in dimensions `h` and `w`.
-    n_samples_for_fit: int
-        Number of samples taken from foreground pixels for background mean estimation.
-        The number of background pixels will be used if this number is greater than the
-        number of background pixels.
+    mask : Optional[torch.Tensor]
+        `(h, w)` binary mask. Only pixels where the mask is 1 are sampled
+        for the fit. If None, all pixels are used.
+    resolution : Tuple[int, int]
+        Number of spline knots in dimensions `h` and `w`.
+    n_samples_for_fit : int
+        Number of pixels (where the mask is 1) sampled for the fit. All such
+        pixels are used if this number is greater than their count.
 
     Returns
     -------
-    local_mean: torch.Tensor
-        `(h, w)` array containing a local estimate of the local mean.
+    local_mean : torch.Tensor
+        `(h, w)` local mean estimate, with the dtype of `image`.
     """
     input_dtype = image.dtype
     image = image.numpy()

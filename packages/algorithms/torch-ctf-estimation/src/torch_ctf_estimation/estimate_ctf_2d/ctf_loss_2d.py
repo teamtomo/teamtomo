@@ -40,7 +40,7 @@ def compute_ctf2_t(
     """
     Compute CTF^2 * env^2 * bp_filter for one frame (patch grid).
 
-    If ``use_amplitude`` is True, return |CTF| * env * bp_filter instead.
+    If `use_amplitude` is True, return |CTF| * env * bp_filter instead.
 
     Returns simulated spectrum in same shape as defocus_t (rfft layout).
     """
@@ -110,9 +110,9 @@ def compute_thickness_ctf_ps_t(
     """
     Compute thickness-modulated power spectrum * env^2 * bp_filter for one frame.
 
-    Uses ``calculate_ctf_thickness_2d`` (or the LPP variant) with
-    ``return_power_spectrum=True``, so the output is already in power-spectrum form
-    (no squaring required).  ``correlation_loss_t`` can be applied directly to the
+    Uses `calculate_ctf_thickness_2d` (or the LPP variant) with
+    `return_power_spectrum=True`, so the output is already in power-spectrum form
+    (no squaring required).  `correlation_loss_t` can be applied directly to the
     result.
 
     Parameters
@@ -120,7 +120,7 @@ def compute_thickness_ctf_ps_t(
     thickness_t : torch.Tensor
         Sample thickness in Angstroms, shape (gh, gw) matching the patch grid.
     defocus_t : torch.Tensor
-        Fixed defocus in micrometers, same shape as ``thickness_t``.
+        Fixed defocus in micrometers, same shape as `thickness_t`.
     astig_clamped : torch.Tensor
         Scalar astigmatism in micrometers.
     astig_angle_clamped : torch.Tensor
@@ -243,7 +243,7 @@ def mean_pearson_r_final_2d(
     """
     Mean Pearson r between patch power and simulated CTF² per time frame (no penalty).
 
-    ``forward_frame(t_idx)`` must return ``(predicted_defocus_t, phase_shift_t)`` for
+    `forward_frame(t_idx)` must return `(predicted_defocus_t, phase_shift_t)` for
     that frame, matching the training forward pass.
     """
     t_frames = patch_power_spectra.shape[0]

@@ -30,11 +30,11 @@ def apply_alignment_to_structure(
     sim_box_size: int | None = None,
     ref_origin_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> pd.DataFrame:
-    """Apply an :class:`AlignmentResult` transform to a table of atoms.
+    """Apply an `AlignmentResult` transform to a table of atoms.
 
     The coordinate pipeline mirrors what the potential simulator and
-    :func:`~torch_fit_in_map.crop_or_pad_to_shape` do during
-    :func:`~torch_fit_in_map.fit_map_in_structure`, then applies the alignment and
+    `crop_or_pad_to_shape` do during
+    `fit_structure_in_map`, then applies the alignment and
     converts back to Angstroms:
 
     1. Atom Angstroms -> simulation voxels:
@@ -42,35 +42,40 @@ def apply_alignment_to_structure(
        p_sim = (
            atom_Angstroms_zyx - centroid_Angstroms_zyx + box_centre_sim_Angstroms
        ) / pixel_size
-        ```
-    2. Simulation voxels -> cropped-box voxels (accounts for ``crop_or_pad_to_shape``):
-       ``p_mob = p_sim - crop_start_zyx``
+       ```
+    2. Simulation voxels -> cropped-box voxels (accounts for `crop_or_pad_to_shape`):
+       `p_mob = p_sim - crop_start_zyx`
     3. Apply alignment (rotation around box centre, then translate):
-       ``p_ref = R⁻¹ @ (p_mob - c) + c + t``
+       `p_ref = R⁻¹ @ (p_mob - c) + c + t`
     4. Reference voxels -> Angstroms (adds MRC origin):
-       ``atom_ref_Angstroms = p_ref * pixel_size + origin_Angstroms``
+       `atom_ref_Angstroms = p_ref * pixel_size + origin_Angstroms`
 
     Parameters
     ----------
     atoms : pandas.DataFrame
-        Atom table with columns ``x``, ``y``, ``z`` (Angstroms).  Any additional
+        Atom table with columns `x`, `y`, `z` (Angstroms).  Any additional
         columns are preserved unchanged.
     result : AlignmentResult
         Alignment result (rotation in zyx, translation in zyx pixels).
     pixel_size : float
         Voxel size of the reference map in Angstroms.
     box_shape : tuple[int, int, int]
-        ``(d, h, w)`` shape of the reference map.
+        `(d, h, w)` shape of the reference map.
     sim_box_size : int or None
-        Cubic box size used during simulation.  Defaults to ``max(box_shape)``.
+        Cubic box size used during simulation.  Defaults to `max(box_shape)`.
     ref_origin_xyz : tuple[float, float, float]
         XYZ origin of the reference map in Angstroms (from MRC header).
 
     Returns
     -------
     pandas.DataFrame
-        A copy of *atoms* with the ``x``, ``y``, ``z`` columns transformed into
+        A copy of *atoms* with the `x`, `y`, `z` columns transformed into
         the reference frame.
+
+    Raises
+    ------
+    ValueError
+        If `atoms` is missing any of the `x`, `y`, `z` columns.
     """
     missing = {"x", "y", "z"} - set(atoms.columns)
     if missing:

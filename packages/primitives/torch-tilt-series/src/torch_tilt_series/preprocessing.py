@@ -31,23 +31,23 @@ def preprocess_tilt_series_images(
 
     Parameters
     ----------
-    images: torch.Tensor
+    images : torch.Tensor
         `(..., h, w)` tilt images.
-    low: float
-        High-pass cutoff frequency, as a fraction of Nyquist (0-0.5).
+    low : float
+        High-pass cutoff frequency, in cycles/pixel (0-0.5, 0.5 = Nyquist).
         The comparison against `low` is strict, so the default 0.0 already
         excludes the DC (zero-frequency/mean) term.
-    high: float
-        Low-pass cutoff frequency, as a fraction of Nyquist (0-0.5).
+    high : float
+        Low-pass cutoff frequency, in cycles/pixel (0-0.5, 0.5 = Nyquist).
         Default 0.5 (Nyquist). Frequencies are radial (Euclidean norm of the
         per-axis frequencies), so this also clips the diagonal/corner
         frequencies above the axis-aligned Nyquist radius, rather than
         passing the full rfft grid.
-    falloff: float
-        Width, as a fraction of Nyquist, of the cosine falloff at each
+    falloff : float
+        Width, in cycles/pixel, of the cosine falloff at each
         cutoff. Default 0.0: hard edges, i.e. the filter is binary
         (0.0/1.0) with no soft transition.
-    bandpass_padding: int
+    bandpass_padding : int
         Pixels of mirror padding added on each side of each image before
         filtering, and the soft edge width of the rectangular mask applied
         over that padding. The padding is only used internally for the
@@ -55,18 +55,18 @@ def preprocess_tilt_series_images(
         the returned images are not padded. Mirror-padding requires
         `bandpass_padding` to be smaller than each spatial dimension, so it
         is silently clamped down to fit small images.
-    subtract_background: bool
+    subtract_background : bool
         If True (default), fit-and-subtract a linear background plane per
         image (see `torch_tilt_series.utils.subtract_plane`) before
         filtering.
-    normalize: bool
+    normalize : bool
         If True (default), normalize on the central crop (see
         `torch_tilt_series.utils.normalize_on_central_crop`) after
         filtering.
 
     Returns
     -------
-    images: torch.Tensor
+    images : torch.Tensor
         `(..., h, w)` preprocessed tilt images.
     """
     if subtract_background:

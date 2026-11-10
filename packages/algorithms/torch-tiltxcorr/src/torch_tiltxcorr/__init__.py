@@ -1,4 +1,4 @@
-"""Cross correlation with cosine stretching for cryo-EM data in PyTorch"""
+"""Cross correlation with cosine stretching for cryo-EM data in PyTorch."""
 
 from importlib.metadata import PackageNotFoundError, version
 

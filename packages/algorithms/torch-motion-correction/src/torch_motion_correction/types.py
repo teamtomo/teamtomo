@@ -14,7 +14,7 @@ from torch_motion_correction.utils import make_early_stopper
 class FourierFilterConfig:
     """Configuration for Fourier-space filtering applied during motion estimation.
 
-    Parameters
+    Attributes
     ----------
     b_factor : float
         B-factor in Angstroms^2 used to downweight high-frequency content.
@@ -33,9 +33,9 @@ class PatchSamplingConfig:
     """Configuration for patch extraction from a movie.
 
     Groups patch shape and overlap fraction and provides a convenience method to
-    construct an :class:`~torch_motion_correction.patch_utils.ImagePatchIterator`.
+    construct an `ImagePatchIterator`.
 
-    Parameters
+    Attributes
     ----------
     patch_shape : tuple[int, int]
         Patch dimensions as (height, width) in pixels.
@@ -64,7 +64,7 @@ class PatchSamplingConfig:
         image: torch.Tensor,
         device: torch.device | None = None,
     ) -> ImagePatchIterator:
-        """Build an :class:`~torch_motion_correction.patch_utils.ImagePatchIterator`.
+        """Build an `ImagePatchIterator`.
 
         Parameters
         ----------
@@ -99,7 +99,7 @@ class PatchSamplingConfig:
 class OptimizationConfig:
     """Configuration for the gradient-based optimization in local motion estimation.
 
-    Parameters
+    Attributes
     ----------
     max_iterations : int
         Maximum number of optimization iterations. Default is 100.
@@ -150,7 +150,7 @@ class OptimizationConfig:
 class XCRefinementConfig:
     """Post-processing configuration for cross-correlation motion estimation.
 
-    Parameters
+    Attributes
     ----------
     sub_pixel_refinement : bool
         Whether to apply parabolic sub-pixel refinement to cross-correlation

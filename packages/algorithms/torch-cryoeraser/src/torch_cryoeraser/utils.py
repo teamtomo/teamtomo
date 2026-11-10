@@ -1,3 +1,5 @@
+"""Image utilities for background statistics and connected components."""
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -23,14 +25,15 @@ def central_crop_2d(image: torch.Tensor, percentage: float = 25) -> torch.Tensor
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(b, h, w)` or `(h, w)` array of 2D images.
-    percentage: float
-        percentage of image height and width for cropped region.
+    percentage : float
+        Percentage of image height and width for cropped region.
+
     Returns
     -------
-    cropped_image: torch.Tensor
-        `(b, h, w)` or `(h, w)` array of cropped 2D images.
+    cropped_image : torch.Tensor
+        `(b, h', w')` or `(h', w')` array of cropped 2D images.
     """
     h, w = image.shape[-2], image.shape[-1]
     mh, mw = h // 2, w // 2
@@ -45,15 +48,18 @@ def estimate_background_std(image: torch.Tensor, mask: torch.Tensor):
 
     Parameters
     ----------
-    image: torch.Tensor
+    image : torch.Tensor
         `(h, w)` array containing dataset for which background standard deviation
         will be estimated.
-    mask: torch.Tensor of 0 or 1
-        Binary mask separating foreground and background.
+    mask : torch.Tensor
+        `(h, w)` binary mask (0 or 1) separating foreground (1) and
+        background (0).
+
     Returns
     -------
-    standard_deviation: float
-        estimated standard deviation for the background.
+    standard_deviation : torch.Tensor
+        Scalar standard deviation of the background (mask == 0) pixels in the
+        central 25% crop.
     """
     image = central_crop_2d(image, percentage=25).float()
     mask = central_crop_2d(mask, percentage=25)
@@ -67,12 +73,15 @@ def pixel_count_map_2d(mask: torch.Tensor):
 
     Parameters
     ----------
-    mask: torch.Tensor
-        `(h, w)` binary array
+    mask : torch.Tensor
+        `(h, w)` binary array.
 
     Returns
     -------
-
+    connected_component_image : torch.Tensor
+        `(h, w)` array where each pixel holds the pixel count of the
+        connected component (label from `scipy.ndimage.label`) it belongs to.
+        Background pixels (label 0) hold the total background pixel count.
     """
     labels, n = ndi.label(mask.cpu().numpy())
     labels = torch.tensor(labels, dtype=torch.long)

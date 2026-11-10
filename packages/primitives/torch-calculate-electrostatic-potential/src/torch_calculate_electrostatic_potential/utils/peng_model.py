@@ -32,10 +32,25 @@ PENG_GAUSSIAN_TERM_COUNT = 5
 class BondedScatteringFactorTable:
     """Gaussian scattering factors keyed by bonded-environment identifier.
 
-    Every environment must provide the same number of ``(a_i, b_i)`` Gaussian
-    terms in ``parameters_a`` and ``parameters_b``. Use :attr:`n_terms`
-    to query that count. Keys must match ``annotate_bonding_environments``,
-    which lists bonded neighbours by atomic number, e.g. ``"C(HCCN)"``.
+    Every environment must provide the same number of `(a_i, b_i)` Gaussian
+    terms in `parameters_a` and `parameters_b`. Use `n_terms`
+    to query that count. Keys must match `annotate_bonding_environments`,
+    which lists bonded neighbours by atomic number, e.g. `"C(HCCN)"`.
+
+    Attributes
+    ----------
+    parameters_a : Mapping[str, Sequence[float]]
+        Gaussian amplitudes `a_i` for each bonded-environment key.
+    parameters_b : Mapping[str, Sequence[float]]
+        Gaussian widths `b_i` for each bonded-environment key. Must have the
+        same keys as `parameters_a`, with sequences of matching length.
+
+    Raises
+    ------
+    ValueError
+        If `parameters_a` is empty, the two mappings have different keys, an
+        environment has mismatched or empty sequences, or environments use
+        different numbers of Gaussian terms.
     """
 
     parameters_a: Mapping[str, Sequence[float]]
@@ -142,40 +157,53 @@ def resolve_scattering_parameters(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Resolve an explicitly selected Peng parameter model.
 
-    ``peng_elemental`` selects Peng et al. (1996) neutral-atom electron
-    scattering factors and ignores bonding metadata. ``peng_bonded`` selects
+    `peng_elemental` selects Peng et al. (1996) neutral-atom electron
+    scattering factors and ignores bonding metadata. `peng_bonded` selects
     the bundled empirical factors of Shtyrov et al. (2026). A mapping from
-    molecule-type keys to :class:`BondedScatteringFactorTable` may instead be
+    molecule-type keys to `BondedScatteringFactorTable` may instead be
     supplied to select custom factors. Bonded models use the per-atom
-    ``molecule_types`` and ``bonded_environments`` metadata.
+    `molecule_types` and `bonded_environments` metadata.
 
     Parameters
     ----------
     atomic_numbers : torch.Tensor
         One-dimensional tensor of atomic numbers for bonded models, or any shape
-        for ``peng_elemental``. Bonded lookup iterates over flat
-        ``bonded_environments`` / ``molecule_types`` tuples and does not support
-        batched ``(batch, n_atoms)`` atomic-number tensors.
+        for `peng_elemental`. Bonded lookup iterates over flat
+        `bonded_environments` / `molecule_types` tuples and does not support
+        batched `(batch, n_atoms)` atomic-number tensors.
     scattering_factors : {"peng_elemental", "peng_bonded"} or mapping
         Bundled parameter model, or custom tables keyed by molecule type such
-        as ``"protein"`` and ``"rna"``.
+        as `"protein"` and `"rna"`. Molecule types are matched after stripping
+        whitespace and lower-casing.
     bonded_environments : tuple[str, ...], optional
-        Canonical keys such as ``"C(HHCC)"`` produced by
-        ``annotate_bonding_environments``.
+        Canonical keys such as `"C(HHCC)"` produced by
+        `annotate_bonding_environments`. Required for bonded models.
     molecule_types : tuple[str, ...], optional
-        Per-atom provider names: ``"protein"`` or ``"rna"``.
+        Per-atom provider names, e.g. `"protein"` or `"rna"`. Required for
+        bonded models.
     bonded_fallback : {"elemental", "error"}
         Use elemental parameters with one aggregate warning, or reject unsupported
         providers and keys.
     device : torch.device, optional
-        Device for returned tensors.
+        Device for returned tensors. Defaults to the device of `atomic_numbers`.
     dtype : torch.dtype, optional
         Floating-point type for returned tensors.
 
     Returns
     -------
     a, b : torch.Tensor
-        Selected parameters, each with shape ``(n_atoms, 5)``.
+        Selected parameters, each with shape `(*atomic_numbers.shape, 5)`
+        (`(n_atoms, 5)` for bonded models). Amplitudes `a` are in Angstroms and
+        widths `b` in Angstroms squared.
+
+    Raises
+    ------
+    ValueError
+        If the model name or `bonded_fallback` is unknown; if a bonded model is
+        selected with non-1D `atomic_numbers`, missing metadata, or metadata
+        whose length differs from the number of atoms; if a provider does not
+        use 5 Gaussian terms; or if `bonded_fallback="error"` and some atoms
+        have no bonded parameters.
     """
     providers: BondedScatteringFactorProviders
     if isinstance(scattering_factors, str):

@@ -80,6 +80,27 @@ torch-image-interpolation = { workspace = true }
 # tomatoes = "torch_transform_image:main_tomatoes"
 
 
+# https://docs.astral.sh/ruff
+[tool.ruff]
+line-length = 88
+src = ["src"]
+
+# https://docs.astral.sh/ruff/rules
+[tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
+select = [
+    "E",    # style errors
+    "W",    # style warnings
+    "F",    # flakes
+    "D",    # pydocstyle
+]
+ignore = [
+    "D401", # First line should be in imperative mood (remove to opt in)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D"]
+
 # https://docs.pytest.org/
 [tool.pytest.ini_options]
 minversion = "7.0"

@@ -65,7 +65,24 @@ def image_center(
     image_shape: tuple[int, ...],
     device: torch.device | None = None,
 ) -> torch.LongTensor:
-    """Get the coordinates of the center pixel/voxel of an image."""
+    """Get the coordinates of the center pixel/voxel of an image.
+
+    The center is at `image_shape // 2` in every dimension, i.e. the position of
+    the DFT origin after an `fftshift`.
+
+    Parameters
+    ----------
+    image_shape : tuple[int, ...]
+        Shape of the image, e.g. `(h, w)` or `(d, h, w)`.
+    device : torch.device | None, optional
+        Device on which to create the output tensor.
+
+    Returns
+    -------
+    torch.LongTensor
+        `(len(image_shape), )` array of center coordinates, in the same
+        dimension order as `image_shape`.
+    """
     from torch_grid_utils.fftfreq_grid import dft_center
 
     center = dft_center(

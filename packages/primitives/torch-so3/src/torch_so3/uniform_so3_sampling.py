@@ -126,43 +126,43 @@ def get_sectored_euler_angles(
 ) -> torch.Tensor:
     """Generate ZYZ Euler angles grouped by coarse HEALPix sector.
 
-    The sphere is divided into ``n_sectors = 12 * nside_coarse**2`` equal-area sectors.
-    Within each sector a finer HEALPix grid (controlled by ``nside_fine`` or
-    ``theta_step``) provides the directional sampling, and those directions are combined
-    with a full sweep of the in-plane angle ``psi``.  Coarse sectors are dropped unless
-    at least one fine-pixel centre lies in the given ``(theta, phi)`` window; if kept,
-    the sector still contains **all** ``k2`` fine directions.
+    The sphere is divided into `n_sectors = 12 * nside_coarse**2` equal-area sectors.
+    Within each sector a finer HEALPix grid (controlled by `nside_fine` or
+    `theta_step`) provides the directional sampling, and those directions are combined
+    with a full sweep of the in-plane angle `psi`.  Coarse sectors are dropped unless
+    at least one fine-pixel centre lies in the given `(theta, phi)` window; if kept,
+    the sector still contains **all** `k2` fine directions.
 
     Parameters
     ----------
     nside_coarse : int
-        HEALPix ``nside`` for the coarse sector grid.  Must be a power of two >= 1.
-        ``n_sectors = 12 * nside_coarse**2``.
+        HEALPix `nside` for the coarse sector grid.  Must be a power of two >= 1.
+        `n_sectors = 12 * nside_coarse**2`.
     nside_fine : int, optional
-        HEALPix ``nside`` for the fine sampling inside each sector.  Must be a power
-        of two >= ``nside_coarse``.  If ``None``, inferred from ``theta_step`` and
+        HEALPix `nside` for the fine sampling inside each sector.  Must be a power
+        of two >= `nside_coarse`.  If `None`, inferred from `theta_step` and
         rounded up to the nearest power of two.
     theta_step : float, optional
-        Angular step in degrees used to infer ``nside_fine`` when ``nside_fine`` is
-        ``None``.  Default is 2.5.
+        Angular step in degrees used to infer `nside_fine` when `nside_fine` is
+        `None`.  Default is 2.5.
     psi_step : float, optional
-        Angular step for the in-plane rotation ``psi`` in degrees.  Default is 1.5.
+        Angular step for the in-plane rotation `psi` in degrees.  Default is 1.5.
     psi_min : float, optional
-        Minimum value for ``psi`` in degrees.  Default is 0.0.
+        Minimum value for `psi` in degrees.  Default is 0.0.
     psi_max : float, optional
-        Maximum (exclusive) value for ``psi`` in degrees.  Default is 360.0.
+        Maximum (exclusive) value for `psi` in degrees.  Default is 360.0.
     theta_min, theta_max, phi_min, phi_max : float, optional
         In degrees.  Passed to
-        :func:`~torch_so3.base_s2_grid.healpix_sectored_base_grid` to select coarse
+        `healpix_sectored_base_grid` to select coarse
         sectors (any fine centre in range keeps the full sector).
 
     Returns
     -------
     torch.Tensor
-        Euler angles in degrees of shape ``(n_kept, n_per_sector, 3)`` with columns
-        ``(phi, theta, psi)``.  ``n_per_sector = k2 * n_psi`` where
-        ``k2 = (nside_fine / nside_coarse)**2`` and
-        ``n_psi = len(arange(psi_min, psi_max, psi_step))``.  ``n_kept`` is the number
+        Euler angles in degrees of shape `(n_kept, n_per_sector, 3)` with columns
+        `(phi, theta, psi)`.  `n_per_sector = k2 * n_psi` where
+        `k2 = (nside_fine / nside_coarse)**2` and
+        `n_psi = len(arange(psi_min, psi_max, psi_step))`.  `n_kept` is the number
         of coarse sectors with at least one fine direction in the angular window.
     """
     # S2 base grid: (n_kept, k2, 2)

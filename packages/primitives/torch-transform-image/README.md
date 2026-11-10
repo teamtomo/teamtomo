@@ -1,10 +1,9 @@
 # torch-transform-image
 
-[![License](https://img.shields.io/pypi/l/torch-transform-image.svg?color=green)](https://github.com/teamtomo/torch-transform-image/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-transform-image.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-transform-image/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-transform-image.svg?color=green)](https://pypi.org/project/torch-transform-image)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-transform-image.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-transform-image/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-transform-image/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-transform-image/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-transform-image)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 Real space transformations of 2D/3D images in PyTorch
 
@@ -36,7 +35,7 @@ Transformation matrices left-multiply homogeneous pixel coordinates (`[y, x, 1]`
 
 ### Generating Transformation Matrices
 
-The companion package [torch-affine-utils](https://github.com/teamtomo/torch-affine-utils) provides convenient functions 
+The companion package [torch-affine-utils](../../primitives/torch-affine-utils/README.md) provides convenient functions 
 to generate transformation matrices that work with homogenous pixel coordinates (`yxw`/`zyxw`):
 
 ```python
@@ -89,7 +88,7 @@ rotated = affine_transform_image_2d(
 ```python
 import torch
 from torch_transform_image import affine_transform_image_3d
-from torch_affine_utils.transforms_3d import R, T, S  # Rotation, Translation, Scale
+from torch_affine_utils.transforms_3d import Rx, Ry, Rz, T, S  # Rotations, Translation, Scale
 
 # Create a test volume (64×64×64)
 volume = torch.zeros((64, 64, 64), dtype=torch.float32)

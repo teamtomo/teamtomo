@@ -1,5 +1,10 @@
 # torch-ctf-estimation
 
+[![License](https://img.shields.io/pypi/l/torch-ctf-estimation.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/algorithms/torch-ctf-estimation/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/torch-ctf-estimation.svg?color=green)](https://pypi.org/project/torch-ctf-estimation)
+[![Python Version](https://img.shields.io/pypi/pyversions/torch-ctf-estimation.svg?color=green)](https://python.org)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
+
 Contrast transfer function estimation for cryo-EM images in PyTorch.
 
 ## Overview

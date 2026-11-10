@@ -13,7 +13,31 @@ def extract_central_slices_rfft_2d(
     fftfreq_max: float | None = None,
     yx_matrices: bool = False,
 ) -> torch.Tensor:
-    """Extract central slice from an fftshifted rfft."""
+    """Extract central slices (lines) from an fftshifted rfft of a 2D image.
+
+    Parameters
+    ----------
+    image_rfft : torch.Tensor
+        `(h, w // 2 + 1)` rfft of a 2D image, fftshifted along the `h` dimension.
+    image_shape : tuple[int, int]
+        `(h, w)` shape of the real-space image that `image_rfft` was computed from.
+    rotation_matrices : torch.Tensor
+        `(..., 2, 2)` array of rotation matrices defining the orientation of each
+        central line. Matrices left-multiply xy column vectors unless
+        `yx_matrices` is `True`.
+    fftfreq_max : float | None, optional
+        Maximum frequency (cycles per pixel) to extract. Samples beyond it are
+        set to zero. If `None` (default), all frequencies are extracted.
+    yx_matrices : bool, optional
+        Set to `True` if the provided matrices left-multiply yx column vectors
+        instead of xy column vectors. Default is `False`.
+
+    Returns
+    -------
+    torch.Tensor
+        `(..., w // 2 + 1)` array of central lines, one per rotation matrix, as
+        rffts of 1D projections. Values are sampled with bilinear interpolation.
+    """
     rotation_matrices = rotation_matrices.to(torch.float32)
 
     # generate grid of DFT sample frequencies for a central slice spanning the x-plane

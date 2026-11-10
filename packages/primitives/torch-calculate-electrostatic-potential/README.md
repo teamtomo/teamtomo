@@ -1,5 +1,10 @@
 # torch-calculate-electrostatic-potential
 
+[![License](https://img.shields.io/pypi/l/torch-calculate-electrostatic-potential.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-calculate-electrostatic-potential/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/torch-calculate-electrostatic-potential.svg?color=green)](https://pypi.org/project/torch-calculate-electrostatic-potential)
+[![Python Version](https://img.shields.io/pypi/pyversions/torch-calculate-electrostatic-potential.svg?color=green)](https://python.org)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
+
 Differentiable 2D projected and 3D electrostatic potentials from Peng 1996
 electron-scattering factors.
 
@@ -61,6 +66,7 @@ With [uv](https://github.com/astral-sh/uv): `uv pip install torch-calculate-elec
 ## Usage
 
 ```python
+import mmdf
 from torch_calculate_electrostatic_potential import (
     GridConfig,
     potential_from_structure_2d,
@@ -68,7 +74,12 @@ from torch_calculate_electrostatic_potential import (
 )
 from torch_structure_manipulation import AtomicStructure
 
-structure = AtomicStructure.from_dataframe(atoms, device="cuda")
+# File I/O belongs to the caller; any reader returning an atom DataFrame works.
+atoms = mmdf.read("structure.cif")
+# Bonded scattering factors need bonding environments, so annotate on load.
+structure = AtomicStructure.from_annotated_dataframe(
+    atoms, include_hydrogens=False, device="cuda"
+)
 
 grid_3d = GridConfig.from_grid_shape_and_voxel_size(
     grid_shape=(128, 128, 128),
@@ -176,11 +187,13 @@ it for broad Gaussians.
 
 ## Testing
 
-Install the package together with test dependencies:
+Tests run from the [TeamTomo monorepo](https://github.com/teamtomo/teamtomo):
 
-```sh
-pip install "torch-calculate-electrostatic-potential[test]" @ git+https://github.com/teamtomo/torch-calculate-electrostatic-potential.git
-pytest
+```bash
+git clone https://github.com/teamtomo/teamtomo.git
+cd teamtomo
+uv sync --all-packages --group test
+uv run pytest packages/primitives/torch-calculate-electrostatic-potential
 ```
 
 With coverage: `pytest --cov=torch_calculate_electrostatic_potential --cov-report=html`.

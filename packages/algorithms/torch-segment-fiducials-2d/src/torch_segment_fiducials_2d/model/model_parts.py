@@ -1,3 +1,5 @@
+"""Building blocks for the residual U-Net."""
+
 from typing import Optional
 
 import torch
@@ -64,6 +66,7 @@ class ResBlock(nn.Module):
         self.downsample = downsample
 
     def forward(self, x: Tensor) -> Tensor:
+        """Apply the residual block to a `(b, c, h, w)` input."""
         identity = x
         if self.downsample is not None:
             identity = self.downsample(x)
@@ -78,7 +81,7 @@ class ResBlock(nn.Module):
 
 
 class DoubleConv(nn.Module):
-    """(convolution -> [BN] -> ReLU) * 2"""
+    """(convolution -> [BN] -> ReLU) * 2."""
 
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
@@ -94,6 +97,7 @@ class DoubleConv(nn.Module):
         )
 
     def forward(self, x):
+        """Apply both convolution blocks to a `(b, c, h, w)` input."""
         return self.double_conv(x)
 
 
@@ -134,11 +138,12 @@ class Down(nn.Module):
         self.forward_impl = nn.Sequential(*layers)
 
     def forward(self, x):
+        """Apply the residual blocks to a `(b, c, h, w)` input."""
         return self.forward_impl(x)
 
 
 class Up(nn.Module):
-    """Upscaling then double conv"""
+    """Upscaling then double conv."""
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -147,6 +152,7 @@ class Up(nn.Module):
         self.post_cat_conv = DoubleConv(in_channels, out_channels, in_channels)
 
     def forward(self, x1, x2):
+        """Upsample `x1`, pad it to `x2`'s size, concatenate and convolve."""
         x1 = self.up(x1)
         x1 = self.post_up_conv(x1)
         # pad input to (b, c, h, w)

@@ -6,14 +6,14 @@ tests, and downstream tools. They do not write files.
 Chaining choices:
 
 - Always fit 1D defocus on the mean spectrum first, then 2D (grid or linear).
-- ``use_1d_defocus_for_spatial``: build the 2D field from per-patch 1D fits
+- `use_1d_defocus_for_spatial`: build the 2D field from per-patch 1D fits
   (useful for linear tilt or a spatial grid) instead of one 2D optimisation.
-- ``patch_sidelength < 0``: whole-image mode (requires ``nh=nw=1``).
-- ``mask_laser_axis`` + ``LaserParams``: zero FFT strips along the laser axis.
-- ``linear_fix_defocus_0_from_1x1``: seed linear ``defocus_0`` from a 1x1 2D fit.
-- ``estimate_ctf_and_thickness`` additionally runs: 1D thickness grid search,
+- `patch_sidelength < 0`: whole-image mode (requires `nh=nw=1`).
+- `mask_laser_axis` + `LaserParams`: zero FFT strips along the laser axis.
+- `linear_fix_defocus_0_from_1x1`: seed linear `defocus_0` from a 1x1 2D fit.
+- `estimate_ctf_and_thickness` additionally runs: 1D thickness grid search,
   then optional joint defocus+thickness refine (1D or 2D), controlled by
-  ``ThicknessParams.refine_dim``.
+  `ThicknessParams.refine_dim`.
 """
 
 from typing import Any, NamedTuple
@@ -68,7 +68,28 @@ def _scalar(value: Any) -> float:
 
 
 class CTFEstimationResult(NamedTuple):
-    """Outputs of :func:`estimate_ctf_and_thickness`."""
+    """Outputs of `estimate_ctf_and_thickness`.
+
+    Attributes
+    ----------
+    mean_ps : torch.Tensor
+        Mean rFFT power spectrum over all patches, shape `(ph, pw // 2 + 1)`
+        (laser-axis masked when masking is enabled).
+    result1d : Defocus1DResults
+        1D defocus fit on the mean power spectrum.
+    result2d : Defocus2DResults
+        2D defocus fit. When `refine_dim` is `"1d"` or `"2d"`, its defocus
+        fields are updated by the joint defocus/thickness refinement.
+    thickness1d : Thickness1DResults or None
+        Result of the 1D thickness grid search.
+    thickness_joint : Thickness1DResults or Thickness2DResults or None
+        Result of the joint thickness refinement: `Thickness1DResults` for
+        `refine_dim` `"thickness"` or `"1d"`, `Thickness2DResults` for `"2d"`,
+        and None for `"none"`.
+    pixel_spacing_angstroms : float
+        Pixel spacing in Å used for fitting, after Fourier rescaling to
+        `target_pixel_spacing_angstroms`.
+    """
 
     mean_ps: torch.Tensor
     result1d: Defocus1DResults
@@ -446,8 +467,8 @@ def estimate_ctf(
     fitting_params : CTFFittingParams
         Defocus grid resolution, frequency range, patch size, and fitting options.
     laser_params : LaserParams | None, optional
-        If set, ``laser_xy_angle_deg`` and ``dual_laser`` can drive laser-axis
-        masking when ``mask_laser_axis`` is enabled. Use ``model_laser=True`` to
+        If set, `laser_xy_angle_deg` and `dual_laser` can drive laser-axis
+        masking when `mask_laser_axis` is enabled. Use `model_laser=True` to
         fit with the LPP CTF model; if None, use standard CTF with no masking.
     device : torch.device | None, optional
         Device for computation. If None, uses cuda:0 when available, else cpu.
@@ -480,14 +501,14 @@ def estimate_ctf_and_thickness(
     """
     Estimate CTF and sample thickness from a 2D or 3D image.
 
-    Runs the same 1D-then-2D defocus chain as :func:`estimate_ctf`, then adds a
+    Runs the same 1D-then-2D defocus chain as `estimate_ctf`, then adds a
     1D thickness grid search on the mean spectrum (using the 2D mean defocus).
-    Unless ``thickness_params.refine_dim == "none"``, a gradient-descent joint
+    Unless `thickness_params.refine_dim == "none"`, a gradient-descent joint
     refine of thickness and defocus follows:
 
-    - ``"thickness"``: refine thickness only, defocus held at the 2D mean.
-    - ``"1d"``: jointly refine (scalar) defocus and thickness.
-    - ``"2d"``: jointly refine the 2D defocus field and thickness.
+    - `"thickness"`: refine thickness only, defocus held at the 2D mean.
+    - `"1d"`: jointly refine (scalar) defocus and thickness.
+    - `"2d"`: jointly refine the 2D defocus field and thickness.
 
     Parameters
     ----------
@@ -501,16 +522,16 @@ def estimate_ctf_and_thickness(
         Thickness range/step, refine mode, and optional tilt-corrected/equiphase
         power spectrum options for the 1D thickness fit.
     laser_params : LaserParams | None, optional
-        See :func:`estimate_ctf`.
+        See `estimate_ctf`.
     device : torch.device | None, optional
         Device for computation. If None, uses cuda:0 when available, else cpu.
 
     Returns
     -------
     CTFEstimationResult
-        ``mean_ps``, ``result1d``, ``result2d`` (as in :func:`estimate_ctf`), plus
-        ``thickness1d`` (grid search result), ``thickness_joint`` (refine result,
-        or None if ``refine_dim == "none"``), and ``pixel_spacing_angstroms``
+        `mean_ps`, `result1d`, `result2d` (as in `estimate_ctf`), plus
+        `thickness1d` (grid search result), `thickness_joint` (refine result,
+        or None if `refine_dim == "none"`), and `pixel_spacing_angstroms`
         (post-rescale pixel spacing used for fitting).
     """
     if device is None:

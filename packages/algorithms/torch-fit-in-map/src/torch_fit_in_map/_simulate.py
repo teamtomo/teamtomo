@@ -23,35 +23,33 @@ if TYPE_CHECKING:
 class PotentialSimulator(Protocol):
     """Protocol for simulating an electrostatic-potential map from a table of atoms.
 
-    Atoms are supplied as a :class:`pandas.DataFrame` with (at least) the
-    columns ``x``, ``y``, ``z`` (Cartesian coordinates in Angstroms) and
-    ``element`` (atomic symbol, e.g. ``"C"``).  This is the column convention
-    produced by :func:`mmdf.read`, so callers can obtain a compatible frame with
-    ``mmdf.read("model.pdb")`` (file reading itself lives in the CLI wrapper,
-    ``torch-fit-in-map-cli``).
+    Atoms are supplied as a `pandas.DataFrame` with (at least) the
+    columns `x`, `y`, `z` (Cartesian coordinates in Angstroms) and
+    `element` (atomic symbol, e.g. `"C"`).  This is the column convention
+    produced by `mmdf.read`, so callers can obtain a compatible frame with
+    `mmdf.read("model.pdb")` (file reading itself lives in the CLI wrapper,
+    `torch-fit-in-map-cli`).
 
-    The default implementation uses ``torch-calculate-electrostatic-potential``.
+    The default implementation uses `torch-calculate-electrostatic-potential`.
 
     A custom simulator can be injected by implementing this protocol and passing
-    it to :func:`fit_map_in_structure` or :func:`fit_structure_in_map`.
+    it to `fit_map_in_structure` or `fit_structure_in_map`.
 
-    Example
-    -------
-    .. code-block:: python
-
-        import mmdf
-
-
-        class MySimulator:
-            def simulate(
-                self, atoms, pixel_size, box_size, device=None, config=None
-            ): ...
+    Examples
+    --------
+    ```python
+    import mmdf
 
 
-        atoms = mmdf.read("model.pdb")
-        result = fit_structure_in_map(
-            atoms, potential_map, 1.5, 128, simulator=MySimulator()
-        )
+    class MySimulator:
+        def simulate(self, atoms, pixel_size, box_size, device=None, config=None): ...
+
+
+    atoms = mmdf.read("model.pdb")
+    result = fit_structure_in_map(
+        atoms, potential_map, 1.5, 128, simulator=MySimulator()
+    )
+    ```
     """
 
     def simulate(
@@ -67,24 +65,25 @@ class PotentialSimulator(Protocol):
         Parameters
         ----------
         atoms : pandas.DataFrame
-            Atom table with columns ``x``, ``y``, ``z`` (Angstroms) and
-            ``element`` (atomic symbol).
+            Atom table with columns `x`, `y`, `z` (Angstroms) and
+            `element` (atomic symbol).
         pixel_size : float
             Voxel size in Angstroms.
         box_size : int
             Cubic box dimension in voxels.
         device : torch.device or None
-            Target device for the output tensor.
+            Target device for the output tensor. The default simulator uses
+            CUDA when available, otherwise CPU, if `None`.
         config : PotentialSimulatorConfig or None
-            Simulator options. ``None`` uses the default configuration.
-            :func:`fit_map_in_structure` and :func:`fit_structure_in_map` only
+            Simulator options. `None` uses the default configuration.
+            `fit_map_in_structure` and `fit_structure_in_map` only
             pass this to the default simulator, so custom simulators may omit
             this parameter.
 
         Returns
         -------
         potential : torch.Tensor
-            ``(box_size, box_size, box_size)`` float32 potential map in volts.
+            `(box_size, box_size, box_size)` float32 potential map in volts.
         """
         ...
 

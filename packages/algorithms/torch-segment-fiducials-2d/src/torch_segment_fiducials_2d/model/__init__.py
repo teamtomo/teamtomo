@@ -1,3 +1,5 @@
+"""Residual U-Net model and pretrained weights."""
+
 from .model import ResidualUNet18
 from ._pretrained_weights import get_latest_checkpoint
 

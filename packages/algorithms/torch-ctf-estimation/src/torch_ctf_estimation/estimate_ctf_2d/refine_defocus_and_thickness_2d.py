@@ -56,16 +56,16 @@ def refine_defocus_and_thickness_2d(
 ) -> tuple[Defocus2DResults, Thickness2DResults]:
     """Jointly refine 2D defocus and thickness with the thickness-modulated CTF.
 
-    Seeds defocus from ``result2d`` and thickness from the 1D grid search.
-    A scalar thickness (1x1x1 spline) is used unless ``thickness_grid_resolution``
+    Seeds defocus from `result2d` and thickness from the 1D grid search.
+    A scalar thickness (1x1x1 spline) is used unless `thickness_grid_resolution`
     is set.
 
     Parameters
     ----------
     patch_power_spectra : torch.Tensor
-        Background-subtracted patch power spectra ``(t, gh, gw, ph, pw)``.
+        Background-subtracted patch power spectra `(t, gh, gw, ph, pw)`.
     normalised_patch_positions : torch.Tensor
-        Patch positions in ``[0, 1]``, shape ``(t, gh, gw, 3)``.
+        Patch positions in `[0, 1]`, shape `(t, gh, gw, 3)`.
     result2d : Defocus2DResults
         Defocus result to refine (grid or linear).
     initial_thickness_angstroms : float
@@ -83,14 +83,14 @@ def refine_defocus_and_thickness_2d(
     n_iterations, defocus_lr, thickness_lr :
         Optimiser settings.
     thickness_grid_resolution : tuple[int, int, int] | None
-        Thickness spline resolution. ``None`` uses ``(1, 1, 1)``.
+        Thickness spline resolution. `None` uses `(1, 1, 1)`.
     defocus_bounds_microns : tuple[float, float] | None
         Defocus clamp bounds.
     laser_params, axis_mask :
         Optional LPP / laser-axis mask.
     early_stopper : callable or None, optional
-        Stateful ``(loss) -> should_stop`` callback. Default None (run all
-        ``n_iterations``).
+        Stateful `(loss) -> should_stop` callback. Default None (run all
+        `n_iterations`).
 
     Returns
     -------

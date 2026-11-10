@@ -288,22 +288,22 @@ def exhaustive_search(
     """Exhaustive SO(3) search with per-rotation FFT translation optimisation.
 
     For each candidate orientation the mobile volume is rotated and the
-    optimal translation is found as the ``argmax`` of the 3-D normalised
+    optimal translation is found as the `argmax` of the 3-D normalised
     cross-correlation map, computed via a single FFT pair.  Both volumes must
     already share the same voxel size; call
-    :func:`~torch_fit_in_map._preprocess.normalise_voxel_sizes` first if
+    `normalise_voxel_sizes` first if
     needed.
 
     Parameters
     ----------
     reference : torch.Tensor
-        ``(d, h, w)`` reference volume.
+        `(d, h, w)` reference volume.
     mobile : torch.Tensor
-        ``(d, h, w)`` mobile volume (same voxel size as *reference*).
+        `(d, h, w)` mobile volume (same voxel size as *reference*).
     config : ExhaustiveSearchConfig or None
-        Search parameters.  Defaults are used when ``None``.
+        Search parameters.  Defaults are used when `None`.
     mask : torch.Tensor or None
-        Optional ``(d, h, w)`` soft mask in ``[0, 1]`` applied to both
+        Optional `(d, h, w)` soft mask in `[0, 1]` applied to both
         volumes before scoring.
     verbose : bool
         Show search progress.
@@ -311,8 +311,8 @@ def exhaustive_search(
     Returns
     -------
     AlignmentResult
-        Best rotation matrix (3 x 3, zyx), translation in pixels (3,), and NCC
-        peak score.
+        Best rotation matrix (3 x 3, zyx), translation in pixels (3,), and
+        cross-correlation peak score (see `AlignmentResult.score`).
     """
     if config is None:
         config = ExhaustiveSearchConfig()

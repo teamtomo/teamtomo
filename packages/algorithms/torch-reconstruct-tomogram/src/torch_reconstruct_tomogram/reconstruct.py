@@ -160,32 +160,63 @@ def reconstruct_subvolume(
 ) -> torch.Tensor:
     """Reconstruct 3D patch(es) at location(s) in the sample.
 
-    Rank-polymorphic: input (..., 3) -> output (..., d, h, w)
+    Rank-polymorphic: input `(..., 3)` -> output `(..., d, h, w)`.
 
-    - tilt_series supplies the projection geometry,
-    - points_zyx are zyx coordinates in Angstroms, relative to the tomogram center
-    - sidelength is the output subvolume size in voxels
-    - output_pixel_spacing is the voxel size of the output in Angstroms
-      (defaults to `tilt_series.pixel_spacing`); the per-tilt 2D crops are
-      Fourier-rescaled to this pixel size before 3D reconstruction, so local
-      (subvolume) and global (tomogram) reconstructions can each target an
-      arbitrary output pixel size independent of the raw data's
-    - images, if given, are used instead of reading `tilt_series.image_path`.
-      They must already be selected and ordered to match the geometry, i.e.
-      `(n_tilts, h, w)` lining up 1:1 with `tilt_series.tilt_angles`;
-      `tilt_series.image_indices` is not applied to them. `preprocess` still
-      applies, so several stacks passed this way are preprocessed identically.
-      The compute device is taken from `images.device`, so caller-supplied
-      data is left wherever the caller put it
-    - preprocess, if True (default), applies
-      `torch_tilt_series.preprocess_tilt_series_images` to the loaded images
-      before reconstruction - by default plane subtraction, a DC-excluding
-      bandpass with no low-pass, i.e. up to Nyquist, and central-crop
-      normalization
-    - `**preprocessing_kwargs` are forwarded to `preprocess_tilt_series_images`,
-      overriding any of its defaults (`low`, `high`, `falloff`,
-      `bandpass_padding`, `subtract_background`, `normalize`) - see that
-      function's docstring for details
+    For each point, 2D patches are cropped from every tilt image at the
+    projected position, Fourier-rescaled to `output_pixel_spacing`, inserted
+    as central slices into a 3D Fourier volume (2x oversampled), normalised
+    by the insertion weights, gridding-corrected and cropped back to
+    `sidelength`.
+
+    Parameters
+    ----------
+    tilt_series : TiltSeries
+        Supplies the projection geometry and `pixel_spacing` (raises
+        `ValueError` if unset), plus `image_path`/`image_indices` used to load
+        the raw images when `images` is None.
+    points_zyx : torch.Tensor
+        `(..., 3)` zyx patch centers in Angstroms, relative to the tomogram
+        center.
+    sidelength : int
+        Output subvolume sidelength, in voxels.
+    output_pixel_spacing : float | None
+        Voxel size of the output, in Angstroms. Defaults to
+        `tilt_series.pixel_spacing`. The per-tilt 2D crops are
+        Fourier-rescaled to this pixel size before 3D reconstruction, so local
+        (subvolume) and global (tomogram) reconstructions can each target an
+        arbitrary output pixel size independent of the raw data's.
+    images : torch.Tensor | None
+        `(n_tilts, h, w)` images to use instead of reading
+        `tilt_series.image_path`. They must already be selected and ordered to
+        line up 1:1 with `tilt_series.tilt_angles`;
+        `tilt_series.image_indices` is not applied to them. `preprocess` still
+        applies, so several stacks passed this way are preprocessed
+        identically. The compute device is taken from the images (loaded
+        images are on `tilt_series.device`), so caller-supplied data is left
+        wherever the caller put it.
+    preprocess : bool
+        If True (default), apply
+        `torch_tilt_series.preprocess_tilt_series_images` to the images
+        before reconstruction - by default plane subtraction, a DC-excluding
+        bandpass with no low-pass (i.e. up to Nyquist), and central-crop
+        normalization.
+    **preprocessing_kwargs : Any
+        Forwarded to `preprocess_tilt_series_images`, overriding any of its
+        defaults (`low`, `high`, `falloff`, `bandpass_padding`,
+        `subtract_background`, `normalize`) - see that function's docstring
+        for details.
+
+    Returns
+    -------
+    subvolumes : torch.Tensor
+        `(..., sidelength, sidelength, sidelength)` reconstructed patches, on
+        the device of the images.
+
+    Raises
+    ------
+    ValueError
+        If `images` is given and its length does not match the number of
+        tilts in `tilt_series`, or if `tilt_series.pixel_spacing` is unset.
     """
     images = _resolve_images(tilt_series, images, preprocess, **preprocessing_kwargs)
     return _reconstruct_subvolume(
@@ -224,39 +255,71 @@ def reconstruct_tomogram(
 ) -> torch.Tensor:
     """Reconstruct the full tomogram by tiling reconstructed patches in 3D.
 
-    - tilt_series supplies the projection geometry, plus `image_path`/
-      `image_indices` used to load the raw images
-    - volume_shape is the (d, h, w) shape of the output tomogram, in voxels
-    - sidelength is the spacing between patch centers, in voxels; patches
-      are reconstructed on a grid tiling `volume_shape`
-    - batch_size, if set, reconstructs at most this many patches per chunk
-      (to bound memory usage); defaults to reconstructing all patches at once
-    - output_pixel_spacing is the voxel size of the output in Angstroms
-      (defaults to `tilt_series.pixel_spacing`)
-    - blend_margin is the extra margin, in voxels, added around each patch
-      (total reconstructed patch size is `sidelength + 2 * blend_margin`);
-      overlapping patches are cosine-tapered and blended together over this
-      margin to avoid seams at patch boundaries. Defaults to
-      `sidelength // 4`
-    - images, if given, are used instead of reading `tilt_series.image_path`.
-      They must already be selected and ordered to match the geometry, i.e.
-      `(n_tilts, h, w)` lining up 1:1 with `tilt_series.tilt_angles`;
-      `tilt_series.image_indices` is not applied to them. `preprocess` still
-      applies, so several stacks passed this way are preprocessed identically.
-      This is what makes half-tomogram reconstruction possible without
-      round-tripping the split stacks through disk: pass the same
-      `tilt_series` with each half's images to get two volumes sharing one
-      alignment. The compute device is taken from `images.device`, so
-      caller-supplied data is left wherever the caller put it
-    - preprocess, if True (default), applies
-      `torch_tilt_series.preprocess_tilt_series_images` to the loaded images
-      before reconstruction - by default plane subtraction, a DC-excluding
-      bandpass with no low-pass, i.e. up to Nyquist, and central-crop
-      normalization
-    - `**preprocessing_kwargs` are forwarded to `preprocess_tilt_series_images`,
-      overriding any of its defaults (`low`, `high`, `falloff`,
-      `bandpass_padding`, `subtract_background`, `normalize`) - see that
-      function's docstring for details
+    Patches of `sidelength + 2 * blend_margin` voxels are reconstructed with
+    `reconstruct_subvolume`'s method on a regular grid of centers spaced
+    `sidelength` voxels apart, starting at `sidelength // 2`. Overlapping
+    patches are weighted by a separable cosine-taper window over the margin
+    and blended (weighted average), with patches clipped to the volume bounds.
+    The volume is accumulated on the CPU and moved to the images' device at
+    the end.
+
+    Parameters
+    ----------
+    tilt_series : TiltSeries
+        Supplies the projection geometry and `pixel_spacing` (raises
+        `ValueError` if unset), plus `image_path`/`image_indices` used to load
+        the raw images when `images` is None.
+    volume_shape : tuple[int, int, int]
+        `(d, h, w)` shape of the output tomogram, in voxels. The tomogram
+        center (voxel `(d // 2, h // 2, w // 2)`) corresponds to the origin
+        of tomogram space.
+    sidelength : int
+        Spacing between patch centers, in voxels.
+    batch_size : int | None
+        If set, reconstruct at most this many patches per chunk (to bound
+        memory usage). Defaults to reconstructing all patches at once.
+    output_pixel_spacing : float | None
+        Voxel size of the output, in Angstroms. Defaults to
+        `tilt_series.pixel_spacing`.
+    blend_margin : int | None
+        Extra margin, in voxels, added around each patch (total reconstructed
+        patch size is `sidelength + 2 * blend_margin`); overlapping patches
+        are cosine-tapered and blended together over this margin to avoid
+        seams at patch boundaries. Defaults to `sidelength // 4`.
+    images : torch.Tensor | None
+        `(n_tilts, h, w)` images to use instead of reading
+        `tilt_series.image_path`. They must already be selected and ordered to
+        line up 1:1 with `tilt_series.tilt_angles`;
+        `tilt_series.image_indices` is not applied to them. `preprocess` still
+        applies, so several stacks passed this way are preprocessed
+        identically. This is what makes half-tomogram reconstruction possible
+        without round-tripping the split stacks through disk: pass the same
+        `tilt_series` with each half's images to get two volumes sharing one
+        alignment. The compute device is taken from the images (loaded images
+        are on `tilt_series.device`), so caller-supplied data is left
+        wherever the caller put it.
+    preprocess : bool
+        If True (default), apply
+        `torch_tilt_series.preprocess_tilt_series_images` to the images
+        before reconstruction - by default plane subtraction, a DC-excluding
+        bandpass with no low-pass (i.e. up to Nyquist), and central-crop
+        normalization.
+    **preprocessing_kwargs : Any
+        Forwarded to `preprocess_tilt_series_images`, overriding any of its
+        defaults (`low`, `high`, `falloff`, `bandpass_padding`,
+        `subtract_background`, `normalize`) - see that function's docstring
+        for details.
+
+    Returns
+    -------
+    tomogram : torch.Tensor
+        `(d, h, w)` float32 tomogram, on the device of the images.
+
+    Raises
+    ------
+    ValueError
+        If `images` is given and its length does not match the number of
+        tilts in `tilt_series`, or if `tilt_series.pixel_spacing` is unset.
     """
     images = _resolve_images(tilt_series, images, preprocess, **preprocessing_kwargs)
 

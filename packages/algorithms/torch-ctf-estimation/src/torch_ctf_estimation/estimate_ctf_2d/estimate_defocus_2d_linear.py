@@ -504,7 +504,7 @@ def estimate_defocus_2d_linear(
 
     Optional cubic spline in t when nt > 1. Only the first element of
     defocus_grid_resolution (nt) is used.
-    See :func:`estimate_ctf_2d` for other parameter descriptions.
+    See `estimate_ctf_2d` for other parameter descriptions.
     """
     defocus_bounds_microns = resolve_defocus_bounds(defocus_bounds_microns)
     phase_shift_bounds_degrees = resolve_phase_shift_bounds(phase_shift_bounds_degrees)

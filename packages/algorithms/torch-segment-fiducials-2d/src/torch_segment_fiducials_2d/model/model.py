@@ -1,3 +1,5 @@
+"""Residual U-Net (ResNet18-style encoder) for fiducial segmentation."""
+
 import warnings
 from typing import Tuple, Optional, Callable, Any
 
@@ -67,6 +69,7 @@ class ResidualUNet18(L.LightningModule):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, image: Tensor) -> Tensor:
+        """Compute `(b, num_classes, h, w)` logits for `(b, 1, h, w)` images."""
         x1 = self.base_layer(image)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -85,6 +88,7 @@ class ResidualUNet18(L.LightningModule):
         batch: Tuple[torch.Tensor, torch.Tensor],
         batch_idx: int,
     ):
+        """Compute the cross-entropy plus dice loss for a training batch."""
         images, labels = batch
         logits = self(images)  # (b, c, h, w)
         cross_entropy = F.cross_entropy(logits, labels)
@@ -98,6 +102,7 @@ class ResidualUNet18(L.LightningModule):
         batch: Tuple[torch.Tensor, torch.Tensor],
         batch_idx: int,
     ):
+        """Compute and log the dice score for a validation batch."""
         images, labels = batch
         logits = self(images)  # (b, c, h, w)
         dice = dice_score(ground_truth=labels, logits=logits)
@@ -134,12 +139,14 @@ class ResidualUNet18(L.LightningModule):
         return torch.tensor(merger.merge(unpad=True))
 
     def on_validation_epoch_end(self):
+        """Log the mean validation dice score and reset the accumulator."""
         mean_dice_score = torch.mean(torch.as_tensor(self.validation_step_outputs))
         self.validation_dice_score = mean_dice_score
         self.log(name="validation dice score", value=mean_dice_score)
         self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
+        """Create the RMSprop optimizer and a plateau learning-rate scheduler."""
         optimizer = optim.RMSprop(
             params=self.parameters(),
             lr=self.learning_rate,
@@ -157,6 +164,7 @@ class ResidualUNet18(L.LightningModule):
         optimizer_closure: Optional[Callable[[], Any]] = None,
         **kwargs,
     ) -> None:
+        """Log the learning rate and step the scheduler on each epoch's first batch."""
         self.log("learning rate", optimizer.param_groups[0]["lr"])
         if batch_idx == 0:  # call the scheduler after each validation
             self.scheduler.step(self.validation_dice_score)

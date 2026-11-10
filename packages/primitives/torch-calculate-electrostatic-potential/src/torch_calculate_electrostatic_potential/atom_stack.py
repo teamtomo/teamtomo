@@ -30,6 +30,29 @@ class AtomStack:
         atom_names: list[str] | None = None,
         device: torch.device | str = "cpu",
     ) -> None:
+        """Initialize from coordinates and atomic numbers.
+
+        Parameters
+        ----------
+        atom_pos_zyx : torch.Tensor
+            Atom coordinates in Angstroms, zyx order, shape `(..., N, 3)`.
+        atomic_numbers : torch.Tensor
+            Integer atomic numbers, shape `(N,)`. Element symbols are derived
+            from these.
+        atom_bfactors : torch.Tensor | float, optional
+            Atomic B-factors in Angstroms squared, shape `(N,)` or a scalar
+            applied to every atom. Default is 0.0.
+        atom_occupancies : torch.Tensor | float, optional
+            Unitless atomic occupancies, shape `(N,)` or a scalar applied to
+            every atom. Default is 1.0.
+        atom_names : list[str] | None, optional
+            Optional per-atom names, stored as the structure's atom names and
+            returned by `atom_names`. If None, empty names are stored and
+            `atom_names` returns None.
+        device : torch.device | str, optional
+            Device on which all atom data is stored. Inputs are moved to this
+            device. Default is `"cpu"`.
+        """
         resolved_device = torch.device(device)
         positions = atom_pos_zyx.to(resolved_device)
         numbers = torch.as_tensor(
@@ -136,7 +159,31 @@ class AtomStack:
         atom_occupancies: torch.Tensor | float = 1.0,
         device: torch.device | str = "cpu",
     ) -> AtomStack:
-        """Construct an AtomStack from coordinates and element names."""
+        """Construct an AtomStack from coordinates and element names.
+
+        Parameters
+        ----------
+        atom_pos_zyx : torch.Tensor
+            Atom coordinates in Angstroms, zyx order, shape `(..., N, 3)`.
+        atom_names : list[str]
+            Element symbols, one per atom (e.g. `"C"`, `"Fe"`), parsed with
+            `gemmi.Element` to obtain atomic numbers. Also kept as the stack's
+            `atom_names`.
+        atom_bfactors : torch.Tensor | float, optional
+            Atomic B-factors in Angstroms squared, shape `(N,)` or a scalar
+            applied to every atom. Default is 0.0.
+        atom_occupancies : torch.Tensor | float, optional
+            Unitless atomic occupancies, shape `(N,)` or a scalar applied to
+            every atom. Default is 1.0.
+        device : torch.device | str, optional
+            Device on which all atom data is stored. Inputs are moved to this
+            device. Default is `"cpu"`.
+
+        Returns
+        -------
+        AtomStack
+            The new atom stack.
+        """
         atomic_numbers = torch.tensor(
             [gemmi.Element(name).atomic_number for name in atom_names],
             dtype=torch.int64,
@@ -159,7 +206,29 @@ class AtomStack:
         atom_occupancies: torch.Tensor | float = 1.0,
         device: torch.device | str = "cpu",
     ) -> AtomStack:
-        """Construct an AtomStack from coordinates and atomic numbers."""
+        """Construct an AtomStack from coordinates and atomic numbers.
+
+        Parameters
+        ----------
+        atom_pos_zyx : torch.Tensor
+            Atom coordinates in Angstroms, zyx order, shape `(..., N, 3)`.
+        atomic_numbers : torch.Tensor
+            Integer atomic numbers, shape `(N,)`.
+        atom_bfactors : torch.Tensor | float, optional
+            Atomic B-factors in Angstroms squared, shape `(N,)` or a scalar
+            applied to every atom. Default is 0.0.
+        atom_occupancies : torch.Tensor | float, optional
+            Unitless atomic occupancies, shape `(N,)` or a scalar applied to
+            every atom. Default is 1.0.
+        device : torch.device | str, optional
+            Device on which all atom data is stored. Inputs are moved to this
+            device. Default is `"cpu"`.
+
+        Returns
+        -------
+        AtomStack
+            The new atom stack, with `atom_names` set to None.
+        """
         return cls(
             atom_pos_zyx, atomic_numbers, atom_bfactors, atom_occupancies, None, device
         )
@@ -167,7 +236,24 @@ class AtomStack:
     def to_scattering_potential_3d(
         self, grid_config: GridConfig, **kwargs: Any
     ) -> torch.Tensor:
-        """Compute a 3D potential using the current physical kernel."""
+        """Compute a 3D potential using the current physical kernel.
+
+        Uses elemental Peng 1996 scattering parameters and the stack's
+        B-factors and occupancies.
+
+        Parameters
+        ----------
+        grid_config : GridConfig
+            Three-dimensional output grid.
+        **kwargs : Any
+            Forwarded to `calculate_scattering_potential_3d`
+            (`per_voxel_averaging`, `batch_size`, `verbose`).
+
+        Returns
+        -------
+        torch.Tensor
+            Potential volume(s) in volts, shape `(..., *grid_config.grid_shape)`.
+        """
         return calculate_scattering_potential_3d(
             atom_pos_zyx=self.atom_pos_zyx,
             atom_bfactors=self.atom_bfactors,
@@ -181,7 +267,26 @@ class AtomStack:
     def to_scattering_potential_2d(
         self, grid_config: GridConfig, **kwargs: Any
     ) -> torch.Tensor:
-        """Compute a projected 2D potential using the current physical kernel."""
+        """Compute a projected 2D potential using the current physical kernel.
+
+        The z coordinate is dropped and the yx coordinates are projected onto
+        the grid using elemental Peng 1996 scattering parameters and the
+        stack's B-factors and occupancies.
+
+        Parameters
+        ----------
+        grid_config : GridConfig
+            Two-dimensional output grid in yx order.
+        **kwargs : Any
+            Forwarded to `calculate_scattering_potential_2d`
+            (`per_voxel_averaging`, `batch_size`, `verbose`).
+
+        Returns
+        -------
+        torch.Tensor
+            Projected potential image(s) in V Angstrom, shape
+            `(..., *grid_config.grid_shape)`.
+        """
         return calculate_scattering_potential_2d(
             atom_pos_yx=self.atom_pos_zyx[..., 1:],
             atom_bfactors=self.atom_bfactors,

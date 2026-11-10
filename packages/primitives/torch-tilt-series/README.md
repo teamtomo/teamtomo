@@ -1,10 +1,9 @@
 # torch-tilt-series
 
-[![License](https://img.shields.io/pypi/l/torch-tilt-series.svg?color=green)](https://github.com/teamtomo/torch-tilt-series/raw/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/torch-tilt-series.svg?color=green)](https://github.com/teamtomo/teamtomo/blob/main/packages/primitives/torch-tilt-series/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/torch-tilt-series.svg?color=green)](https://pypi.org/project/torch-tilt-series)
 [![Python Version](https://img.shields.io/pypi/pyversions/torch-tilt-series.svg?color=green)](https://python.org)
-[![CI](https://github.com/teamtomo/torch-tilt-series/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/torch-tilt-series/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/teamtomo/torch-tilt-series/branch/main/graph/badge.svg)](https://codecov.io/gh/teamtomo/torch-tilt-series)
+[![CI](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml/badge.svg)](https://github.com/teamtomo/teamtomo/actions/workflows/ci.yml)
 
 Tilt series data structure, projection and subtilt extraction for cryo-ET.
 
@@ -21,7 +20,7 @@ This package provides a `TiltSeries` class for working with cryo-ET tilt series 
 
 All 3D/2D positions are in `zyx`/`yx` coordinates, in Angstroms, relative to the tomogram/detector center. Translations are stored in Angstroms as `(y, x)`.
 
-Subtilt/subvolume extraction and full volume reconstruction live in [`torch-reconstruct-tomogram`](https://github.com/teamtomo/torch-reconstruct-tomogram).
+Subtilt/subvolume extraction and full volume reconstruction live in [`torch-reconstruct-tomogram`](../../algorithms/torch-reconstruct-tomogram/README.md).
 
 
 ## Installation

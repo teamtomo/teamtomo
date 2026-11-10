@@ -20,9 +20,9 @@ def estimate_background_2d(
 
     Parameters
     ----------
-    power_spectrum: torch.Tensor
+    power_spectrum : torch.Tensor
         Power spectrum of the image, shape (H, W) for rfft (W = width//2+1).
-    image_sidelength: int or (int, int)
+    image_sidelength : int or (int, int)
         If int: sidelength of a square image (image_shape = (L, L)).
         If (height, width): image shape so output matches power_spectrum.
 

@@ -45,9 +45,93 @@ def defocus_field_from_1d_fits(
     """
     Build defocus field from per-patch 1D fits; fit grid or linear to those values.
 
-    Runs estimate_ctf_1d on each patch, then fits either a 3D spline grid or
+    Runs `estimate_ctf_1d` on each patch, then fits either a 3D spline grid or
     a linear (defocus_0 + gradient) model to the (position, defocus_1d) data.
     Astigmatism and envelope come from result_1x1.
+
+    Each per-patch 1D fit starts from the mean defocus of `result_1x1`, so the
+    1D grid search is skipped and only gradient-descent refinement of defocus
+    (and optionally phase shift) runs, without envelope refinement.
+
+    Parameters
+    ----------
+    patch_power_spectra : torch.Tensor
+        Per-patch power spectra, shape `(t, gh, gw, ph, pw // 2 + 1)`.
+    normalised_patch_positions : torch.Tensor
+        Patch positions, shape `(t, gh, gw, 3)`, as normalised `(t, y, x)` in
+        [0, 1].
+    result_1x1 : Defocus2DResults
+        Whole-image (1x1) 2D fit. Its mean defocus seeds every patch fit; its
+        astigmatism, astigmatism angle, envelope B and (unless
+        `fixed_phase_shift_deg` is set) phase shift are reused.
+    defocus_model : {"grid", "linear"}
+        Model fitted to the per-patch defocus values.
+    defocus_grid_resolution : tuple[int, int, int]
+        Grid resolution `(nt, nh, nw)` for the "grid" model. Unused for "linear".
+    initial_defocus : float
+        Initial value (µm) of every grid node before fitting the "grid" model.
+        Unused for "linear", where `defocus_0` is the mean defocus of
+        `result_1x1`.
+    image_sidelength : int
+        Side length in pixels of each (square) patch.
+    frequency_fit_range_angstroms : tuple[float, float]
+        `(low, high)` fit band in Å for the per-patch 1D fits.
+    voltage_kev : float
+        Acceleration voltage in keV.
+    spherical_aberration_mm : float
+        Spherical aberration in mm.
+    amplitude_contrast_fraction : float
+        Fraction of amplitude contrast.
+    pixel_spacing_angstroms : float
+        Pixel spacing in Å.
+    optimize_envelope_1d : bool
+        Passed to `estimate_ctf_1d` as `optimize_envelope`. Has no effect here
+        because the per-patch fits always skip the grid search.
+    b_range_1d : tuple[float, float]
+        Passed to `estimate_ctf_1d` as `b_range` (B-factor range in Å²). Has no
+        effect here for the same reason.
+    b_step_1d : float
+        Passed to `estimate_ctf_1d` as `b_step`. Has no effect here for the
+        same reason.
+    refine_steps_1d : int
+        Number of gradient-descent refinement steps per patch.
+    background_result : _Background1DResult or None
+        Pre-fitted 1D background (e.g. from the mean spectrum) to reuse for every
+        patch. If None, a background is fitted per patch.
+    device : torch.device
+        Device for the per-patch defocus values and the fitted defocus model.
+    optimize_phase_shift : bool, optional
+        If True, refine the phase shift in each per-patch fit. Default False.
+    use_equiphase_for_1d_spatial : bool, optional
+        If True, the per-patch 1D spectra use equiphase averaging with the
+        astigmatism of `result_1x1`. Default False.
+    laser_params : LaserParams or None, optional
+        Laser phase plate parameters for the equiphase phase calculation.
+        Default None.
+    equiphase_n_theta : int, optional
+        Azimuth samples per shell for equiphase averaging. Default 64.
+    defocus_range_microns : tuple[float, float] or None, optional
+        Defocus bounds in µm for the per-patch fits. None uses the default
+        bounds (0, 10). Default None.
+    phase_shift_range_degrees : tuple[float, float] or None, optional
+        Phase shift bounds in degrees for the per-patch fits. None uses the
+        default bounds (0, 180). Default None.
+    fixed_phase_shift_deg : float or None, optional
+        If set, used as the initial (and equiphase) phase shift for every patch
+        instead of the phase shift of `result_1x1`. Default None.
+
+    Returns
+    -------
+    Defocus2DResults
+        Result with `defocus_model_type` set to `defocus_model`, the fitted
+        `CubicCatmullRomGrid3d` or `LinearDefocusModel`, `patch_power_spectra`,
+        astigmatism and envelope B copied from `result_1x1`, and `defocus_u` /
+        `defocus_v` from the mean defocus ± astigmatism / 2.
+
+    Warns
+    -----
+    UserWarning
+        For the linear model, if the fitted defocus gradient is zero or NaN.
     """
     t, gh, gw, _ph, _pw = patch_power_spectra.shape
     nt, nh, nw = defocus_grid_resolution

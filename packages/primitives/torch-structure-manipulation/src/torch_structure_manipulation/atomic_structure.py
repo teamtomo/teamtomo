@@ -16,16 +16,44 @@ if TYPE_CHECKING:
 class AtomicStructure:
     """Lightweight numerical representation of an atomic structure.
 
-    Positions use array-friendly ``(z, y, x)`` order. Numerical fields may have
+    Positions use array-friendly `(z, y, x)` order. Numerical fields may have
     arbitrary broadcast-compatible batch dimensions before their atom dimension.
     Text metadata is shared across batches and held in immutable tuples.
 
-    Bonding metadata (``bonded_environments``, ``molecule_types``) is not batched:
+    Bonding metadata (`bonded_environments`, `molecule_types`) is not batched:
     one tuple is shared by every batch member. That matches ensemble-of-poses use
     cases (same chemistry, different coordinates) but not batched structures with
-    different chemistry. See :meth:`from_annotated_dataframe` and the bonded-factor
+    different chemistry. See `from_annotated_dataframe` and the bonded-factor
     notes on
-    :func:`torch_calculate_electrostatic_potential.potential_from_structure_3d`.
+    `torch_calculate_electrostatic_potential.potential_from_structure_3d`.
+
+    Attributes
+    ----------
+    positions_zyx : torch.Tensor
+        Atom coordinates in Angstroms, zyx order, shape `(..., n_atoms, 3)`.
+    atomic_numbers : torch.Tensor
+        Integer atomic numbers, shape `(..., n_atoms)`.
+    elements : tuple[str, ...]
+        Element symbol for each atom, length `n_atoms`.
+    atom_names : tuple[str, ...]
+        Atom name for each atom (e.g. `"CA"`), length `n_atoms`.
+    b_factors : torch.Tensor
+        Atomic B-factors in Angstroms squared, a scalar or shape
+        `(..., n_atoms)`.
+    occupancies : torch.Tensor
+        Unitless atomic occupancies, a scalar or shape `(..., n_atoms)`.
+    bonded_environments : tuple[str, ...] | None
+        Optional per-atom bonded-environment keys such as `"C(HCCN)"`, as
+        produced by `annotate_bonding_environments`. Default is None.
+    molecule_types : tuple[str, ...] | None
+        Optional per-atom molecule type (`"protein"`, `"rna"` or `"other"`).
+        Default is None.
+
+    Raises
+    ------
+    ValueError
+        If field shapes or lengths are inconsistent with the number of atoms in
+        `positions_zyx`, or the numerical batch shapes do not broadcast.
     """
 
     positions_zyx: torch.Tensor
@@ -88,10 +116,34 @@ class AtomicStructure:
     ) -> AtomicStructure:
         """Construct from an mmdf-compatible DataFrame.
 
-        Required columns are ``x``, ``y``, ``z``, and ``element``. Atom names
-        come from ``atom`` when present. ``b_isotropic`` and ``occupancy``
-        default to zero and one, respectively. Optional ``bonded_environments``
-        and ``molecule_type`` columns are preserved when present.
+        Required columns are `x`, `y`, `z`, and `element`. Atom names
+        come from `atom` when present. `b_isotropic` and `occupancy`
+        default to zero and one, respectively. Optional `bonded_environments`
+        and `molecule_type` columns are preserved when present.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Atom table with one row per atom. Coordinates are in Angstroms.
+            Element symbols are stripped and upper-cased; if an
+            `atomic_number` column is present it is used instead of looking
+            the symbols up with gemmi.
+        device : torch.device | str | None, optional
+            Device for the created tensors. Default is None (PyTorch's default
+            device).
+        dtype : torch.dtype, optional
+            Floating-point dtype for positions, B-factors and occupancies.
+            Default is torch.float32.
+
+        Returns
+        -------
+        AtomicStructure
+            Unbatched structure with positions of shape `(n_atoms, 3)`.
+
+        Raises
+        ------
+        ValueError
+            If a required column is missing or an element symbol is unknown.
         """
         required = {"x", "y", "z", "element"}
         missing = sorted(required.difference(df.columns))
@@ -165,13 +217,39 @@ class AtomicStructure:
         """Annotate bonding metadata, then construct from the result.
 
         This is the usual entry point for Peng bonded scattering factors: it
-        calls :func:`~torch_structure_manipulation.annotate_bonding_environments`
-        to add ``bonded_environments`` and ``molecule_type`` columns, then
-        delegates to :meth:`from_dataframe`.
+        calls `torch_structure_manipulation.annotate_bonding_environments`
+        to add `bonded_environments` and `molecule_type` columns, then
+        delegates to `from_dataframe`.
 
-        The input must include ``chain``, ``residue_id``, ``residue``, ``atom``,
-        and ``element`` in addition to the coordinate columns required by
-        :meth:`from_dataframe`.
+        The input must include `chain`, `residue_id`, `residue`, `atom`,
+        and `element` in addition to the coordinate columns required by
+        `from_dataframe`.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Atom table with one row per atom, using mmdf column names.
+        include_hydrogens : bool, optional
+            Passed to `annotate_bonding_environments`: whether hydrogen
+            neighbours are included in the bonded-environment keys. Default is
+            True.
+        device : torch.device | str | None, optional
+            Device for the created tensors. Default is None (PyTorch's default
+            device).
+        dtype : torch.dtype, optional
+            Floating-point dtype for positions, B-factors and occupancies.
+            Default is torch.float32.
+
+        Returns
+        -------
+        AtomicStructure
+            Unbatched structure with `bonded_environments` and
+            `molecule_types` set.
+
+        Raises
+        ------
+        ValueError
+            If a required column is missing or an element symbol is unknown.
         """
         from .bonding import annotate_bonding_environments
 
@@ -204,7 +282,27 @@ class AtomicStructure:
         return self.positions_zyx.device
 
     def with_positions(self, positions_zyx: torch.Tensor) -> AtomicStructure:
-        """Return a copy with replacement, broadcast-compatible positions."""
+        """Return a copy with replacement, broadcast-compatible positions.
+
+        Parameters
+        ----------
+        positions_zyx : torch.Tensor
+            New atom coordinates in Angstroms, zyx order, shape
+            `(..., n_atoms, 3)` with the same number of atoms. Leading batch
+            dimensions may differ from the current positions. The tensor is
+            stored as given (no device or dtype conversion).
+
+        Returns
+        -------
+        AtomicStructure
+            Copy of this structure with the new positions; all other fields are
+            shared.
+
+        Raises
+        ------
+        ValueError
+            If `positions_zyx` does not have shape `(..., n_atoms, 3)`.
+        """
         if positions_zyx.ndim < 2 or positions_zyx.shape[-2:] != (self.num_atoms, 3):
             raise ValueError(
                 "replacement positions must have shape (..., n_atoms, 3) with the "
@@ -217,7 +315,24 @@ class AtomicStructure:
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> AtomicStructure:
-        """Return a copy with numerical tensors moved to a device and dtype."""
+        """Return a copy with numerical tensors moved to a device and dtype.
+
+        Parameters
+        ----------
+        device : torch.device | str | None, optional
+            Target device. Default is None (keep each tensor's device).
+        dtype : torch.dtype | None, optional
+            Target floating-point dtype for positions, B-factors and
+            occupancies. Default is None, which casts B-factors and occupancies
+            to the current dtype of the positions. `atomic_numbers` keeps its
+            integer dtype.
+
+        Returns
+        -------
+        AtomicStructure
+            Copy of this structure with converted tensors; text metadata is
+            shared.
+        """
         floating_dtype = self.positions_zyx.dtype if dtype is None else dtype
         return replace(
             self,

@@ -160,24 +160,25 @@ def gradient_refine(
 ) -> AlignmentResult:
     """Gradient-based local refinement of rotation and translation.
 
-    Refines an initial alignment (e.g. from :func:`exhaustive_search`) using
+    Refines an initial alignment (e.g. from `exhaustive_search`) using
     PyTorch autograd.  The rotation is parameterised as an axis-angle vector
     (Rodrigues formula), which is unconstrained and avoids gimbal lock.
 
     Parameters
     ----------
     reference : torch.Tensor
-        ``(d, h, w)`` reference volume.
+        `(d, h, w)` reference volume.
     mobile : torch.Tensor
-        ``(d, h, w)`` mobile volume at the same voxel size.
+        `(d, h, w)` mobile volume at the same voxel size.
     initial_rotation : torch.Tensor
-        ``(3, 3)`` zyx rotation matrix from a coarse search.
+        `(3, 3)` zyx rotation matrix from a coarse search.
     initial_translation : torch.Tensor
-        ``(3,)`` zyx translation in pixels from a coarse search.
+        `(3,)` zyx translation in pixels from a coarse search.
     config : GradientRefinementConfig or None
-        Optimisation parameters.
+        Optimisation parameters. Defaults are used when `None`.
     mask : torch.Tensor or None
-        Optional ``(d, h, w)`` soft mask.
+        Optional `(d, h, w)` soft mask, used for volume normalisation and the
+        loss.
     verbose : bool
         Show refinement progress.
 
@@ -185,7 +186,9 @@ def gradient_refine(
     -------
     AlignmentResult
         Refined rotation matrix (3 x 3, zyx), translation in pixels (3,), and
-        final NCC score.
+        score equal to the negated final loss (the NCC for `loss="ncc"`, the
+        negative MSE for `loss="mse"`). Tensors are on the device of
+        `reference`.
     """
     if config is None:
         config = GradientRefinementConfig()

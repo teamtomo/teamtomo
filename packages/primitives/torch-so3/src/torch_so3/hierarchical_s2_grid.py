@@ -18,7 +18,16 @@ def _check_healpy_available() -> None:
 
 @dataclass(frozen=True)
 class GridLevel:
-    """A single HEALPix NESTED resolution within a HierarchicalS2Grid."""
+    """A single HEALPix NESTED resolution within a HierarchicalS2Grid.
+
+    Attributes
+    ----------
+    nside : int
+        HEALPix nside of this level.
+    depth : int
+        Number of times the finest level's nside is halved to give this level's
+        nside, i.e. 0 for the finest level of a `HierarchicalS2Grid`.
+    """
 
     nside: int
     depth: int
@@ -35,12 +44,36 @@ class GridLevel:
         return 58.6 / self.nside
 
     def angle_from_index(self, ipix: npt.ArrayLike) -> tuple[np.ndarray, np.ndarray]:
-        """Get (theta, phi) in radians for pixel index/indices at this level."""
+        """Get (theta, phi) in radians for pixel index/indices at this level.
+
+        Parameters
+        ----------
+        ipix : ArrayLike
+            HEALPix NESTED pixel index/indices at this level's resolution.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            (theta, phi) angles in radians for each pixel index.
+        """
         _check_healpy_available()
         return hp.pix2ang(self.nside, np.asarray(ipix), nest=True)
 
     def index_from_angle(self, theta: npt.ArrayLike, phi: npt.ArrayLike) -> np.ndarray:
-        """Get the pixel index/indices closest to (theta, phi) angles at this level."""
+        """Get the pixel index/indices closest to (theta, phi) angles at this level.
+
+        Parameters
+        ----------
+        theta : ArrayLike
+            Colatitude angle(s) in radians.
+        phi : ArrayLike
+            Longitude angle(s) in radians.
+
+        Returns
+        -------
+        np.ndarray
+            HEALPix NESTED pixel index/indices at this level.
+        """
         _check_healpy_available()
         return hp.ang2pix(self.nside, np.asarray(theta), np.asarray(phi), nest=True)
 
@@ -71,7 +104,24 @@ class HierarchicalS2Grid:
     levels: list[GridLevel]
 
     def __init__(self, nside_finest: int, n_levels: int):
-        """Initialize with validation checks."""
+        """Initialize with validation checks.
+
+        Parameters
+        ----------
+        nside_finest : int
+            HEALPix nside of the finest level. Must be a power of 2 divisible by
+            `2 ** (n_levels - 1)`.
+        n_levels : int
+            Number of resolution levels. Each coarser level halves the nside.
+
+        Raises
+        ------
+        ValueError
+            If `nside_finest` is not a power of 2 or is not divisible by
+            `2 ** (n_levels - 1)`.
+        ImportError
+            If running on Windows, where healpy is unavailable.
+        """
         _check_healpy_available()
         if nside_finest & (nside_finest - 1) != 0:
             raise ValueError("nside_finest must be a power of 2")
@@ -91,7 +141,29 @@ class HierarchicalS2Grid:
     def from_target_step_deg(
         cls, target_step_deg: float, n_levels: int
     ) -> "HierarchicalS2Grid":
-        """Create a grid whose finest level is closest to a target step, in degrees."""
+        """Create a grid whose finest level is closest to a target step, in degrees.
+
+        The finest nside is `round(58.6 / target_step_deg)` rounded to the nearest
+        power of 2 (in log2 space).
+
+        Parameters
+        ----------
+        target_step_deg : float
+            Target angular spacing of the finest level, in degrees.
+        n_levels : int
+            Number of resolution levels.
+
+        Returns
+        -------
+        HierarchicalS2Grid
+            The constructed grid.
+
+        Raises
+        ------
+        ValueError
+            If `target_step_deg` is so large that the resulting nside is < 1, or
+            if the resulting nside is not divisible by `2 ** (n_levels - 1)`.
+        """
         closest_nside = round(58.6 / target_step_deg)
         if closest_nside < 1:
             raise ValueError("Target step size too large; resulting nside < 1.")

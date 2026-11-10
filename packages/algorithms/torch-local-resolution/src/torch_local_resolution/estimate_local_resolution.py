@@ -1,8 +1,8 @@
 """Local resolution estimation: validated public API and core routine.
 
-:func:`compute_resolution` sets up geometry, prepares rFFTs and permutation
+`compute_resolution` sets up geometry, prepares rFFTs and permutation
 surrogates, applies per-shell bandpasses, and fills per-batch p-value maps via
-:mod:`utils_correlations`.
+`utils_correlations`.
 """
 
 import numpy as np
@@ -158,14 +158,13 @@ def _prepare_device_and_geometry(
 
 
 def compute_correlation(inp: ComputeResolutionInput) -> torch.Tensor:
-    """Compute per-shell correlation from a validated :class:`ComputeResolutionInput`.
+    """Compute per-shell correlation from a validated `ComputeResolutionInput`.
 
     Parameters
     ----------
     inp : ComputeResolutionInput
         Validated half-maps and hyperparameters. Build via
-        :class:`~toch_local_resolution.input_models.ComputeResolutionInput` or call
-        :func:`estimate_local_resolution`.
+        `ComputeResolutionInput` or call `estimate_local_resolution`.
 
     Returns
     -------
@@ -173,7 +172,7 @@ def compute_correlation(inp: ComputeResolutionInput) -> torch.Tensor:
         Map with correlation values per batch element, per sampling location, per
         investigated shell, in the order of given input shells. Shape is
         (n_batch, len(windows_radii), *output_shape). Map size will be reduced
-        compared to input map according to ``step_size``.
+        compared to input map according to `step_size`.
     """
     (
         device,
@@ -251,14 +250,15 @@ def compute_correlation(inp: ComputeResolutionInput) -> torch.Tensor:
 
 
 def compute_resolution(inp: ComputeResolutionInput) -> torch.Tensor:
-    """Compute per-shell p-value map from a validated :class:`ComputeResolutionInput`.
+    """Compute per-shell p-value map from a validated `ComputeResolutionInput`.
 
     Parameters
     ----------
     inp : ComputeResolutionInput
         Validated half-maps and hyperparameters. Build via
-        :class:`~toch_local_resolution.input_models.ComputeResolutionInput` or call
-        :func:`estimate_local_resolution`.
+        `ComputeResolutionInput` or call `estimate_local_resolution`. If
+        `inp.n_random_maps` is 0, the estimated number of random maps is
+        written back to `inp.n_random_maps`.
 
     Returns
     -------
@@ -266,7 +266,7 @@ def compute_resolution(inp: ComputeResolutionInput) -> torch.Tensor:
         Map with p-values per batch element, per sampling location, per investigated
         shell, in the order of given input shells. Shape is
         (n_batch, len(windows_radii), *output_shape). Map size will be reduced
-        compared to input map according to ``step_size``.
+        compared to input map according to `step_size`.
     """
     (
         device,
@@ -389,54 +389,68 @@ def estimate_local_resolution(
 ) -> torch.Tensor:
     """Compute per-shell p-value map by local correlation, no resolution thresholding.
 
-    Arguments are validated with :class:`ComputeResolutionInput` then passed to
-    :func:`compute_resolution`. The compute device is ``cpu`` when ``gpu_id`` is
-    ``None``, otherwise ``cuda:{gpu_id}`` (CUDA must be available if ``gpu_id`` is
+    Arguments are validated with `ComputeResolutionInput` then passed to
+    `compute_resolution`. The compute device is `cpu` when `gpu_id` is
+    `None`, otherwise `cuda:{gpu_id}` (CUDA must be available if `gpu_id` is
     set).
 
     Parameters
     ----------
-    apix
+    apix : float
         Voxel size in Å per pixel.
-    windows_radii
-        Window radii in voxels, one entry per shell; paired with ``resolutions``.
-    resolutions
-        Target resolutions in Å, one per ``windows_radii`` entry.
-    batch_half_map1, batch_half_map2
-        Half-maps with shape ``(B, Z, Y, X)``. Use ``Z = 1`` for 2D (single slice).
+    windows_radii : list[float]
+        Window radii in voxels, one entry per shell; paired with `resolutions`.
+    resolutions : list[float]
+        Target resolutions in Å, one per `windows_radii` entry.
+    batch_half_map1, batch_half_map2 : torch.Tensor
+        Half-maps with shape `(B, Z, Y, X)`. Use `Z = 1` for 2D (single slice).
         Both tensors must match in shape; they are moved to the compute device
-        inside :func:`compute_resolution`.
-    step_size
+        inside `compute_resolution`.
+    step_size : int, optional
         Stride in voxels between correlation samples on the output grid.
-    gpu_id
-        If ``None``, run on CPU. If an int, use that CUDA device index (must exist).
-    skip_statistics
+        Default 3.
+    gpu_id : int or None, optional
+        If `None`, run on CPU. If an int, use that CUDA device index (must exist).
+        Default None.
+    skip_statistics : bool, optional
         Return correlation values directly, skipping p-value determination entirely.
         The correlation values will not be adequate for resolution estimation and
         should not be compared across map sizes and datasets. The benefit is
-        differentiability.
-    n_random_maps
+        differentiability. Default False.
+    n_random_maps : int, optional
         Number of random surrogate / permuted maps for the null distribution.
-    reference_dist_size
+        0 estimates the number from `reference_dist_size`. Default 0.
+    reference_dist_size : int, optional
         Number of random window pairs used to build the permutation null.
-    do_phase_permutation
-        If ``True``, build surrogates by permuting Fourier phases of half-map 2
-        (``torch_fourier_filter.phase_randomize.phase_permutation``); if ``False``,
-        permute real-space voxels before FFT.
-    batch_size
+        Default 10000.
+    do_phase_permutation : bool, optional
+        If `True`, build surrogates by permuting Fourier phases of half-map 2
+        (`torch_fourier_filter.phase_randomize.phase_permutation`); if `False`,
+        permute real-space voxels before FFT. Default True.
+    batch_size : int, optional
         How many grid positions to process together in the local correlation scan
-        (GPU memory vs throughput).
-    shell_size
-        Relative shell width for bandpass (passed to shell construction in 1/Å).
-    falloff
-        Hypertangent bandpass falloff (``torch_fourier_filter``).
+        (GPU memory vs throughput). Default 4096.
+    shell_size : float, optional
+        Bandpass shell half-width as a fraction of Nyquist (see
+        `ComputeResolutionInput`). Default 0.05.
+    falloff : float, optional
+        Hypertangent bandpass falloff (`torch_fourier_filter`). Default 1.5.
 
     Returns
     -------
     torch.Tensor
         P-value map per batch element and shell. Shape
-        ``(n_batch, len(windows_radii), *output_shape)``, ``float16``. Spatial size
-        is reduced versus the input when ``step_size > 1``.
+        `(n_batch, len(windows_radii), *output_shape)`, `float16`. Spatial size
+        is reduced versus the input when `step_size > 1`. With
+        `skip_statistics=True`, the map holds correlation values instead
+        (`float32`, same shape).
+
+    Raises
+    ------
+    pydantic.ValidationError
+        If the arguments fail `ComputeResolutionInput` validation (e.g.
+        mismatched lengths or shapes, non-positive values, or an unavailable
+        `gpu_id`).
     """
     # Pydantic validates all arguments before any heavy compute runs.
     inp = ComputeResolutionInput(
