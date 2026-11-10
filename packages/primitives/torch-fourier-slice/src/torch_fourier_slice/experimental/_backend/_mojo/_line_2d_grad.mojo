@@ -29,6 +29,7 @@ from _common import (
     _line_2d_shift_phase,
     _line_2d_k,
     _rfft_half,
+    _load_c2_line,
 )
 from _gather_grad import _interp_2d_with_grad
 from _slice_3d_grad import _redot
@@ -135,15 +136,18 @@ def _extract_line_2d_pose_grad_pixel[
         img + i_bv * p.sidelength * half * 2,
         row_major(p.sidelength, half, 2),
     )
-    var vg = _interp_2d_with_grad[interp](img_b, k[0], k[1], 0)
+    var vg = _interp_2d_with_grad[interp](img_b, k[0], k[1])
     var val = C2(vg[0], vg[1])
     var gy = C2(vg[2], vg[3])
     var gx = C2(vg[4], vg[5])
     if p.has_shifts_2d != 0:
         _couple_shift_2d(shifts_2d, i_bv, i_bp, val, p, gy, gx)
     var line_half = p.proj_sidelength_half()
-    var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
-    var gp = C2(grad_line[off], grad_line[off + 1])
+    # tile-view load: a raw `C2(ptr[off], ptr[off + 1])` reads zeros inside Metal kernels
+    var grad_line_b = TileTensor(
+        grad_line + i_bv * p.bp * line_half * 2, row_major(p.bp, line_half, 2)
+    )
+    var gp = _load_c2_line(grad_line_b, i_bp, x)
     var pf = _line_2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
     var gpc = _cmul(gp, C2(pf[0], -pf[1]))
     var modulated = _cmul(val, pf)
@@ -179,15 +183,17 @@ def _insert_line_2d_pose_grad_pixel[
         grad_img + i_bv * p.sidelength * half * 2,
         row_major(p.sidelength, half, 2),
     )
-    var vg = _interp_2d_with_grad[interp](grad_img_b, k[0], k[1], 1)
+    var vg = _interp_2d_with_grad[interp](grad_img_b, k[0], k[1])
     var val = C2(vg[0], vg[1])
     var gy = C2(vg[2], vg[3])
     var gx = C2(vg[4], vg[5])
     if p.has_shifts_2d != 0:
         _couple_shift_2d(shifts_2d, i_bv, i_bp, val, p, gy, gx)
     var line_half = p.proj_sidelength_half()
-    var off = ((i_bv * p.bp + i_bp) * line_half + x) * 2
-    var pv = C2(lines[off], lines[off + 1])
+    var lines_b = TileTensor(
+        lines + i_bv * p.bp * line_half * 2, row_major(p.bp, line_half, 2)
+    )
+    var pv = _load_c2_line(lines_b, i_bp, x)
     var pf = _line_2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
     var pvc = _cmul(pv, C2(pf[0], -pf[1]))
     return _line_2d_pose_grad_terms(sx, k[0], k[1], pvc, gy, gx, pvc, val, p)
