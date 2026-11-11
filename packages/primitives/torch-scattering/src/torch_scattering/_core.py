@@ -90,15 +90,23 @@ def fresnel_propagator(
 
     Notes
     -----
-    ``H(k) = exp(i * pi * wavelength * dz * k^2)``. This is a pure phase
-    transfer function, so ``|H(k)| == 1`` for all `k`.
+    ``H(k) = exp(-i * pi * wavelength * dz * k^2)`` (Kirkland Eq. 6.92). This
+    is a pure phase transfer function, so ``|H(k)| == 1`` for all `k`.
+
+    The sign is fixed by `transmission_function`, which advances the phase by
+    ``+sigma * V * dz``: both follow the ``exp(+i k z)`` plane-wave
+    convention, under which a positive potential acts as a converging lens.
+    ``H`` is the paraxial limit of the exact angular-spectrum propagator
+    ``exp(2 * pi * i * dz * (sqrt(1 / wavelength^2 - k^2) - 1 / wavelength))``
+    and propagates the wave forwards (downstream) by `dz`, so a positive
+    phase object focuses: its centre gets brighter.
 
     References
     ----------
     .. [1] E. J. Kirkland, Advanced Computing in Electron Microscopy,
-       Springer US, Boston, MA, 2010.
+       Eq. (6.92), Springer US, Boston, MA, 2010.
     """
-    return torch.exp(1j * C.pi * wavelength * dz * frequency_grid**2)
+    return torch.exp(-1j * C.pi * wavelength * dz * frequency_grid**2)
 
 
 def transmission_function(
