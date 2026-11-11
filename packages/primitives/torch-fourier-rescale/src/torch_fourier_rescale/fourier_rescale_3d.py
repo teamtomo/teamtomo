@@ -87,7 +87,9 @@ def fourier_rescale_3d(
         raise ValueError("Either target_spacing or target_shape must be specified")
 
     # place image center at array indices [0, 0, 0] and compute centered rfft3
-    image = torch.fft.fftshift(image, dim=(-3, -2, -1))
+    # ifftshift moves the centre [n // 2] to [0]; fftshift would move [(n + 1) // 2]
+    # there, one sample off along odd dimensions
+    image = torch.fft.ifftshift(image, dim=(-3, -2, -1))
     dft = torch.fft.rfftn(image, dim=(-3, -2, -1))
     dft = torch.fft.fftshift(dft, dim=(-3, -2))
 
@@ -111,7 +113,8 @@ def fourier_rescale_3d(
         rescaled_image = rescaled_image * (1 / np.prod(image.shape[-3:]))
     else:
         rescaled_image = torch.fft.irfftn(dft, dim=(-3, -2, -1), s=new_shape)
-    rescaled_image = torch.fft.ifftshift(rescaled_image, dim=(-3, -2, -1))
+    # fftshift moves [0] back to the centre [n // 2] for odd and even sizes
+    rescaled_image = torch.fft.fftshift(rescaled_image, dim=(-3, -2, -1))
 
     # Calculate new spacing after rescaling
     new_spacing_d, new_spacing_h, new_spacing_w = calculate_new_spacing(

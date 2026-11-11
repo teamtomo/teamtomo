@@ -4960,6 +4960,7 @@ dependencies = [
     { name = "einops" },
     { name = "numpy" },
     { name = "torch" },
+    { name = "torch-ctf" },
     { name = "torch-grid-utils" },
     { name = "torch-image-interpolation" },
 ]
@@ -5003,6 +5004,7 @@ requires-dist = [
     { name = "mojo", marker = "extra == 'mojo'", specifier = "==1.0.0" },
     { name = "numpy" },
     { name = "torch" },
+    { name = "torch-ctf", editable = "packages/primitives/torch-ctf" },
     { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
     { name = "torch-image-interpolation", editable = "packages/primitives/torch-image-interpolation" },
 ]

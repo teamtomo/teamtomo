@@ -186,7 +186,8 @@ def calculate_ctf_thickness_1d(
     Returns
     -------
     ctf : torch.Tensor
-        Thickness-modulated 1D CTF (real-valued).
+        Thickness-modulated 1D CTF (real-valued). The amplitude form has the same
+        sign as :func:`calculate_ctf_1d` and equals it at zero thickness.
 
     """
     (
@@ -386,7 +387,8 @@ def calculate_ctf_thickness_2d(
     -------
     ctf : torch.Tensor
         Thickness-modulated 2D CTF. Real if ``return_power_spectrum`` or no odd
-        aberrations; otherwise complex.
+        aberrations; otherwise complex. The amplitude form has the same sign as
+        :func:`calculate_ctf_2d` and equals it at zero thickness.
 
     """
     return _calculate_ctf_thickness_2d_or_lpp(
@@ -510,6 +512,8 @@ def calculate_ctf_thickness_lpp(
     -------
     ctf : torch.Tensor
         Thickness-modulated LPP CTF (real for power spectrum or no odd phase).
+        The amplitude form has the same sign as :func:`calc_LPP_ctf_2D` and
+        equals it at zero thickness.
 
     """
     phase_shift_provider = _make_lpp_phase_shift_provider(

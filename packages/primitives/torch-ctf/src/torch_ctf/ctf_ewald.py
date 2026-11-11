@@ -101,6 +101,18 @@ def calculate_ctfp_and_ctfq_2d(
         The P component of the CTF for the given parameters (complex tensor).
     ctfq : torch.Tensor
         The Q component of the CTF for the given parameters (complex tensor).
+
+    Notes
+    -----
+    Same sign convention as :func:`calculate_ctf_2d`: ``(ctfp + ctfq) / 2`` is
+    the real CTF, so positive potential at underfocus gives a dark image. ``ctfp``
+    and ``ctfq`` are the negatives of RELION's CTFP and CTFQ. In terms of the
+    complex CTF ``H`` from ``calculate_ctf_2d(..., return_complex_ctf=True)``,
+    ``ctfq = i H(k)`` and ``ctfp = -i conj(H(-k))`` (away from the ``kx = 0``
+    column, where Friedel symmetry is enforced).
+
+    Changed in 0.7.0: ``ctfp`` and ``ctfq`` used to have the opposite sign.
+    Multiply both by -1 to reproduce earlier results.
     """
     # Enforce rfft=True for Ewald sphere correction
     if not rfft:
@@ -143,17 +155,19 @@ def calculate_ctfp_and_ctfq_2d(
         even_zernike_coeffs=even_zernike_coeffs,
     )
 
-    # calculate ctf
-    # ctfp: real = -sin, imag = +cos
+    # calculate ctf, with the same sign as calculate_ctf_2d: (ctfp + ctfq) / 2 is
+    # the real CTF sin(chi). Both are the negative of RELION's CTFP/CTFQ, so the
+    # roles of P and Q are unchanged.
+    # ctfp: real = +sin, imag = -cos
     ctfp = torch.complex(
-        -torch.sin(total_phase_shift),
-        torch.cos(total_phase_shift),
+        torch.sin(total_phase_shift),
+        -torch.cos(total_phase_shift),
     )
 
-    # ctfq: real = -sin, imag = -cos
+    # ctfq: real = +sin, imag = +cos
     ctfq = torch.complex(
-        -torch.sin(total_phase_shift),
-        -torch.cos(total_phase_shift),
+        torch.sin(total_phase_shift),
+        torch.cos(total_phase_shift),
     )
 
     # Apply odd zernike coefficients if provided

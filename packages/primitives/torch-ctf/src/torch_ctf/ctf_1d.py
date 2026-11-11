@@ -40,7 +40,19 @@ def calculate_ctf_1d(
     Returns
     -------
     ctf : torch.Tensor
-        The Contrast Transfer Function for the given parameters.
+        The Contrast Transfer Function for the given parameters. With no phase
+        shift it is ``-amplitude_contrast`` at zero frequency and, at underfocus,
+        its first extremum is -1.
+
+    Notes
+    -----
+    Sign convention: positive electrostatic potential multiplied by the CTF at
+    underfocus (``defocus > 0``) gives a dark image, as in a raw micrograph. The
+    CTF is ``sin(chi)``, with ``chi`` from :func:`calculate_total_phase_shift`.
+    This matches CTFFIND4 and cisTEM, and is the negative of RELION's CTF.
+
+    Changed in 0.7.0: the CTF used to be ``-sin(chi)`` (``+amplitude_contrast``
+    at zero frequency). Multiply by -1 to reproduce earlier results.
     """
     (
         defocus,
@@ -61,8 +73,8 @@ def calculate_ctf_1d(
         oversampling_factor=oversampling_factor,
     )
 
-    # calculate ctf
-    ctf = -torch.sin(
+    # calculate ctf: sin(chi) is negative at underfocus, so positive potential is dark
+    ctf = torch.sin(
         calculate_total_phase_shift(
             defocus_um=defocus,
             voltage_kv=voltage,
