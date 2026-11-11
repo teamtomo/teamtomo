@@ -62,7 +62,9 @@ def calculate_defocus_phase_aberration(
     Returns
     -------
     phase_aberration : torch.Tensor
-        The phase aberration for the given parameters.
+        The phase aberration for the given parameters, in radians:
+        ``-pi * lambda * defocus * k^2 + pi / 2 * Cs * lambda^3 * k^4``.
+        It is negative at low frequency for underfocus.
     """
     # Unit conversions
     defocus = defocus_um * 1e4  # micrometers -> angstroms

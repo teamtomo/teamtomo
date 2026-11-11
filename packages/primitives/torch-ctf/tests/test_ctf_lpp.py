@@ -325,7 +325,7 @@ def test_calc_LPP_ctf_2D_with_beam_tilt_only():
 
 
 def test_calc_LPP_ctf_2D_return_complex_ctf_symmetric_path():
-    """LPP return_complex_ctf: unit modulus; imag matches real WPOA when chi_a=0."""
+    """LPP return_complex_ctf: unit modulus; -imag matches real WPOA when chi_a=0."""
     common = {
         "defocus": 1.5,
         "astigmatism": 0,
@@ -354,7 +354,7 @@ def test_calc_LPP_ctf_2D_return_complex_ctf_symmetric_path():
     assert ctf_c.shape == ctf_real.shape
     assert torch.all(torch.isfinite(ctf_c))
     assert torch.allclose(torch.abs(ctf_c), torch.ones_like(ctf_c.real), atol=1e-5)
-    assert torch.allclose(ctf_c.imag, ctf_real, atol=1e-5)
+    assert torch.allclose(-ctf_c.imag, ctf_real, atol=1e-5)
 
 
 def test_calc_LPP_ctf_2D_return_complex_ctf_beam_tilt_unit_modulus():

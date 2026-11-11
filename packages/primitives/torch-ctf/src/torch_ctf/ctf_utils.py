@@ -71,7 +71,8 @@ def calculate_total_phase_shift(
     Returns
     -------
     total_phase_shift : torch.Tensor
-        The total phase shift for the given parameters.
+        The total phase shift chi for the given parameters, in radians. It is
+        negative at low frequency for underfocus, and the CTF is ``sin(chi)``.
     """
     phase_aberration = calculate_defocus_phase_aberration(
         defocus_um, voltage_kv, spherical_aberration_mm, fftfreq_grid_angstrom_squared
