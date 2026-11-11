@@ -9,6 +9,8 @@ import gemmi
 import torch
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import pandas as pd
 
 
@@ -179,6 +181,62 @@ class AtomicStructure:
             df, include_hydrogens=include_hydrogens
         )
         return cls.from_dataframe(annotated, device=device, dtype=dtype)
+
+    @classmethod
+    def from_atomic_numbers(
+        cls,
+        positions_zyx: torch.Tensor,
+        atomic_numbers: torch.Tensor | Sequence[int],
+        *,
+        b_factors: torch.Tensor | float = 0.0,
+        occupancies: torch.Tensor | float = 1.0,
+        atom_names: Sequence[str] | None = None,
+        device: torch.device | str | None = None,
+    ) -> AtomicStructure:
+        """Construct from coordinates and atomic numbers, without a DataFrame.
+
+        ``atomic_numbers`` must have shape ``(n_atoms,)``; element symbols are
+        derived from it. ``positions_zyx`` may carry batch dimensions and keeps its
+        floating dtype, which ``b_factors`` and ``occupancies`` adopt. Scalar
+        ``b_factors`` and ``occupancies`` apply to every atom. Atom names default to
+        empty strings. Tensors stay on the device of ``positions_zyx`` unless
+        ``device`` is given.
+        """
+        if device is None:
+            device = positions_zyx.device
+        dtype = (
+            positions_zyx.dtype
+            if positions_zyx.is_floating_point()
+            else torch.get_default_dtype()
+        )
+        positions = positions_zyx.to(device=device, dtype=dtype)
+        numbers = torch.as_tensor(atomic_numbers, dtype=torch.int64, device=device)
+        if numbers.ndim != 1:
+            raise ValueError("atomic_numbers must have shape (n_atoms,)")
+
+        number_values = numbers.tolist()
+        unknown = sorted(
+            {
+                value
+                for value in number_values
+                if gemmi.Element(value).atomic_number == 0
+            }
+        )
+        if unknown:
+            raise ValueError(f"unknown atomic numbers: {unknown}")
+
+        return cls(
+            positions_zyx=positions,
+            atomic_numbers=numbers,
+            elements=tuple(
+                gemmi.Element(value).name.upper() for value in number_values
+            ),
+            atom_names=(
+                ("",) * len(number_values) if atom_names is None else tuple(atom_names)
+            ),
+            b_factors=torch.as_tensor(b_factors, dtype=dtype, device=device),
+            occupancies=torch.as_tensor(occupancies, dtype=dtype, device=device),
+        )
 
     @property
     def num_atoms(self) -> int:
