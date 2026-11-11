@@ -49,20 +49,47 @@ def test_load_tilt_series_images_requires_image_path():
         load_tilt_series_images(tilt_series)
 
 
-def _warp_xml(n_tilts=3, use_tilt=None, grid_x_value="0", level_x="0", level_y="0"):
-    """Minimal Warp-style tilt-series XML: per-tilt lists, CTF block, 1x1xT grids."""
+def _warp_xml(
+    n_tilts=3,
+    use_tilt=None,
+    grid_x_value="0",
+    level_x="0",
+    level_y="0",
+    grid_size=(1, 1),
+    grid_values=None,
+    image_dimensions="4000, 4000",
+):
+    """Minimal Warp-style tilt-series XML: per-tilt lists, CTF block, grids.
+
+    `grid_size` is the (Width, Height) of GridMovementX/Y. `grid_values`, if
+    given, maps node (x, y, z) to its (GridMovementX, GridMovementY) values;
+    otherwise X is `grid_x_value` everywhere and Y is zero.
+    """
     angles = [-30.0, 0.0, 30.0][:n_tilts]
     use_tilt = use_tilt or ["True"] * n_tilts
+    if grid_values is None:
+        grid_values = lambda x, y, z: (grid_x_value, 0)  # noqa: E731
+    width, height = grid_size
 
     def lines(values):
         return "\n".join(str(v) for v in values)
 
-    nodes = "".join(
-        f'<Node X="0" Y="0" Z="{z}" Value="{grid_x_value}" />' for z in range(n_tilts)
-    )
+    def grid(name, component):
+        nodes = "".join(
+            f'<Node X="{x}" Y="{y}" Z="{z}" '
+            f'Value="{grid_values(x, y, z)[component]}" />'
+            for z in range(n_tilts)
+            for y in range(height)
+            for x in range(width)
+        )
+        return (
+            f'<{name} Width="{width}" Height="{height}" Depth="{n_tilts}">'
+            f"{nodes}</{name}>\n"
+        )
+
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
-        '<TiltSeries ImageDimensionsAngstrom="4000, 4000" '
+        f'<TiltSeries ImageDimensionsAngstrom="{image_dimensions}" '
         f'LevelAngleX="{level_x}" LevelAngleY="{level_y}">\n'
         f"<Angles>{lines(angles)}</Angles>\n"
         f"<UseTilt>{lines(use_tilt)}</UseTilt>\n"
@@ -70,12 +97,9 @@ def _warp_xml(n_tilts=3, use_tilt=None, grid_x_value="0", level_x="0", level_y="
         f"<AxisOffsetX>{lines(10.0 * (i + 1) for i in range(n_tilts))}</AxisOffsetX>\n"
         f"<AxisOffsetY>{lines(-5.0 * (i + 1) for i in range(n_tilts))}</AxisOffsetY>\n"
         '<CTF><Param Name="PixelSize" Value="2.5" /></CTF>\n'
-        f'<GridMovementX Width="1" Height="1" Depth="{n_tilts}">'
-        f"{nodes}</GridMovementX>\n"
-        f'<GridMovementY Width="1" Height="1" Depth="{n_tilts}">'
-        + "".join(f'<Node X="0" Y="0" Z="{z}" Value="0" />' for z in range(n_tilts))
-        + "</GridMovementY>\n"
-        "</TiltSeries>"
+        + grid("GridMovementX", 0)
+        + grid("GridMovementY", 1)
+        + "</TiltSeries>"
     )
 
 
@@ -130,7 +154,6 @@ def test_from_warp_xml_drops_unused_tilts(tmp_path):
 
 def test_from_warp_xml_applies_local_grids_by_default(tmp_path):
     pytest.importorskip("warpxmlfile")
-    pytest.importorskip("torch_cubic_spline_grids")
     path = tmp_path / "TS_1.xml"
     path.write_text(
         _warp_xml(grid_x_value="1.5")
@@ -153,3 +176,49 @@ def test_from_warp_xml_applies_local_grids_by_default(tmp_path):
         path, local_shifts_2d=lambda projected: torch.zeros_like(projected)
     )
     assert torch.allclose(custom.project_points(point), unshifted)
+
+
+def test_from_warp_xml_non_square_grid_orientation(tmp_path):
+    """A 3-wide x 2-high grid on a non-square image: at each node the shift is
+    exactly minus that node's value, so swapping x/y or width/height fails."""
+    pytest.importorskip("warpxmlfile")
+    width_a, height_a = 4000.0, 3000.0
+    grid_w, grid_h = 3, 2
+
+    def values(x, y, z):  # distinct per node, per tilt and per component
+        return (100 * z + 10 * y + x, -(100 * z + 10 * y + x) - 0.5)
+
+    path = tmp_path / "TS_1.xml"
+    path.write_text(
+        _warp_xml(
+            use_tilt=["True", "False", "True"],
+            grid_size=(grid_w, grid_h),
+            grid_values=values,
+            image_dimensions=f"{width_a}, {height_a}",
+        )
+    )
+    tilt_series = from_warp_xml(path)
+    kept_tilts = [0, 2]  # UseTilt drops tilt 1
+
+    # every node position, (y, x) in Angstroms relative to the image centre
+    nodes = [(x, y) for y in range(grid_h) for x in range(grid_w)]
+    yx = torch.tensor(
+        [
+            [
+                y / (grid_h - 1) * height_a - height_a / 2,
+                x / (grid_w - 1) * width_a - width_a / 2,
+            ]
+            for x, y in nodes
+        ]
+    )
+    projected = yx[:, None, :].expand(-1, len(kept_tilts), 2)  # (n, t, 2)
+    shifts = tilt_series.local_shifts_2d(projected)  # (n, t, 2) as (y, x)
+
+    expected = torch.tensor(
+        [
+            [[-values(x, y, z)[1], -values(x, y, z)[0]] for z in kept_tilts]
+            for x, y in nodes
+        ],
+        dtype=torch.float32,
+    )
+    assert torch.allclose(shifts, expected, atol=1e-3)
