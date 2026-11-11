@@ -100,10 +100,9 @@ def _generate_tilted_plane_tilt_series(
 
     # Generate tilt series
     M_scope2detector_rot = M_scope2detector[:, :3, :3]
-    M_scope2detector_rot_inv = torch.linalg.pinv(M_scope2detector_rot)
     tilt_series = project_3d_to_2d(
         volume=volume_in_scope,
-        rotation_matrices=M_scope2detector_rot_inv,
+        rotation_matrices=M_scope2detector_rot,
         zyx_matrices=True,
     )
 

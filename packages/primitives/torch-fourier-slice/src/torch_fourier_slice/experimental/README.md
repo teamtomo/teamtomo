@@ -58,7 +58,7 @@ from torch_fourier_slice.experimental import (
 assert mojo_kernels_available()          # False if the `mojo` package is missing
 
 volume = ...                             # real (d, d, d), even side
-rotations = ...                          # (bp, 3, 3) zyx rotation matrices
+rotations = ...                          # (bp, 3, 3) zyx rotations of the volume
 
 images = project_3d_to_2d(volume, rotations)               # CPU  -> CPU kernel
 images = project_3d_to_2d(volume.to("cuda"), rotations)    # CUDA -> GPU kernel
@@ -79,7 +79,8 @@ from torch_fourier_slice.experimental import extract_central_slices_rfft_3d
 
 volume_rfft = torch.fft.rfftn(torch.fft.fftshift(volume, dim=(-3, -2, -1)),
                               dim=(-3, -2, -1))
-slices = extract_central_slices_rfft_3d(volume_rfft.contiguous(), rotations)
+# the rfft layer takes the passive rotation: transpose to match project_3d_to_2d
+slices = extract_central_slices_rfft_3d(volume_rfft.contiguous(), rotations.mT)
 ```
 
 Interpolation: `interpolation="linear"` (trilinear, default) or `"cubic"`
@@ -361,7 +362,7 @@ Consistent across Python and Mojo:
 | `z, y, x` | integer **voxel** indices into the volume |
 | `kz, ky, kx` | the continuous **rotated sample coordinate** (a frequency) |
 | `i_bv, i_bp` | batch indices; `i_h, i_w` projection pixel indices |
-| rotations | `(bv_rot, bp, 3, 3)`, **zyx** convention (poses a central *slice*) |
+| rotations | `(bv_rot, bp, 3, 3)`, **zyx** convention (poses a central *slice*). The rfft layer takes the passive rotation (image → volume frame); the real-space layer takes its transpose, the active rotation of the volume. See "Rotation convention" in the package README |
 | directions | `(bv_rot, bp, 3)` zyx (or `(…, 2)` yx in 2D) unit vectors — poses a central *line*, which has no in-plane gauge to fix |
 | `Float32Ptr` | raw pointer into a contiguous float32 buffer (CPU or GPU); grouped into buffer structs where several travel together |
 | `C2` / `C6` / `C8` | complex `(re, im)` SIMD / value + 2 spatial gradients (2D) / value + 3 spatial gradients (3D) |
