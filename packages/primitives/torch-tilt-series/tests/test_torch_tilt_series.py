@@ -503,3 +503,39 @@ def test_from_etomo_directory_reads_xtilt(tmp_path):
 
     ts = TiltSeries.from_etomo_directory(tmp_path, pixel_spacing=2.0)
     assert torch.allclose(ts.x_tilts, torch.tensor([-0.37, -0.30, -0.25]), atol=1e-5)
+
+
+@pytest.mark.parametrize("pixel_spacing", [None, 3.5])
+def test_copy(pixel_spacing):
+    ts = make_tilt_series()
+    ts.pixel_spacing = pixel_spacing
+    ts.image_indices = torch.tensor([2, 0, 1])
+    ts.sample_translations.requires_grad_(True)
+    copied = ts.copy()
+
+    assert copied is not ts
+    assert copied._pixel_spacing == pixel_spacing
+    assert copied.image_path == ts.image_path
+    assert copied.device == ts.device
+    assert not copied.sample_translations.requires_grad
+    for name in (
+        "tilt_angles",
+        "tilt_axis_angle",
+        "sample_translations",
+        "x_tilts",
+        "sample2levelled",
+        "levelled2tomo",
+        "image_indices",
+    ):
+        original, new = getattr(ts, name), getattr(copied, name)
+        assert torch.equal(new, original.detach())
+        assert new.data_ptr() != original.data_ptr()
+
+    copied.tilt_angles[0] = 99.0
+    copied.image_indices[0] = 99
+    assert ts.tilt_angles[0] == -30.0
+    assert ts.image_indices[0] == 2
+
+
+def test_copy_without_image_indices():
+    assert make_tilt_series().copy().image_indices is None
