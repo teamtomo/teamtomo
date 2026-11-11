@@ -1,4 +1,8 @@
 [default.extend-words]
+# numpy/torch API name, not a misspelling of "arrange". Flagged inside notebooks,
+# where typos parses the JSON as prose rather than as code.
+arange = "arange"
+
 ix = "ix"
 iy = "iy"
 iz = "iz"
