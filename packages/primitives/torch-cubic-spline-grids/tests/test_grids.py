@@ -287,9 +287,11 @@ def test_4d_grid_with_singleton_dimension(grid_cls):
         (CubicCatmullRomGrid2d, (3, 5)),
     ],
 )
-def test_from_interpolating_data_passes_through_the_data(grid_class, resolution):
+def test_from_interpolants_at_control_points_passes_through_the_data(
+    grid_class, resolution
+):
     data = torch.randn(2, *resolution)
-    grid = grid_class.from_interpolating_data(data)
+    grid = grid_class.from_interpolants_at_control_points(data)
     axes = [torch.linspace(0, 1, r) for r in resolution]
     grid_points = torch.stack(torch.meshgrid(*axes, indexing='ij'), dim=-1)
     grid_points = grid_points.reshape(-1, grid.ndim)
@@ -299,3 +301,14 @@ def test_from_interpolating_data_passes_through_the_data(grid_class, resolution)
     # control points differ from the data for the B-spline (approximating basis)
     if grid_class is not CubicCatmullRomGrid2d:
         assert not torch.allclose(grid.data, data)
+    # round trip: evaluating at the grid points returns the input values
+    assert torch.allclose(grid.to_interpolants_at_control_points(), data, atol=1e-5)
+
+
+@pytest.mark.parametrize('grid_class', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
+def test_to_interpolants_at_control_points_single_channel(grid_class):
+    data = torch.randn(4, 6)
+    grid = grid_class.from_interpolants_at_control_points(data)
+    assert torch.allclose(
+        grid.to_interpolants_at_control_points(), data[None], atol=1e-5
+    )

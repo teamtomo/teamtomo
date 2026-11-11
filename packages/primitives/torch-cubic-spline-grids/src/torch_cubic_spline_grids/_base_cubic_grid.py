@@ -73,7 +73,7 @@ class CubicSplineGrid(torch.nn.Module):
         return grid
 
     @classmethod
-    def from_interpolating_data(cls, data: torch.Tensor) -> Self:
+    def from_interpolants_at_control_points(cls, data: torch.Tensor) -> Self:
         """Instantiate a grid whose spline passes through `data` at the grid points.
 
         Same input as `from_grid_data`, but the values are *interpolated*: the
@@ -90,10 +90,8 @@ class CubicSplineGrid(torch.nn.Module):
         grid = cls.from_grid_data(data)
         data = grid.data  # (c, *resolution), coerced to multichannel
         n_channels, resolution = grid.n_channels, grid.resolution
-        n = int(torch.tensor(resolution).prod())
-        axes = [torch.linspace(0, 1, r) for r in resolution]
-        grid_points = torch.stack(torch.meshgrid(*axes, indexing='ij'), dim=-1)
-        grid_points = grid_points.reshape(n, cls.ndim)
+        grid_points = _grid_points(resolution)  # (n, ndim)
+        n = grid_points.shape[0]
         with torch.no_grad():
             # column j of A: the spline at every grid point when control point j is 1
             one_hot = torch.eye(n).reshape(n, *resolution)
@@ -102,6 +100,24 @@ class CubicSplineGrid(torch.nn.Module):
             control_points = torch.linalg.solve(A, values).T  # (c, n)
         grid.data = control_points.reshape(n_channels, *resolution)
         return grid
+
+    def to_interpolants_at_control_points(self) -> torch.Tensor:
+        """Evaluate the grid at its grid points.
+
+        The inverse of `from_interpolants_at_control_points`.
+
+        Returns
+        -------
+        data: torch.Tensor
+            `(c, *grid_dimensions)` values of the spline at each grid point
+            (i / (n - 1) along each axis). For a Catmull-Rom grid this equals
+            `data`; for a B-spline grid it differs from the control points.
+        """
+        grid_points = _grid_points(self.resolution).to(self._data.device)
+        with torch.no_grad():
+            values = self(grid_points)  # (n, c) or (n,) for a single channel
+        values = values.reshape(-1, self.n_channels).T  # (c, n)
+        return values.reshape(self.n_channels, *self.resolution)
 
     @property
     def data(self) -> torch.Tensor:
@@ -142,3 +158,10 @@ class CubicSplineGrid(torch.nn.Module):
         if self._input_is_coordinate_like is False and self.ndim == 1:
             interpolated = einops.rearrange(interpolated, '... 1 -> ...')
         return interpolated
+
+
+def _grid_points(resolution: Tuple[int, ...]) -> torch.Tensor:
+    """`(n, ndim)` coordinates of every grid point, i / (r - 1) along each axis."""
+    axes = [torch.linspace(0, 1, r) for r in resolution]
+    grid_points = torch.stack(torch.meshgrid(*axes, indexing='ij'), dim=-1)
+    return grid_points.reshape(-1, len(resolution))

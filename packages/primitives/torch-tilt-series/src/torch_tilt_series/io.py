@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch_cubic_spline_grids import CubicBSplineGrid2d
 
 from torch_tilt_series.tilt_series import LocalShiftFn, TiltSeries, _writable
 
@@ -220,8 +221,6 @@ def _warp_local_shifts_2d(
     and subtracts the result. `tilt_indices` selects and orders the tilts kept
     in the `TiltSeries`. A grid of ones (`1x1`) is a constant per tilt.
     """
-    from torch_cubic_spline_grids import CubicBSplineGrid2d
-
     if image_dimensions_angstrom is None:
         raise ValueError(
             "the XML has no ImageDimensionsAngstrom; cannot place its local "
@@ -236,7 +235,7 @@ def _warp_local_shifts_2d(
         nodes = torch.as_tensor(np.stack([grid_x[t], grid_y[t]]), dtype=torch.float32)
         if nodes.shape[-2:] == (1, 1):  # a constant: no spline needed
             nodes = nodes.expand(2, 2, 2)
-        grid = CubicBSplineGrid2d.from_interpolating_data(nodes).to(device)
+        grid = CubicBSplineGrid2d.from_interpolants_at_control_points(nodes).to(device)
         grid.requires_grad_(False)  # loaded data; call .requires_grad_(True) to refine
         grids.append(grid)
 
