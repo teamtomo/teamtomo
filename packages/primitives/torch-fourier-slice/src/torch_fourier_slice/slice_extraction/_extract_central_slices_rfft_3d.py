@@ -112,7 +112,10 @@ def extract_central_slices_rfft_3d(
         Input volume in fftshifted RFFT format, shape (d, d, d//2 + 1).
     rotation_matrices : torch.Tensor
         Rotation matrices (..., 3, 3) defining the orientations of the central slices
-        to extract. Multiple matrices can be provided for batch extraction.
+        to extract. Multiple matrices can be provided for batch extraction. Each
+        matrix rotates the slice's frequency coordinates (image frame) into the
+        volume frame, a passive rotation: the slice extracted with R is that of
+        the volume rotated by R^T. `project_3d_to_2d` takes the active rotation R.
     fftfreq_max : float | None
         Maximum frequency, in terms of Nyquist frequency, to include in the extracted
         slices. For example, a value of 0.3 would discard all frequencies whose
@@ -288,7 +291,10 @@ def extract_central_slices_rfft_3d_multichannel(
         Input multichannel volume in fftshifted RFFT format, shape (c, d, d, d//2 + 1).
     rotation_matrices : torch.Tensor
         Rotation matrices (..., 3, 3) defining the orientations of the central slices
-        to extract. Multiple matrices can be provided for batch extraction.
+        to extract. Multiple matrices can be provided for batch extraction. Each
+        matrix rotates the slice's frequency coordinates (image frame) into the
+        volume frame, a passive rotation: the slice extracted with R is that of
+        the volume rotated by R^T. `project_3d_to_2d` takes the active rotation R.
     fftfreq_max : float | None
         Maximum frequency, in terms of Nyquist frequency, to include in the extracted
         slices. For example, a value of 0.3 would discard all frequencies whose

@@ -51,9 +51,11 @@ def _backproject(
     )
     if weights is not None:
         density = density * weights
+    # the rfft layer takes the inverse (image -> volume) rotation of the active
+    # rotation the real-space layer accepts
     volume_rfft, weight_volume = insert_fn(
         image_rfft,
-        rotations,
+        rotations.transpose(-1, -2),
         shifts_3d=shifts_3d,
         shifts_2d=shifts_2d,
         weights=density,
@@ -98,7 +100,10 @@ def backproject_2d_to_3d(
         Their device selects the CPU/GPU backend.
     rotations : torch.Tensor
         Real ``(3, 3)`` or ``(bp, 3, 3)`` **zyx** rotation matrices, the same
-        convention as :func:`.project_3d_to_2d`.
+        convention as :func:`.project_3d_to_2d`: each image is a projection
+        along z of the volume rotated by its matrix (an active rotation). These
+        are the transpose of the matrices :func:`.insert_central_slices_rfft_3d`
+        takes for the same image.
     shifts_3d : torch.Tensor | None
         Optional ``(..., bp, 3)`` zyx shifts in the volume frame; the conjugate
         phase ramp is applied (adjoint of the forward shift).
