@@ -728,3 +728,39 @@ def test_calculate_ctf_2d_return_complex_ctf_beam_tilt_matches_manual_phase():
     )
     expected = torch.exp(-1j * (total_phase_shift - antisymmetric_phase_shift))
     assert torch.allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("astigmatism_angle", "direction_yx"),
+    [(0.0, (0, 1)), (45.0, (1, 1)), (90.0, (1, 0))],
+)
+def test_calculate_ctf_2d_astigmatism_angle_places_defocus_u(
+    astigmatism_angle, direction_yx
+):
+    """0 degrees puts defocus_u along x; positive angles rotate it towards +y."""
+    kwargs = {
+        "voltage": 300.0,
+        "spherical_aberration": 2.7,
+        "amplitude_contrast": 0.07,
+        "phase_shift": 0.0,
+        "pixel_size": 1.0,
+        "image_shape": (64, 64),
+        "rfft": False,
+        "fftshift": False,
+    }
+    astigmatic = calculate_ctf_2d(
+        defocus=1.5, astigmatism=0.5, astigmatism_angle=astigmatism_angle, **kwargs
+    )
+    defocus_u = calculate_ctf_2d(
+        defocus=2.0, astigmatism=0.0, astigmatism_angle=0.0, **kwargs
+    )
+    defocus_v = calculate_ctf_2d(
+        defocus=1.0, astigmatism=0.0, astigmatism_angle=0.0, **kwargs
+    )
+    # (y, x) indices along the given direction and perpendicular to it, skipping DC
+    steps = torch.arange(1, 32)
+    dy, dx = direction_yx
+    along = (steps * dy, steps * dx)
+    across = ((steps * dx) % 64, (-steps * dy) % 64)
+    torch.testing.assert_close(astigmatic[along], defocus_u[along], atol=1e-3, rtol=0)
+    torch.testing.assert_close(astigmatic[across], defocus_v[across], atol=1e-3, rtol=0)

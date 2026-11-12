@@ -72,6 +72,15 @@ class CTFFittingParams(_EarlyStoppingMixin):
     optimize_astigmatism: bool = True
     defocus_model: Literal["grid", "linear"] = "grid"
     use_1d_defocus_for_spatial: bool = False
+    spatial_1d_defocus_window_microns: float = Field(
+        default=1.0,
+        gt=0.0,
+        description=(
+            "With use_1d_defocus_for_spatial, each patch's 1D fit searches defocus "
+            "within this half-width (µm) of the whole-image defocus, clipped to "
+            "defocus_range_microns, before refining."
+        ),
+    )
     use_equiphase_for_1d_spatial: bool = True
     equiphase_n_theta: int = 64
     linear_fix_defocus_0_from_1x1: bool = False
