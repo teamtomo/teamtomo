@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from torch_tilt_series import TiltSeries, load_tilt_series_images
+from torch_tilt_series import TiltSeries, from_warp_xml, load_tilt_series_images
 
 
 def test_load_tilt_series_images_uses_path_and_indices(tmp_path):
@@ -47,3 +47,178 @@ def test_load_tilt_series_images_requires_image_path():
     )
     with pytest.raises(ValueError):
         load_tilt_series_images(tilt_series)
+
+
+def _warp_xml(
+    n_tilts=3,
+    use_tilt=None,
+    grid_x_value="0",
+    level_x="0",
+    level_y="0",
+    grid_size=(1, 1),
+    grid_values=None,
+    image_dimensions="4000, 4000",
+):
+    """Minimal Warp-style tilt-series XML: per-tilt lists, CTF block, grids.
+
+    `grid_size` is the (Width, Height) of GridMovementX/Y. `grid_values`, if
+    given, maps node (x, y, z) to its (GridMovementX, GridMovementY) values;
+    otherwise X is `grid_x_value` everywhere and Y is zero.
+    """
+    angles = [-30.0, 0.0, 30.0][:n_tilts]
+    use_tilt = use_tilt or ["True"] * n_tilts
+    if grid_values is None:
+        grid_values = lambda x, y, z: (grid_x_value, 0)  # noqa: E731
+    width, height = grid_size
+
+    def lines(values):
+        return "\n".join(str(v) for v in values)
+
+    def grid(name, component):
+        nodes = "".join(
+            f'<Node X="{x}" Y="{y}" Z="{z}" '
+            f'Value="{grid_values(x, y, z)[component]}" />'
+            for z in range(n_tilts)
+            for y in range(height)
+            for x in range(width)
+        )
+        return (
+            f'<{name} Width="{width}" Height="{height}" Depth="{n_tilts}">'
+            f"{nodes}</{name}>\n"
+        )
+
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        f'<TiltSeries ImageDimensionsAngstrom="{image_dimensions}" '
+        f'LevelAngleX="{level_x}" LevelAngleY="{level_y}">\n'
+        f"<Angles>{lines(angles)}</Angles>\n"
+        f"<UseTilt>{lines(use_tilt)}</UseTilt>\n"
+        f"<AxisAngle>{lines([85.0] * n_tilts)}</AxisAngle>\n"
+        f"<AxisOffsetX>{lines(10.0 * (i + 1) for i in range(n_tilts))}</AxisOffsetX>\n"
+        f"<AxisOffsetY>{lines(-5.0 * (i + 1) for i in range(n_tilts))}</AxisOffsetY>\n"
+        '<CTF><Param Name="PixelSize" Value="2.5" /></CTF>\n'
+        + grid("GridMovementX", 0)
+        + grid("GridMovementY", 1)
+        + "</TiltSeries>"
+    )
+
+
+def test_from_warp_xml_reads_global_alignment(tmp_path):
+    pytest.importorskip("warpxmlfile")
+    path = tmp_path / "TS_1.xml"
+    path.write_text(_warp_xml())
+
+    tilt_series = from_warp_xml(path, image_path=tmp_path / "TS_1.st")
+    assert torch.allclose(tilt_series.tilt_angles, torch.tensor([-30.0, 0.0, 30.0]))
+    assert torch.allclose(tilt_series.tilt_axis_angle, torch.tensor([85.0] * 3))
+    # (y, x) in Angstroms, straight from AxisOffsetY / AxisOffsetX
+    assert torch.allclose(
+        tilt_series.sample_translations,
+        torch.tensor([[-5.0, 10.0], [-10.0, 20.0], [-15.0, 30.0]]),
+    )
+    assert tilt_series.pixel_spacing == 2.5
+    assert tilt_series.image_path == tmp_path / "TS_1.st"
+    # a binned stack: the pixel size is overridden, the Angstrom alignment is not
+    binned = from_warp_xml(path, pixel_spacing=10.0)
+    assert binned.pixel_spacing == 10.0
+    assert torch.equal(binned.sample_translations, tilt_series.sample_translations)
+    assert torch.equal(tilt_series.image_indices, torch.tensor([0, 1, 2]))
+    # Warp tomogram z is flipped relative to sample z
+    z_flip = torch.diag(torch.tensor([-1.0, 1.0, 1.0, 1.0]))
+    assert torch.equal(tilt_series.levelled2tomo, z_flip)
+    assert tilt_series.local_shifts_2d is None
+    assert TiltSeries.from_warp_xml(path).tilt_angles.shape == (3,)
+
+
+def test_from_warp_xml_maps_level_angles(tmp_path):
+    pytest.importorskip("warpxmlfile")
+    path = tmp_path / "TS_1.xml"
+    path.write_text(_warp_xml(level_x="2", level_y="-1"))
+
+    tilt_series = from_warp_xml(path)
+    # Warp: tilt = Angles + LevelAngleY; Rx(LevelAngleX) -> x_tilts, sign flipped
+    assert torch.allclose(tilt_series.tilt_angles, torch.tensor([-31.0, -1.0, 29.0]))
+    assert torch.allclose(tilt_series.x_tilts, torch.tensor(-2.0))
+
+
+def test_from_warp_xml_drops_unused_tilts(tmp_path):
+    pytest.importorskip("warpxmlfile")
+    path = tmp_path / "TS_1.xml"
+    path.write_text(_warp_xml(use_tilt=["True", "False", "True"]))
+
+    tilt_series = from_warp_xml(path)
+    assert torch.allclose(tilt_series.tilt_angles, torch.tensor([-30.0, 30.0]))
+    assert torch.equal(tilt_series.image_indices, torch.tensor([0, 2]))
+    assert tilt_series.sample_translations.shape == (2, 2)
+
+
+def test_from_warp_xml_applies_local_grids_by_default(tmp_path):
+    pytest.importorskip("warpxmlfile")
+    path = tmp_path / "TS_1.xml"
+    path.write_text(
+        _warp_xml(grid_x_value="1.5")
+    )  # 1x1xT grid: a constant +1.5 A shift in x
+
+    tilt_series = from_warp_xml(path)
+    assert tilt_series.local_shifts_2d is not None
+    plain = from_warp_xml(path, apply_local_shifts=False)
+    assert plain.local_shifts_2d is None
+
+    point = torch.zeros(1, 3)  # the tomogram centre projects to the image centre
+    shifted = tilt_series.project_points(point)
+    unshifted = plain.project_points(point)
+    # Warp subtracts the movement: x moves by -1.5 A, y is unchanged; (y, x) output
+    assert torch.allclose(
+        shifted - unshifted, torch.tensor([[[0.0, -1.5]] * 3]), atol=1e-5
+    )
+
+    custom = from_warp_xml(
+        path, local_shifts_2d=lambda projected: torch.zeros_like(projected)
+    )
+    assert torch.allclose(custom.project_points(point), unshifted)
+
+
+def test_from_warp_xml_non_square_grid_orientation(tmp_path):
+    """A 3-wide x 2-high grid on a non-square image: at each node the shift is
+    exactly minus that node's value, so swapping x/y or width/height fails."""
+    pytest.importorskip("warpxmlfile")
+    width_a, height_a = 4000.0, 3000.0
+    grid_w, grid_h = 3, 2
+
+    def values(x, y, z):  # distinct per node, per tilt and per component
+        return (100 * z + 10 * y + x, -(100 * z + 10 * y + x) - 0.5)
+
+    path = tmp_path / "TS_1.xml"
+    path.write_text(
+        _warp_xml(
+            use_tilt=["True", "False", "True"],
+            grid_size=(grid_w, grid_h),
+            grid_values=values,
+            image_dimensions=f"{width_a}, {height_a}",
+        )
+    )
+    tilt_series = from_warp_xml(path)
+    kept_tilts = [0, 2]  # UseTilt drops tilt 1
+
+    # every node position, (y, x) in Angstroms relative to the image centre
+    nodes = [(x, y) for y in range(grid_h) for x in range(grid_w)]
+    yx = torch.tensor(
+        [
+            [
+                y / (grid_h - 1) * height_a - height_a / 2,
+                x / (grid_w - 1) * width_a - width_a / 2,
+            ]
+            for x, y in nodes
+        ]
+    )
+    projected = yx[:, None, :].expand(-1, len(kept_tilts), 2)  # (n, t, 2)
+    shifts = tilt_series.local_shifts_2d(projected)  # (n, t, 2) as (y, x)
+
+    expected = torch.tensor(
+        [
+            [[-values(x, y, z)[1], -values(x, y, z)[0]] for z in kept_tilts]
+            for x, y in nodes
+        ],
+        dtype=torch.float32,
+    )
+    assert torch.allclose(shifts, expected, atol=1e-3)
