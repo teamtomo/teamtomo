@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from torch_fourier_filter.whitening import (
@@ -67,3 +68,22 @@ def test_whitening_filter():
     wf = whitening_filter(img_dft, rfft=True, fftshift=False, output_shape=(32, 32))
     assert isinstance(wf, torch.Tensor), "Output should be a tensor"
     assert wf.shape == (32, 17), "Output shape should be the same as input"
+
+
+@pytest.mark.parametrize("shape", [(12, 16), (12, 17), (6, 12, 17)])
+def test_whitening_uses_input_width(shape):
+    """Full and half output layouts must sample the same physical frequencies."""
+    image = torch.randn(shape)
+    half = torch.fft.rfftn(image)
+    dim = tuple(range(image.ndim))
+    width = shape[-1]
+    full_filter = whitening_filter(
+        half, dim=dim, real_space_last_dim=width, output_rfft=False
+    )
+    half_filter = whitening_filter(half, dim=dim, real_space_last_dim=width)
+    assert full_filter.shape == image.shape
+    torch.testing.assert_close(half_filter, full_filter[..., : half.shape[-1]])
+    if width == 16:
+        torch.testing.assert_close(half_filter, whitening_filter(half))
+    with pytest.raises(ValueError, match="real_space_last_dim"):
+        power_spectral_density(half, real_space_last_dim=width + 2)
