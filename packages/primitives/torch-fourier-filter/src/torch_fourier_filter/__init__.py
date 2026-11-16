@@ -20,6 +20,7 @@ from . import (
     phase_randomize,
     utils,
     whitening,
+    wiener,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "phase_randomize",
     "utils",
     "whitening",
+    "wiener",
 ]
