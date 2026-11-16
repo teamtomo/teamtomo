@@ -123,48 +123,61 @@ def test_get_local_high_resolution_angles():
     assert (local_angles[:, 2] <= 180.0).all()
 
 
-def test_get_local_high_resolution_angles_covers_all_axes():
+_HEALPIX_SKIP = pytest.mark.skipif(
+    platform.system() == "Windows", reason="healpy is not supported on Windows"
+)
+LOCAL_BASE_GRIDS = [
+    "uniform",
+    pytest.param("healpix", marks=_HEALPIX_SKIP),
+    "cartesian",
+]
+
+
+@pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
+def test_get_local_high_resolution_angles_covers_all_axes(base_grid_method):
     """Offsets fill a neighbourhood of the identity: tilts in every direction, plus
     in-plane. Limiting phi near the pole would leave out rotations about x."""
     local_angles = get_local_high_resolution_angles(
-        fine_theta_step=0.5, fine_psi_step=0.5
+        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method=base_grid_method
     )
     rotvec = _zyz_rotvec_deg(local_angles.numpy())
 
-    assert np.abs(rotvec[:, 0]).max() == pytest.approx(2.5, abs=0.05)  # tilt about x
-    assert np.abs(rotvec[:, 1]).max() == pytest.approx(2.5, abs=0.05)  # tilt about y
+    # HEALPix pixel centres do not reach the cap edge exactly
+    tilt_max = 2.0 if base_grid_method == "healpix" else 2.45
+    assert np.abs(rotvec[:, 0]).max() > tilt_max  # tilt about x
+    assert np.abs(rotvec[:, 1]).max() > tilt_max  # tilt about y
+    assert np.abs(rotvec[:, 0]).max() < 2.55
+    assert np.abs(rotvec[:, 1]).max() < 2.55
     assert np.abs(rotvec[:, 2]).max() == pytest.approx(1.5, abs=0.05)  # in-plane
     assert np.linalg.norm(rotvec, axis=1).max() < np.hypot(2.5, 1.5) + 0.05
 
 
-@pytest.mark.skipif(
-    platform.system() == "Windows", reason="healpy is not supported on Windows"
-)
-def test_get_local_high_resolution_angles_healpix_covers_all_axes():
-    local_angles = get_local_high_resolution_angles(
-        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method="healpix"
-    )
-    rotvec = _zyz_rotvec_deg(local_angles.numpy())
-
-    assert np.abs(rotvec[:, 0]).max() > 2.0  # tilt about x
-    assert np.abs(rotvec[:, 1]).max() > 2.0  # tilt about y
-    assert np.abs(rotvec[:, 2]).max() == pytest.approx(1.5, abs=0.05)  # in-plane
-    assert np.linalg.norm(rotvec, axis=1).max() < np.hypot(2.5, 1.5) + 0.05
-
-
-def test_get_local_high_resolution_angles_includes_zero():
+@pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
+def test_get_local_high_resolution_angles_includes_zero(base_grid_method):
     """Test that (0, 0, 0) Euler angles are included in the output."""
-    local_angles = get_local_high_resolution_angles()
-
-    # Check if any row matches (0, 0, 0) within tolerance
-    zero_angle = np.array([0.0, 0.0, 0.0])
-    # Convert to numpy for comparison
-    local_angles_np = local_angles.numpy()
-
-    # Check if any row is close to (0, 0, 0) by computing differences
-    differences = np.abs(local_angles_np - zero_angle)
-    matches = np.all(differences < 1e-5, axis=1)
+    local_angles = get_local_high_resolution_angles(
+        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method=base_grid_method
+    )
+    matches = np.all(np.abs(local_angles.numpy()) < 1e-5, axis=1)
     assert np.any(matches), "Euler angles (0, 0, 0) should be included in the output"
+
+
+def test_get_local_high_resolution_angles_cartesian_lattice():
+    """Cartesian: a square lattice of tilts inside the cap, times in-plane offsets."""
+    local_angles = get_local_high_resolution_angles(
+        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method="cartesian"
+    )
+    # 81 lattice points with |t| <= 2.5 at 0.5 deg spacing, times 7 psi values
+    assert local_angles.shape == (81 * 7, 3)
+
+    # The offsets with no in-plane part are pure tilts on the lattice
+    phi, psi = local_angles[:, 0].numpy(), local_angles[:, 2].numpy()
+    in_plane = np.remainder(psi + phi + 180.0, 360.0) - 180.0
+    tilts = _zyz_rotvec_deg(local_angles.numpy()[np.abs(in_plane) < 1e-6])
+    assert tilts.shape == (81, 3)
+    assert np.allclose(tilts[:, 2], 0.0, atol=1e-6)
+    assert np.allclose(tilts[:, :2] / 0.5, np.round(tilts[:, :2] / 0.5), atol=1e-6)
+    assert np.linalg.norm(tilts, axis=1).max() == pytest.approx(2.5)
 
 
 def test_get_roll_angles():
