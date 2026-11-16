@@ -212,7 +212,7 @@ def curve_1dim_to_ndim(
         values_1d = values_1d.unsqueeze(0)
         _is_batched = False
 
-    interpn_values = torch.empty(values_1d.shape[0], *frequency_grid.shape)
+    interpn_values = values_1d.new_empty((values_1d.shape[0], *frequency_grid.shape))
 
     for i in range(values_1d.shape[0]):
         interpn_values[i] = torch_interp(
@@ -267,8 +267,8 @@ def bin_1dim_with_lerp(
     if xp.ndim != 1:
         raise ValueError("xp must be 1D.")
 
-    x = x.view(-1)
-    y = y.view(-1)
+    x = x.reshape(-1)
+    y = y.reshape(-1)
 
     # Out of bounds masks to prevent indexing errors
     oob_left = x < xp[0]

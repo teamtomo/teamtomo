@@ -31,7 +31,7 @@ def calculate_num_freq_bins(image_shape: tuple[int, ...]) -> int:
 
 
 def real_space_shape_from_dft_shape(
-    dft_shape: tuple[int, ...], rfft: bool
+    dft_shape: tuple[int, ...], rfft: bool, real_space_last_dim: int | None = None
 ) -> tuple[int, ...]:
     """Calculate the real-space shape from a DFT shape and rfft argument.
 
@@ -43,13 +43,22 @@ def real_space_shape_from_dft_shape(
         Whether the input is from an rfft (True) or full fft (False). The default is
         True.
 
+    real_space_last_dim: int, optional
+        Original length of the last transformed axis. An rfft of length 2k or
+        2k+1 has k+1 bins. When omitted, assume the even length.
+
     Returns
     -------
     tuple[int, ...]
         Shape of the real-space image.
     """
     real_space_shape = list(dft_shape)
-    if rfft:
+    if real_space_last_dim is not None:
+        bins = real_space_last_dim // 2 + 1 if rfft else real_space_last_dim
+        if real_space_last_dim < 1 or bins != dft_shape[-1]:
+            raise ValueError("real_space_last_dim is incompatible with the DFT shape")
+        real_space_shape[-1] = real_space_last_dim
+    elif rfft:
         last_dim = 2 * (real_space_shape[-1] - 1)
         real_space_shape[-1] = last_dim
 
@@ -64,6 +73,7 @@ def power_spectral_density(
     num_freq_bins: Optional[int] = None,
     max_freq: Optional[float] = None,
     do_power_spectrum: Optional[bool] = True,
+    real_space_last_dim: int | None = None,
 ) -> torch.Tensor:
     """Calculates the power spectral density of an image in 1-dimension.
 
@@ -94,6 +104,9 @@ def power_spectral_density(
         Weather to use the power (intensity) spectrum or the amplitude spectrum. If
         True, the power spectrum is calculated, otherwise the amplitude spectrum is
         calculated. The default is True.
+    real_space_last_dim: int, optional
+        Length of the last transformed input axis before the FFT. Pass the original
+        length when computing a spectrum from an odd-sized real image.
 
     Returns
     -------
@@ -111,7 +124,7 @@ def power_spectral_density(
     shape_over_dim = tuple(image_dft.shape[d] for d in dim)
 
     real_space_shape = real_space_shape_from_dft_shape(
-        dft_shape=shape_over_dim, rfft=rfft
+        shape_over_dim, rfft, real_space_last_dim
     )
 
     # Construct 1-dimensional grid of frequencies for binning
@@ -183,6 +196,7 @@ def whitening_filter(
     output_shape: Optional[tuple[int, ...]] = None,
     output_rfft: Optional[bool] = None,
     output_fftshift: Optional[bool] = None,
+    real_space_last_dim: int | None = None,
 ) -> torch.Tensor:
     """Create a whitening filter the discrete Fourier transform of an input.
 
@@ -219,6 +233,9 @@ def whitening_filter(
     output_fftshift: bool, optional
         Whether to return the filter fftshifted. If None, then the same as `fftshift`.
         The default is None.
+    real_space_last_dim: int, optional
+        Length of the last transformed input axis before the FFT. This sets the
+        input frequency grid independently of the requested output shape.
 
     Returns
     -------
@@ -235,6 +252,7 @@ def whitening_filter(
         dim=dim,
         num_freq_bins=num_freq_bins,
         do_power_spectrum=do_power_spectrum,
+        real_space_last_dim=real_space_last_dim,
     )
 
     # Create the filter from the power spectrum
@@ -269,7 +287,9 @@ def whitening_filter(
 
     # Construct FFT frequency grid
     if output_shape is None:
-        output_shape = real_space_shape_from_dft_shape(image_dft.shape, rfft=rfft)
+        output_shape = real_space_shape_from_dft_shape(
+            image_dft.shape, rfft, real_space_last_dim
+        )
 
     if output_rfft is None:
         output_rfft = rfft
