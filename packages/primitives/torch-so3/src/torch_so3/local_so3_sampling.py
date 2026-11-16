@@ -20,20 +20,29 @@ def get_local_high_resolution_angles(
 ) -> torch.Tensor:
     """Local orientation refinement from a coarse to fine grid.
 
-    This function is essentially creating a high-resolution grid of Euler angles around
-    the pole to sample all points within the coarse grid. It creates a "disk" of angles
-    for the S^2 (theta, phi) sphere and also samples the in-plane angle (phi) uniformly.
+    This function creates a high-resolution grid of Euler angles around the pole to
+    sample all points within the coarse grid. It creates a "disk" (cap) of view
+    directions on the S^2 (theta, phi) sphere and also samples the in-plane angle (psi).
+
+    For the "uniform" and "healpix" base grids, the cap is theta in
+    [0, coarse_theta_step] with phi over the full circle: near the pole (theta, phi)
+    are polar coordinates of the tilt (theta is how far, phi is which way). Near the
+    pole the in-plane part of Rz(phi) Ry(theta) Rz(psi) is phi + psi, so psi is
+    measured from phi: each offset is Rz(phi) Ry(theta) Rz(psi - phi), a tilt of theta
+    toward phi followed by an in-plane rotation of psi in
+    [-coarse_psi_step, coarse_psi_step]. The offsets therefore cover rotations about
+    all three axes, whether composed on the left or the right of a rotation.
 
     Parameters
     ----------
     coarse_phi_step : float
-        Coarse step size for phi in degrees.
+        Coarse step size for phi in degrees. Only used by the "cartesian" base grid.
     coarse_theta_step : float
         Coarse step size for theta in degrees.
     coarse_psi_step : float
         Coarse step size for psi in degrees.
     fine_phi_step : float
-        Finer step size for phi in degrees.
+        Finer step size for phi in degrees. Only used by the "cartesian" base grid.
     fine_theta_step : float
         Finer step size for theta in degrees.
     fine_psi_step : float
@@ -62,16 +71,27 @@ def get_local_high_resolution_angles(
             base_grid_method=base_grid_method,
         )
     else:
+        # A cap of view directions around the pole, then an in-plane offset. Near the
+        # pole (theta, phi) are polar coordinates of the tilt: theta is how far, phi is
+        # which way. So theta starts at 0 and phi runs over the full circle; limiting
+        # phi to a few degrees keeps a single tilt direction and loses a rotation axis.
         euler_angles = get_uniform_euler_angles(
             psi_step=fine_psi_step,
             theta_step=fine_theta_step,
-            phi_min=-coarse_psi_step,  # Completely sample for uniform base grid?
-            phi_max=coarse_psi_step,
-            theta_min=-coarse_theta_step,
+            phi_min=0.0,
+            phi_max=360.0,
+            theta_min=0.0,
             theta_max=coarse_theta_step,
             psi_min=-coarse_psi_step,
             psi_max=coarse_psi_step + EPS,
             base_grid_method=base_grid_method,
+        )
+        # Near the pole the in-plane part of Rz(phi) Ry(theta) Rz(psi) is phi + psi.
+        # Measure psi from phi, so each offset is a tilt of theta toward phi,
+        # Rz(phi) Ry(theta) Rz(-phi), followed by an in-plane rotation of psi.
+        phi = euler_angles[:, 0]
+        euler_angles[:, 2] = (
+            torch.remainder(euler_angles[:, 2] - phi + 180.0, 360.0) - 180.0
         )
 
     return euler_angles
