@@ -34,6 +34,9 @@ from torch_ctf_estimation.estimate_ctf_2d import (
 from torch_ctf_estimation.estimate_ctf_2d.estimate_background_2d import (
     estimate_background_2d,
 )
+from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
+    _principal_defocus,
+)
 from torch_ctf_estimation.models import (
     CTFFittingParams,
     Defocus1DResults,
@@ -295,6 +298,9 @@ def _run_defocus_2d(
             image_sidelength=image_sidelength_for_1d,
             frequency_fit_range_angstroms=fitting_params.frequency_fit_range_angstroms,
             defocus_range_microns=defocus_bounds,
+            defocus_search_window_microns=(
+                fitting_params.spatial_1d_defocus_window_microns
+            ),
             phase_shift_range_degrees=phase_bounds,
             voltage_kev=optical_params.voltage_kev,
             spherical_aberration_mm=optical_params.spherical_aberration_mm,
@@ -314,7 +320,7 @@ def _run_defocus_2d(
         )
         if result2d.defocus_model_type == "linear":
             axis_deg, tilt_deg = linear_tilt_axis_and_magnitude_deg(
-                result2d, new_spacing, min(h, w)
+                result2d, new_spacing, (h, w)
             )
             result2d = result2d.model_copy(
                 update={
@@ -414,7 +420,7 @@ def _run_defocus_2d(
     )
     if result2d.defocus_model_type == "linear":
         axis_deg, tilt_deg = linear_tilt_axis_and_magnitude_deg(
-            result2d, new_spacing, min(h, w)
+            result2d, new_spacing, (h, w)
         )
         result2d = result2d.model_copy(
             update={
@@ -450,7 +456,7 @@ def estimate_ctf(
         masking when ``mask_laser_axis`` is enabled. Use ``model_laser=True`` to
         fit with the LPP CTF model; if None, use standard CTF with no masking.
     device : torch.device | None, optional
-        Device for computation. If None, uses cuda:0 when available, else cpu.
+        Device for computation. If None, uses the device of ``image``.
 
     Returns
     -------
@@ -462,7 +468,7 @@ def estimate_ctf(
         Results from 2D defocus estimation.
     """
     if device is None:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = image.device
     pipeline = _estimate_defocus(
         image, optical_params, fitting_params, laser_params, device
     )
@@ -503,7 +509,7 @@ def estimate_ctf_and_thickness(
     laser_params : LaserParams | None, optional
         See :func:`estimate_ctf`.
     device : torch.device | None, optional
-        Device for computation. If None, uses cuda:0 when available, else cpu.
+        Device for computation. If None, uses the device of ``image``.
 
     Returns
     -------
@@ -514,7 +520,7 @@ def estimate_ctf_and_thickness(
         (post-rescale pixel spacing used for fitting).
     """
     if device is None:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = image.device
     pipeline = _estimate_defocus(
         image, optical_params, fitting_params, laser_params, device
     )
@@ -625,10 +631,11 @@ def estimate_ctf_and_thickness(
         )
         if thickness_params.refine_dim == "1d":
             df_joint_um = _scalar(result1d_joint.ctf_model.defocus_um)
+            defocus_u, defocus_v = _principal_defocus(df_joint_um, astig_2d_um)
             result2d = result2d.model_copy(
                 update={
-                    "defocus_u": df_joint_um + astig_2d_um / 2.0,
-                    "defocus_v": df_joint_um - astig_2d_um / 2.0,
+                    "defocus_u": defocus_u,
+                    "defocus_v": defocus_v,
                     "cross_correlation_final": result1d_joint.cross_correlation_final,
                 }
             )

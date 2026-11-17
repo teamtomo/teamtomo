@@ -24,6 +24,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _clamp_defocus_grid_after_step,
     _clamp_optional_bounds,
     _get_astig_clamped,
+    _principal_defocus,
     _reset_astigmatism,
     _shared_astigmatism_and_env,
 )
@@ -140,8 +141,9 @@ def _grid_final_scalars(
     final_astigmatism_angle = _astig_angle_to_m90_p90(_fa_deg)
     final_envelope_B = float(envelope_B.detach().cpu().item())
     mean_defocus = float(defocus_model_obj.data.detach().cpu().mean().item())
-    final_defocus_u = mean_defocus + final_astigmatism / 2.0
-    final_defocus_v = mean_defocus - final_astigmatism / 2.0
+    final_defocus_u, final_defocus_v = _principal_defocus(
+        mean_defocus, final_astigmatism
+    )
     return (
         final_astigmatism,
         final_astigmatism_angle,

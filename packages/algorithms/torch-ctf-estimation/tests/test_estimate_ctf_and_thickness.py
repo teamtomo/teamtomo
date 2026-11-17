@@ -1,3 +1,6 @@
+import importlib
+
+import pytest
 import torch
 
 from torch_ctf_estimation.estimate_ctf import (
@@ -91,6 +94,9 @@ def test_estimate_ctf_and_thickness_refine_1d():
     assert result.thickness_joint is not None
     assert result.result2d.defocus_u is not None
     assert result.result2d.defocus_v is not None
+    assert result.result2d.defocus_u - result.result2d.defocus_v == pytest.approx(
+        2 * result.result2d.astigmatism
+    )
 
 
 def test_estimate_ctf_and_thickness_refine_2d():
@@ -134,3 +140,27 @@ def test_estimate_ctf_and_thickness_use_tilt_corrected_ps():
         image, optical, fitting, thickness, device=torch.device("cpu")
     )
     assert result.thickness1d is not None
+
+
+class _DeviceSeen(Exception):
+    """Raised by a stub to report the device it was called with."""
+
+
+def test_estimate_ctf_and_thickness_defaults_to_image_device(monkeypatch):
+    """With device=None, computation runs on the input image's device."""
+    module = importlib.import_module("torch_ctf_estimation.estimate_ctf")
+
+    def record_device(image, optical_params, fitting_params, laser_params, device):
+        raise _DeviceSeen(device)
+
+    # A hard-coded CUDA default would be chosen if CUDA were available.
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(module, "_estimate_defocus", record_device)
+    with pytest.raises(_DeviceSeen) as seen:
+        estimate_ctf_and_thickness(
+            torch.randn(64, 64),
+            default_optical_params(),
+            default_fitting_params(),
+            default_thickness_params(),
+        )
+    assert seen.value.args[0] == torch.device("cpu")
