@@ -7,7 +7,10 @@ from scipy.signal import savgol_filter
 from torch_grid_utils.patch_grid import patch_grid_lazy
 
 from torch_motion_correction.correct_motion import correct_motion, correct_motion_fast
-from torch_motion_correction.deformation_field import DeformationField
+from torch_motion_correction.deformation_field import (
+    DeformationField,
+    _subtract_mean_shift,
+)
 from torch_motion_correction.types import (
     FourierFilterConfig,
     PatchSamplingConfig,
@@ -35,7 +38,9 @@ def estimate_global_motion(
     pixel_spacing: float
         Pixel spacing in angstroms
     reference_frame: int, optional
-        Frame index to use as reference. If None, uses middle frame.
+        Frame index to cross-correlate the other frames against. If None, uses the
+        middle frame. The returned shifts are zero-mean in y and in x, like those of
+        the other estimators, so this frame's shift is not zero in general.
     fourier_filter: FourierFilterConfig, optional
         Fourier-space filtering parameters. Defaults to ``FourierFilterConfig()``
         when None.
@@ -133,9 +138,10 @@ def estimate_global_motion(
             f"x=[{shifts[:, 1].min():.1f}, {shifts[:, 1].max():.1f}]"
         )
 
-    return DeformationField.from_frame_shifts(
+    field = DeformationField.from_frame_shifts(
         shifts=shifts, pixel_spacing=working_pixel_spacing, device=device
     )
+    return DeformationField(data=_subtract_mean_shift(field.data))
 
 
 def estimate_motion_cross_correlation_patches(
@@ -247,6 +253,7 @@ def estimate_motion_cross_correlation_patches(
             image = correct_motion_fast(
                 image=image,
                 deformation_field=initial_deformation_field,
+                pixel_spacing=pixel_spacing,
                 device=device,
                 verbose=verbose,
             )
@@ -358,9 +365,9 @@ def estimate_motion_cross_correlation_patches(
                 cross_corr_flat, peak_indices, ph, pw
             )
         else:
-            # Use integer peak finding
-            peak_y = peak_indices // pw
-            peak_x = peak_indices % pw
+            # Use integer peak finding (as floats, like the sub-pixel peaks)
+            peak_y = (peak_indices // pw).to(cross_corr.dtype)
+            peak_x = (peak_indices % pw).to(cross_corr.dtype)
 
         # Convert to shifts (handle wraparound)
         shift_y = torch.where(peak_y <= ph // 2, peak_y, peak_y - ph)
@@ -415,9 +422,7 @@ def estimate_motion_cross_correlation_patches(
         )
         print(f"Estimated deformation field shape: {deformation_field_tensor.shape}")
 
-    deformation_field_tensor = deformation_field_tensor - torch.mean(
-        deformation_field_tensor
-    )
+    deformation_field_tensor = _subtract_mean_shift(deformation_field_tensor)
     return DeformationField(data=deformation_field_tensor), data_patch_positions
 
 
@@ -546,12 +551,19 @@ def _apply_temporal_smoothing(
 def _apply_outlier_rejection(
     shift_y: torch.Tensor,  # (gh, gw) y shifts
     shift_x: torch.Tensor,  # (gh, gw) x shifts
-    outlier_threshold: float,  # standard deviations from median
+    outlier_threshold: float,  # robust standard deviations from median
     frame_idx: int,  # For logging
     verbose: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Apply outlier rejection to patch shifts using standard deviation from median.
+    Apply outlier rejection to patch shifts using a robust spread about the median.
+
+    The spread is 1.4826 times the median absolute deviation, which estimates the
+    standard deviation for normally distributed shifts. Unlike the standard
+    deviation it is barely moved by the outliers themselves, so it still finds a
+    lone outlier in a small patch grid. A patch within one pixel of the median is
+    never an outlier: when most patches agree exactly, as integer peaks often do
+    without sub-pixel refinement, the spread is zero.
 
     If either X or Y shift for a patch is an outlier, both X and Y shifts
     for that patch are replaced with the mean of valid patches.
@@ -559,11 +571,12 @@ def _apply_outlier_rejection(
     Parameters
     ----------
     shift_y: torch.Tensor
-        Y shifts for all patches in the frame (gh, gw)
+        Y shifts in pixels for all patches in the frame (gh, gw)
     shift_x: torch.Tensor
-        X shifts for all patches in the frame (gh, gw)
+        X shifts in pixels for all patches in the frame (gh, gw)
     outlier_threshold: float
-        Threshold in standard deviations from median for outlier detection
+        Threshold in robust standard deviations from the median for outlier
+        detection
     frame_idx: int
         Frame index for logging purposes
     verbose: bool
@@ -580,25 +593,17 @@ def _apply_outlier_rejection(
     shift_y_flat = shift_y.flatten()
     shift_x_flat = shift_x.flatten()
 
-    # Calculate medians
-    median_y = torch.median(shift_y_flat)
-    median_x = torch.median(shift_x_flat)
-
-    # Calculate standard deviations
-    std_y = torch.std(shift_y_flat)
-    std_x = torch.std(shift_x_flat)
-
-    # Avoid division by zero
-    std_y = torch.max(std_y, torch.tensor(1e-6, device=shift_y.device))
-    std_x = torch.max(std_x, torch.tensor(1e-6, device=shift_x.device))
-
-    # Calculate z-scores (standard deviations from median)
-    z_score_y = torch.abs(shift_y_flat - median_y) / std_y
-    z_score_x = torch.abs(shift_x_flat - median_x) / std_x
+    # Interpolated medians, so two patches that disagree are judged symmetrically
+    median_y = torch.quantile(shift_y_flat, 0.5)
+    median_x = torch.quantile(shift_x_flat, 0.5)
+    deviation_y = torch.abs(shift_y_flat - median_y)
+    deviation_x = torch.abs(shift_x_flat - median_x)
+    spread_y = 1.4826 * torch.quantile(deviation_y, 0.5)
+    spread_x = 1.4826 * torch.quantile(deviation_x, 0.5)
 
     # Identify outliers in either direction
-    outliers_y = z_score_y > outlier_threshold
-    outliers_x = z_score_x > outlier_threshold
+    outliers_y = (deviation_y > outlier_threshold * spread_y) & (deviation_y > 1.0)
+    outliers_x = (deviation_x > outlier_threshold * spread_x) & (deviation_x > 1.0)
 
     # If either X or Y is an outlier, mark the entire patch as outlier
     outliers_combined = outliers_y | outliers_x

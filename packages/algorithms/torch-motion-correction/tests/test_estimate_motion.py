@@ -9,6 +9,7 @@ from torch_motion_correction.estimate_motion_optimizer import (
     estimate_local_motion,
 )
 from torch_motion_correction.estimate_motion_xc import (
+    _apply_outlier_rejection,
     estimate_global_motion,
     estimate_motion_cross_correlation_patches,
 )
@@ -72,6 +73,21 @@ class TestEstimateGlobalMotion:
             device=torch.device("cpu"),
         )
         assert result.shape == (2, sample_image.shape[0], 1, 1)
+
+    @pytest.mark.parametrize("reference_frame", [0, None])
+    def test_mean_shift_removed_per_axis(
+        self, sample_image, pixel_spacing, reference_frame
+    ):
+        """y and x shifts are each zero-mean, whichever frame is the reference."""
+        result = estimate_global_motion(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            reference_frame=reference_frame,
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
+        )
 
     def test_different_devices(self, sample_image, pixel_spacing):
         """Test that device parameter works."""
@@ -188,6 +204,19 @@ class TestEstimateMotionCrossCorrelationPatches:
         assert result.shape[0] == 2
         assert patch_positions is not None
 
+    def test_integer_peaks_with_outlier_rejection(self, sample_image, pixel_spacing):
+        """Integer peaks (no sub-pixel refinement) go through outlier rejection."""
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            refinement=XCRefinementConfig(
+                sub_pixel_refinement=False, outlier_rejection=True
+            ),
+            device=torch.device("cpu"),
+        )
+        assert torch.isfinite(result.data).all()
+
     def test_with_initial_deformation_field(self, sample_image, pixel_spacing):
         """Test with initial deformation field."""
         t = sample_image.shape[0]
@@ -201,6 +230,55 @@ class TestEstimateMotionCrossCorrelationPatches:
         )
         assert result.shape[0] == 2
         assert patch_positions is not None
+
+    def test_single_patch_initial_field_is_applied_in_angstroms(self, sample_image):
+        """Starting from the true 1x1 field, nothing is left to correct."""
+        pixel_spacing = 2.0
+        t = sample_image.shape[0]
+        # sample_image moves 2 px down and 1 px right per frame
+        true_shifts = torch.stack([2.0 * torch.arange(t), 1.0 * torch.arange(t)])
+        true_shifts = true_shifts * pixel_spacing
+        true_shifts = true_shifts - true_shifts.mean(dim=1, keepdim=True)
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(64, 64)),
+            initial_deformation_field=DeformationField(
+                data=true_shifts[:, :, None, None].clone()
+            ),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(2, 3)), true_shifts, atol=1.0, rtol=0
+        )
+
+    def test_mean_shift_removed_per_axis(self, sample_image, pixel_spacing):
+        """y and x shifts are each zero-mean, even from an offset initial field."""
+        initial = torch.zeros((2, sample_image.shape[0], 1, 1))
+        initial[0] += 3.0
+        initial[1] -= 3.0
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            initial_deformation_field=DeformationField(data=initial),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
+        )
+
+    def test_single_patch_with_outlier_rejection(self, sample_image, pixel_spacing):
+        """One patch per frame has no spread to reject outliers against."""
+        result, _ = estimate_motion_cross_correlation_patches(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            patch_sampling=PatchSamplingConfig(patch_shape=(64, 64)),
+            refinement=XCRefinementConfig(outlier_rejection=True),
+            device=torch.device("cpu"),
+        )
+        assert result.shape == (2, sample_image.shape[0], 1, 1)
+        assert torch.isfinite(result.data).all()
 
     def test_patch_sampling_overlap(self, sample_image, pixel_spacing):
         """Test that PatchSamplingConfig overlap parameter is used."""
@@ -327,8 +405,53 @@ class TestEstimateMotionCrossCorrelationPatches:
             expected_field[0, frame_idx] = shift_y.view(gh, gw) * pixel_spacing
             expected_field[1, frame_idx] = shift_x.view(gh, gw) * pixel_spacing
 
-        expected_field = expected_field - torch.mean(expected_field)
+        expected_field = expected_field - expected_field.mean(
+            dim=(1, 2, 3), keepdim=True
+        )
         assert torch.allclose(result.data, expected_field, atol=1e-4)
+
+
+class TestOutlierRejection:
+    """Tests for the per-frame patch outlier rejection."""
+
+    @pytest.mark.parametrize("grid_shape", [(1, 3), (2, 2), (3, 3), (4, 4)])
+    def test_rejects_single_outlier_in_small_grid(self, grid_shape):
+        """One far-off patch is replaced, however few patches there are.
+
+        With the standard deviation as the spread, a lone outlier among n patches
+        scores sqrt(n), so at the default threshold of 3 nothing was rejected with
+        nine or fewer patches.
+        """
+        n = grid_shape[0] * grid_shape[1]
+        shift_y = torch.linspace(-0.3, 0.3, n).view(grid_shape)
+        shift_x = torch.linspace(0.2, -0.2, n).view(grid_shape)
+        shift_y[0, 0] = 100.0
+        corrected_y, corrected_x = _apply_outlier_rejection(
+            shift_y, shift_x.clone(), outlier_threshold=3.0, frame_idx=0
+        )
+        inliers = torch.ones(grid_shape, dtype=torch.bool)
+        inliers[0, 0] = False
+        assert corrected_y[0, 0] == pytest.approx(float(shift_y[inliers].mean()))
+        assert corrected_x[0, 0] == pytest.approx(float(shift_x[inliers].mean()))
+        torch.testing.assert_close(corrected_y[inliers], shift_y[inliers])
+        torch.testing.assert_close(corrected_x[inliers], shift_x[inliers])
+
+    @pytest.mark.parametrize(
+        "shifts",
+        [
+            [[5.0]],  # one patch: nothing to compare against
+            [[0.0, 50.0]],  # two patches: no way to tell which is wrong
+            [[0.0] * 9 + [1.0] * 7],  # integer peaks, one pixel apart
+        ],
+    )
+    def test_leaves_undecidable_shifts_alone(self, shifts):
+        """Shifts are kept when no patch stands out from the others."""
+        shift_y = torch.tensor(shifts)
+        corrected_y, corrected_x = _apply_outlier_rejection(
+            shift_y, shift_y.clone(), outlier_threshold=3.0, frame_idx=0
+        )
+        torch.testing.assert_close(corrected_y, shift_y)
+        torch.testing.assert_close(corrected_x, shift_y)
 
 
 class TestEstimateLocalMotion:
@@ -347,6 +470,24 @@ class TestEstimateLocalMotion:
         assert isinstance(result, DeformationField)
         # Check output shape: (2, nt, nh, nw)
         assert result.shape == (2, sample_image.shape[0], 2, 2)
+
+    def test_mean_shift_removed_per_axis(self, sample_image, pixel_spacing):
+        """y and x shifts are each zero-mean, even from an offset initial field."""
+        initial = torch.zeros((2, sample_image.shape[0], 1, 1))
+        initial[0] += 3.0
+        initial[1] -= 3.0
+        result, _ = estimate_local_motion(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            deformation_field_resolution=(sample_image.shape[0], 1, 1),
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            initial_deformation_field=DeformationField(data=initial),
+            optimization=OptimizationConfig(max_iterations=2),
+            device=torch.device("cpu"),
+        )
+        torch.testing.assert_close(
+            result.data.mean(dim=(1, 2, 3)), torch.zeros(2), atol=1e-5, rtol=0
+        )
 
     def test_with_initial_deformation_field(self, sample_image, pixel_spacing):
         """Test with initial deformation field."""
