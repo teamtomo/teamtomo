@@ -394,10 +394,11 @@ def _insert_into_3d_dft_linear(
     x0_mask = idx_x == 0  # (b, 1, 2, 2, 2) boolean mask
 
     if torch.any(x0_mask):
-        # Calculate mirrored indices for Friedel symmetry
-        # Mirror: (z, y, 0) -> ((d - z) % d, (d - y) % d, 0)
-        idx_z_mirror = (d - idx_z) % d
-        idx_y_mirror = (h - idx_y) % h
+        # Calculate mirrored indices for Friedel symmetry about DC at (d//2, h//2)
+        # Mirror: (z, y, 0) -> ((2 * (d//2) - z) % d, (2 * (h//2) - y) % h, 0)
+        # For even sizes this is (d - z) % d, for odd sizes d - 1 - z
+        idx_z_mirror = (2 * (d // 2) - idx_z) % d
+        idx_y_mirror = (2 * (h // 2) - idx_y) % h
 
         # Only insert conjugate at mirrored positions when original is at x=0
         # Exclude the origin (d//2, h//2, 0) to avoid double insertion at DC

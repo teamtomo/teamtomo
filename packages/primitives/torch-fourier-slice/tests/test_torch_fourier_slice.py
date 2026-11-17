@@ -159,9 +159,6 @@ def test_3d_2d_projection_backprojection_cycle_odd_size(device):
     assert device in str(volume.device)
 
     # calculate FSC between the ground truth volume and the reconstruction
-    # odd grids have slightly different boundary interpolation behaviour than
-    # even ones, so fidelity is consistently a little lower here (~0.984-0.99
-    # across seeds) than the >0.99 achieved for the even-size cube below
     _fsc = fsc(cube.to("cpu"), volume.float().to("cpu"))
     assert torch.all(_fsc[-10:] > 0.98)
 
