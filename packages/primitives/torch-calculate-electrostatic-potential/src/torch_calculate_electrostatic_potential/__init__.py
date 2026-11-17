@@ -2,7 +2,6 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from .atom_stack import AtomStack
 from .grid import GridConfig, default_sublattice_radius
 from .potential import (
     PENG_SCATTERING_TO_POTENTIAL,
@@ -23,7 +22,6 @@ except PackageNotFoundError:
 
 __all__ = [
     "PENG_SCATTERING_TO_POTENTIAL",
-    "AtomStack",
     "BondedScatteringFactorTable",
     "GridConfig",
     "__version__",
