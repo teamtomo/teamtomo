@@ -85,6 +85,9 @@ def get_local_high_resolution_angles(
             psi_max=coarse_psi_step + EPS,
             base_grid_method=base_grid_method,
         )
+        # The base grid's theta rings can overshoot theta_max when coarse_theta_step
+        # isn't a whole multiple of fine_theta_step; keep the cap.
+        euler_angles = euler_angles[euler_angles[:, 1] <= coarse_theta_step + EPS]
         if not bool((euler_angles[:, 1].abs() < EPS).any()):
             # No base-grid point on the pole (HEALPix): add the untilted offsets.
             psi_all = _psi_values(coarse_psi_step, fine_psi_step, euler_angles.dtype)

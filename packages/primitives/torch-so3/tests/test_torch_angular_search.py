@@ -153,6 +153,20 @@ def test_get_local_high_resolution_angles_covers_all_axes(base_grid_method):
 
 
 @pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
+def test_get_local_high_resolution_angles_stays_in_cap(base_grid_method):
+    """Tilts stay within coarse_theta_step when it isn't a multiple of the step."""
+    angles = get_local_high_resolution_angles(
+        coarse_theta_step=2.5,
+        coarse_psi_step=1.5,
+        fine_theta_step=1.0,
+        fine_psi_step=0.5,
+        base_grid_method=base_grid_method,
+    )
+    tilt = np.hypot(*_zyz_rotvec_deg(angles.numpy())[:, :2].T)
+    assert tilt.max() <= 2.5 + 1e-4
+
+
+@pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
 def test_get_local_high_resolution_angles_includes_zero(base_grid_method):
     """Test that (0, 0, 0) Euler angles are included in the output."""
     local_angles = get_local_high_resolution_angles(
