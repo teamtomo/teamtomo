@@ -31,7 +31,7 @@ def extract_central_slices_rfft_2d(
 
     # get (b, 2, 1) array of yx coordinates to rotate
     if fftfreq_max is not None:
-        freq_grid_mask = freq_grid <= fftfreq_max
+        freq_grid_mask = torch.linalg.norm(freq_grid, dim=-1) <= fftfreq_max  # (w,)
         valid_coords = freq_grid[freq_grid_mask, ...]
     else:
         freq_grid_mask = torch.ones(
