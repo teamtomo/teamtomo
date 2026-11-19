@@ -6,6 +6,8 @@ import math
 
 import torch
 
+from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
+
 
 def build_laser_axis_mask(
     image_shape: tuple[int, int],
@@ -75,6 +77,7 @@ def apply_laser_axis_mask(
     laser_xy_angle_deg: float,
     dual_laser: bool,
     mask_width: float,
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Zero FFT strips along the laser axis on patch and mean power spectra.
 
@@ -90,6 +93,9 @@ def apply_laser_axis_mask(
         If True, also mask the orthogonal axis.
     mask_width : float
         Strip width in fftfreq units.
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. If None, square patches
+        ``(ph, ph)`` are assumed when that matches the rfft width.
 
     Returns
     -------
@@ -101,7 +107,7 @@ def apply_laser_axis_mask(
         The applied mask, shape ``(ph, pw_rfft)``.
     """
     axis_mask = build_laser_axis_mask(
-        image_shape=(patch_ps.shape[-2], (patch_ps.shape[-1] - 1) * 2),
+        image_shape=resolve_rfft_image_shape(patch_ps.shape[-2:], image_shape),
         laser_xy_angle_deg=laser_xy_angle_deg,
         dual_laser=dual_laser,
         mask_width=mask_width,

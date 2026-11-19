@@ -1,5 +1,6 @@
 """Tests for prepare_image and patch/power-spectrum primitives."""
 
+import pytest
 import torch
 
 from torch_ctf_estimation.utils.patches import (
@@ -63,3 +64,16 @@ def test_compute_patch_power_spectra_shapes():
     patch_ps, mean_ps = compute_patch_power_spectra(patches)
     assert patch_ps.shape == (1, 2, 2, 16, 9)
     assert mean_ps.shape == (16, 9)
+
+
+def test_prepare_image_returns_achieved_spacing():
+    """The returned spacing is what the rescale achieved, not the target."""
+    image = torch.randn(409, 409)
+    prepared, spacing = prepare_image_for_ctf(
+        image,
+        pixel_spacing_angstroms=1.0,
+        target_pixel_spacing_angstroms=3.0,
+        device=torch.device("cpu"),
+    )
+    assert prepared.shape[-2:] == (136, 136)
+    assert spacing == pytest.approx(409 / 136)

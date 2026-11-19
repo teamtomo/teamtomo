@@ -6,6 +6,7 @@ from torch_ctf.ctf_thickness import calculate_ctf_thickness_1d
 from torch_grid_utils.fftfreq_grid import fftfreq_to_spatial_frequency
 
 from torch_ctf_estimation.estimate_ctf_1d.estimate_ctf_1d_utils import (
+    _ctf_1d_image_sidelength,
     get_background_result,
 )
 from torch_ctf_estimation.models import LaserParams
@@ -137,6 +138,7 @@ def estimate_thickness_1d(
             pixel_size=pixel_spacing_angstroms,
             n_samples=image_sidelength // 2 + 1,
             oversampling_factor=3,
+            image_sidelength=_ctf_1d_image_sidelength(image_sidelength, use_equiphase),
         )
         rows.append(ps_t)
     simulated_ps = torch.stack(rows, dim=0).to(device=device, dtype=dtype)
