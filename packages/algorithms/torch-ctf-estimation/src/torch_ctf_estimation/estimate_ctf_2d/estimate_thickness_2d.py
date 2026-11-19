@@ -30,6 +30,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
 )
 from torch_ctf_estimation.metrics.fit_metrics import pearson_r_flat
 from torch_ctf_estimation.models import LaserParams, Thickness2DResults
+from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
 
 
 def _eval_defocus_at_positions(
@@ -77,6 +78,7 @@ def estimate_thickness_2d(
     laser_params: LaserParams | None = None,
     debug: bool = False,
     early_stopper: Callable[[float], bool] | None = None,
+    image_shape: tuple[int, int] | None = None,
 ) -> Thickness2DResults:
     """
     Estimate sample thickness in 2D using a 3D spline grid over (t, x, y).
@@ -129,6 +131,10 @@ def estimate_thickness_2d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. Needed to tell odd from even
+        widths, since both give the same rfft width. If None, square patches
+        ``(ph, ph)`` are assumed when that matches the rfft width.
 
     Returns
     -------
@@ -137,8 +143,7 @@ def estimate_thickness_2d(
         per-iteration model traces.
     """
     # --- Setup: collapse time dim when nt==1, derive image shape ---
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    image_shape = resolve_rfft_image_shape(patch_power_spectra.shape[-2:], image_shape)
     device = patch_power_spectra.device
     nt = thickness_grid_resolution[0]
     if nt == 1:

@@ -186,8 +186,14 @@ def simulate_thin_power_1d(
     amplitude_contrast: float,
     pixel_spacing_angstroms: float,
     phase_shift_deg: float = 0.0,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
-    """Thin-sample 1D power spectrum (CTF²) on the rFFT frequency grid."""
+    """Thin-sample 1D power spectrum (CTF²) on the rFFT frequency grid.
+
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
+    ``rfftfreq(N)`` (equiphase profiles), None at
+    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    """
     ctf = calculate_ctf_1d(
         defocus=defocus_um,
         voltage=voltage_kev,
@@ -197,6 +203,7 @@ def simulate_thin_power_1d(
         pixel_size=pixel_spacing_angstroms,
         n_samples=n_samples,
         oversampling_factor=3,
+        image_sidelength=image_sidelength,
     )
     return ctf**2
 
@@ -210,8 +217,14 @@ def simulate_thin_abs_ctf_1d(
     amplitude_contrast: float,
     pixel_spacing_angstroms: float,
     phase_shift_deg: float = 0.0,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
-    """Thin-sample |CTF| on the 1D rFFT frequency grid (CTFFind amplitude model)."""
+    """Thin-sample |CTF| on the 1D rFFT frequency grid (CTFFind amplitude model).
+
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
+    ``rfftfreq(N)`` (equiphase profiles), None at
+    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    """
     ctf = calculate_ctf_1d(
         defocus=defocus_um,
         voltage=voltage_kev,
@@ -221,6 +234,7 @@ def simulate_thin_abs_ctf_1d(
         pixel_size=pixel_spacing_angstroms,
         n_samples=n_samples,
         oversampling_factor=3,
+        image_sidelength=image_sidelength,
     )
     return ctf.abs()
 
@@ -235,8 +249,14 @@ def simulate_thickness_abs_ctf_1d(
     amplitude_contrast: float,
     pixel_spacing_angstroms: float,
     phase_shift_deg: float = 0.0,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
-    """|CTF_t| amplitude transfer (sinc * sin chi)."""
+    """|CTF_t| amplitude transfer (sinc * sin chi).
+
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
+    ``rfftfreq(N)`` (equiphase profiles), None at
+    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    """
     ctf = calculate_ctf_thickness_1d(
         return_power_spectrum=False,
         sample_thickness_angstrom=thickness_angstroms,
@@ -248,6 +268,7 @@ def simulate_thickness_abs_ctf_1d(
         pixel_size=pixel_spacing_angstroms,
         n_samples=n_samples,
         oversampling_factor=3,
+        image_sidelength=image_sidelength,
     )
     return ctf.abs()
 
@@ -345,8 +366,14 @@ def simulate_thickness_power_1d(
     amplitude_contrast: float,
     pixel_spacing_angstroms: float,
     phase_shift_deg: float = 0.0,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
-    """CTF_t 1D power spectrum (McMullan / CTFFind5 form)."""
+    """CTF_t 1D power spectrum (McMullan / CTFFind5 form).
+
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
+    ``rfftfreq(N)`` (equiphase profiles), None at
+    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    """
     return calculate_ctf_thickness_1d(
         return_power_spectrum=True,
         sample_thickness_angstrom=thickness_angstroms,
@@ -358,4 +385,5 @@ def simulate_thickness_power_1d(
         pixel_size=pixel_spacing_angstroms,
         n_samples=n_samples,
         oversampling_factor=3,
+        image_sidelength=image_sidelength,
     )

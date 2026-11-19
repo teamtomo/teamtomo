@@ -40,6 +40,67 @@ def _grid_search_phase_shift_range(
     return resolve_phase_shift_bounds(phase_shift_range)
 
 
+def profile_fftfreqs(
+    image_sidelength: int,
+    use_equiphase: bool,
+    device: torch.device | None = None,
+) -> torch.Tensor:
+    """Frequency (cycles/pixel) of each sample of a 1D power profile.
+
+    The two 1D averages sample different frequencies, which differ for odd
+    ``N``:
+
+    - equiphase: each shell is referenced to the rfft pixel on the kx axis, so
+      sample ``k`` sits at ``k / N``, i.e. ``rfftfreq(N)``.
+    - rotational: ``rotational_average_dft_2d`` bins have centres at
+      ``linspace(0, 0.5, N // 2 + 1)``.
+
+    Parameters
+    ----------
+    image_sidelength : int
+        Real-space sidelength ``N`` of the image behind the 2D spectrum.
+    use_equiphase : bool
+        True for the equiphase profile, False for the rotational average.
+    device : torch.device or None, optional
+        Device for the output.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(N // 2 + 1,)`` frequencies in cycles/pixel.
+    """
+    if use_equiphase:
+        return torch.fft.rfftfreq(image_sidelength, device=device)
+    return torch.linspace(0, 0.5, steps=image_sidelength // 2 + 1, device=device)
+
+
+def _ctf_1d_image_sidelength(image_sidelength: int, use_equiphase: bool) -> int | None:
+    """``image_sidelength`` for ``calculate_ctf_1d`` matching :func:`profile_fftfreqs`.
+
+    ``None`` keeps ``calculate_ctf_1d``'s ``linspace(0, 0.5, n)`` grid (rotational
+    bin centres); ``N`` samples at ``rfftfreq(N)`` (equiphase).
+    """
+    return image_sidelength if use_equiphase else None
+
+
+def _fit_band(
+    freqs: torch.Tensor,
+    frequency_fit_range_angstroms: tuple[float, float],
+    pixel_spacing_angstroms: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Fit-band mask and spatial frequencies (1/Å) for a 1D frequency axis."""
+    low_ang, high_ang = frequency_fit_range_angstroms
+    low_fftfreq = spatial_frequency_to_fftfreq(
+        1 / low_ang, spacing=pixel_spacing_angstroms
+    )
+    high_fftfreq = spatial_frequency_to_fftfreq(
+        1 / high_ang, spacing=pixel_spacing_angstroms
+    )
+    fit_mask = torch.logical_and(freqs >= low_fftfreq, freqs <= high_fftfreq)
+    spatial_freqs = fftfreq_to_spatial_frequency(freqs, pixel_spacing_angstroms)
+    return fit_mask, spatial_freqs
+
+
 def compute_final_1d_l2_cross_correlation(
     raps_in_fit_range: torch.Tensor,
     spatial_freqs: torch.Tensor,
@@ -53,11 +114,14 @@ def compute_final_1d_l2_cross_correlation(
     spherical_aberration_mm: float,
     amplitude_contrast: float,
     pixel_spacing_angstroms: float,
+    use_equiphase: bool = False,
 ) -> float:
     """
     L2 NCC between background-subtracted 1D power and CTF^2 times envelope.
 
     Matches the objective used in grid search / refinement on the fit band.
+    ``use_equiphase`` selects the profile's frequency axis (see
+    :func:`profile_fftfreqs`).
     """
     h = image_sidelength
     device = raps_in_fit_range.device
@@ -73,6 +137,7 @@ def compute_final_1d_l2_cross_correlation(
             pixel_size=pixel_spacing_angstroms,
             n_samples=h // 2 + 1,
             oversampling_factor=3,
+            image_sidelength=_ctf_1d_image_sidelength(h, use_equiphase),
         )
         ** 2
     )
@@ -225,7 +290,12 @@ def get_background_result(
             laser_params=laser_params,
             equiphase_n_theta=equiphase_n_theta,
         )
-        fit_mask = background_result.fit_mask
+        # The reused background may come from the other averaging path, so take
+        # the frequency axis (and fit band) of this profile, not the stored one.
+        freqs = profile_fftfreqs(image_sidelength, use_equiphase, device=device)
+        fit_mask, spatial_freqs = _fit_band(
+            freqs, frequency_fit_range_angstroms, pixel_spacing_angstroms
+        )
         raps_in_fit_range = rotationally_averaged_power_spectrum[fit_mask].clone()
         if background_result.background_model is None:
             raise ValueError(
@@ -245,9 +315,9 @@ def get_background_result(
         raps_in_fit_range = (raps_in_fit_range - background).detach()
         return _Background1DResult(
             rotationally_averaged_power_spectrum=rotationally_averaged_power_spectrum,
-            freqs=background_result.freqs.to(device),
-            spatial_freqs=background_result.spatial_freqs.to(device),
-            fit_mask=fit_mask.to(device),
+            freqs=freqs,
+            spatial_freqs=spatial_freqs,
+            fit_mask=fit_mask,
             raps_in_fit_range=raps_in_fit_range,
             background_model=background_result.background_model,
         )
@@ -349,19 +419,12 @@ def fit_background_spline_1d(
         equiphase_n_theta=equiphase_n_theta,
     )
 
-    # Build frequency grid and mask for fit range (angstroms -> fftfreq)
-    freqs = torch.fft.rfftfreq(image_sidelength, device=device)
-    low_ang, high_ang = frequency_fit_range_angstroms
-    low_fftfreq = spatial_frequency_to_fftfreq(
-        1 / low_ang, spacing=pixel_spacing_angstroms
+    # Frequency axis of this profile and mask for fit range (angstroms -> fftfreq)
+    freqs = profile_fftfreqs(image_sidelength, use_equiphase, device=device)
+    fit_mask, spatial_freqs = _fit_band(
+        freqs, frequency_fit_range_angstroms, pixel_spacing_angstroms
     )
-    high_fftfreq = spatial_frequency_to_fftfreq(
-        1 / high_ang, spacing=pixel_spacing_angstroms
-    )
-    fit_mask = torch.logical_and(freqs >= low_fftfreq, freqs <= high_fftfreq)
     raps_in_fit_range = rotationally_averaged_power_spectrum[fit_mask].clone()
-
-    spatial_freqs = fftfreq_to_spatial_frequency(freqs, pixel_spacing_angstroms)
 
     # Fit B-spline in log(raps); subtract exp(spline) for background-subtracted spectrum
     background_model = CubicBSplineGrid1d(resolution=3).to(device)
@@ -485,6 +548,7 @@ def grid_search_defocus_and_envelope_1d(
     phase_shift_step: float = 5.0,
     phase_shift_range: tuple[float, float] | None = None,
     fixed_phase_shift_deg: float = 0.0,
+    use_equiphase: bool = False,
 ) -> _GridSearch1DResult:
     """
     Grid search over defocus (and optionally B-factor envelope) to maximise ZNCC.
@@ -526,6 +590,10 @@ def grid_search_defocus_and_envelope_1d(
         a wide internal range (0-180 degrees) is used for search only.
     fixed_phase_shift_deg : float
         Phase shift in degrees used when optimize_phase_shift is False.
+    use_equiphase : bool
+        Whether ``raps_in_fit_range`` is an equiphase profile (sampled at
+        ``rfftfreq(N)``) rather than a rotational average (``linspace`` bin
+        centres). Selects the matching CTF model grid. Default False.
 
     Returns
     -------
@@ -573,6 +641,7 @@ def grid_search_defocus_and_envelope_1d(
                 pixel_size=pixel_spacing_angstroms,
                 n_samples=h // 2 + 1,
                 oversampling_factor=3,
+                image_sidelength=_ctf_1d_image_sidelength(h, use_equiphase),
             )
             ** 2
         )
@@ -594,6 +663,7 @@ def grid_search_defocus_and_envelope_1d(
                     pixel_size=pixel_spacing_angstroms,
                     n_samples=h // 2 + 1,
                     oversampling_factor=3,
+                    image_sidelength=_ctf_1d_image_sidelength(h, use_equiphase),
                 )
                 ** 2
             )
@@ -707,6 +777,7 @@ def refine_defocus_and_b_factor_1d(
     phase_shift_lr: float = 5.0,
     phase_shift_range: tuple[float, float] | None = None,
     early_stopper: Callable[[float], bool] | None = None,
+    use_equiphase: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
     """
     Refine defocus (and optionally B factor) by gradient descent to maximise ZNCC.
@@ -752,6 +823,9 @@ def refine_defocus_and_b_factor_1d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    use_equiphase : bool
+        Whether ``raps_in_fit_range`` is an equiphase profile (sampled at
+        ``rfftfreq(N)``) rather than a rotational average. Default False.
 
     Returns
     -------
@@ -832,6 +906,7 @@ def refine_defocus_and_b_factor_1d(
                 pixel_size=pixel_spacing_angstroms,
                 n_samples=h // 2 + 1,
                 oversampling_factor=3,
+                image_sidelength=_ctf_1d_image_sidelength(h, use_equiphase),
             )
             ** 2
         )

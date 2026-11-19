@@ -47,6 +47,7 @@ from torch_ctf_estimation.utils.fitting_bounds import (
     resolve_defocus_bounds,
     resolve_phase_shift_bounds,
 )
+from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
 
 # Type for 1D spline params; use Any to avoid two TypeAlias assignments
 _Spline1D: TypeAlias = Any
@@ -74,14 +75,14 @@ class _LinearDefocusParams:
 def _setup_linear_spectra_and_shape(
     patch_power_spectra: torch.Tensor,
     defocus_grid_resolution: tuple[int, int, int],
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[torch.Tensor, tuple[int, int], torch.device, int]:
     """
     Derive image shape and optionally collapse time when nt==1.
 
     Returns (patch_power_spectra, image_shape, device, T).
     """
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    image_shape = resolve_rfft_image_shape(patch_power_spectra.shape[-2:], image_shape)
     device = patch_power_spectra.device
     nt = defocus_grid_resolution[0]
     if nt == 1:
@@ -459,6 +460,7 @@ def estimate_defocus_2d_linear(
     fixed_phase_shift_deg: float | None = None,
     early_stopper: Callable[[float], bool] | None = None,
     use_amplitude: bool = False,
+    image_shape: tuple[int, int] | None = None,
 ) -> Defocus2DResults:
     """
     Estimate defocus in 2D using a linear (tilt) model in (x, y).
@@ -475,7 +477,9 @@ def estimate_defocus_2d_linear(
         image_shape,
         device,
         T,
-    ) = _setup_linear_spectra_and_shape(patch_power_spectra, defocus_grid_resolution)
+    ) = _setup_linear_spectra_and_shape(
+        patch_power_spectra, defocus_grid_resolution, image_shape
+    )
     nt = defocus_grid_resolution[0]
     linear_params = _setup_linear_defocus_params(
         nt,
