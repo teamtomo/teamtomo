@@ -155,6 +155,9 @@ def warp_rfft_power_isotropic(
     ph, w_rfft = power_rfft.shape
     if ph != h:
         raise ValueError(f"power_rfft height {ph} != image_sidelength {h}")
+    # For an odd real width this guesses w - 1, but the error cancels: kx_out and
+    # the kx -> column lookup use the same (scaled) axis, so column j maps to
+    # column s * j whatever the width. Only the index arithmetic matters here.
     w = (w_rfft - 1) * 2
     sf = torch.as_tensor(scale_factor, device=device, dtype=dtype)
     sf0 = float(sf.reshape(-1)[0].item()) if sf.numel() > 0 else 1.0

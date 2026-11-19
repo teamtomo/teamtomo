@@ -187,6 +187,7 @@ def estimate_ctf_1d(
                 phase_shift_lr=phase_shift_lr,
                 phase_shift_range=phase_shift_range,
                 early_stopper=early_stopper,
+                use_equiphase=use_equiphase,
             )
         )
         phase_deg = (
@@ -206,6 +207,7 @@ def estimate_ctf_1d(
             spherical_aberration_mm=spherical_aberration_mm,
             amplitude_contrast=amplitude_contrast,
             pixel_spacing_angstroms=pixel_spacing_angstroms,
+            use_equiphase=use_equiphase,
         )
         return Defocus1DResults(
             cross_correlation_final=cc_final,
@@ -255,6 +257,7 @@ def estimate_ctf_1d(
         phase_shift_step=phase_shift_step,
         phase_shift_range=phase_shift_range,
         fixed_phase_shift_deg=initial_phase_shift if not optimize_phase_shift else 0.0,
+        use_equiphase=use_equiphase,
     )
 
     # -------------------------------------------------------------------------
@@ -291,6 +294,7 @@ def estimate_ctf_1d(
                 phase_shift_lr=phase_shift_lr,
                 phase_shift_range=phase_shift_range,
                 early_stopper=early_stopper,
+                use_equiphase=use_equiphase,
             )
         )
     else:
@@ -324,6 +328,7 @@ def estimate_ctf_1d(
         spherical_aberration_mm=spherical_aberration_mm,
         amplitude_contrast=amplitude_contrast,
         pixel_spacing_angstroms=pixel_spacing_angstroms,
+        use_equiphase=use_equiphase,
     )
     return Defocus1DResults(
         cross_correlation_final=cc_final,
