@@ -143,7 +143,8 @@ def _extract_patches_batched(
         patches_dft = torch.fft.rfftn(patches, dim=(-2, -1))
 
         if decenter:
-            shifts = shifts + pw // 2
+            # move the patch centre [pw // 2] to [0] (ifftshift for odd and even)
+            shifts = shifts - pw // 2
 
         # apply the subpixel shift
         patches_dft = fourier_shift_dft_2d(
