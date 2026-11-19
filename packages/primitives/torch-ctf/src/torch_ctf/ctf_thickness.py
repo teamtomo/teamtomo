@@ -156,6 +156,7 @@ def calculate_ctf_thickness_1d(
     pixel_size: float | torch.Tensor,
     n_samples: int,
     oversampling_factor: int,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
     """1D CTF including sample thickness (amplitude or Thon-ring power spectrum).
 
@@ -182,6 +183,11 @@ def calculate_ctf_thickness_1d(
         Number of samples along the 1D frequency axis.
     oversampling_factor : int
         Factor by which to oversample before averaging back to ``n_samples``.
+    image_sidelength : int | None, optional
+        Real-space side length ``N`` of the image. If given, the CTF is sampled
+        at ``rfftfreq(N)`` and ``n_samples`` must equal ``N // 2 + 1``. If None
+        (default), it is sampled at ``linspace(0, 0.5, n_samples)``. See
+        :func:`~torch_ctf.calculate_ctf_1d`.
 
     Returns
     -------
@@ -207,6 +213,7 @@ def calculate_ctf_thickness_1d(
         pixel_size=pixel_size,
         n_samples=n_samples,
         oversampling_factor=oversampling_factor,
+        image_sidelength=image_sidelength,
     )
 
     chi = calculate_total_phase_shift(
