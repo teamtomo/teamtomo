@@ -134,6 +134,15 @@ def test_polar_grid_basic():
     assert theta.max() <= torch.pi
 
 
+@pytest.mark.parametrize("image_shape", [(4, 6), (5, 7), (5, 6), (21, 20)])
+def test_polar_grid_default_center_is_dft_center(image_shape):
+    """Default center is (h // 2, w // 2) for odd and even sizes."""
+    h, w = image_shape
+    rho, _ = polar_grid(image_shape=image_shape)
+    assert rho[h // 2, w // 2] < 1e-5
+    assert divmod(int(rho.argmin()), w) == (h // 2, w // 2)
+
+
 def test_polar_grid_with_center():
     """Test polar grid with custom center."""
     rho, theta = polar_grid(image_shape=(4, 4), center=(1.0, 1.0))
