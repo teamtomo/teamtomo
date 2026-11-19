@@ -25,11 +25,24 @@ def match_template_dft_2d(
     template_dft: torch.Tensor,
     rotation_matrices: torch.Tensor,
     filters: torch.Tensor,
+    image_shape: tuple[int, int] | None = None,
 ) -> torch.Tensor:
     """Batched projection and cross-correlation with a set of filters.
 
     Note that this function returns a cross-correlation image which is the
     same size as the input image prior to FFT calculation.
+
+    The template volume should be prepared with its centre (index `d // 2`) moved
+    to the array origin before the transform, and the result fftshifted along the
+    two non-rfft dimensions::
+
+        template_dft = torch.fft.fftshift(
+            torch.fft.rfftn(torch.fft.ifftshift(volume, dim=(-3, -2, -1))),
+            dim=(-3, -2),
+        )
+
+    With this convention the cross-correlation peak for a template whose
+    projection is found at `image[y:y + h, x:x + w]` is at index `(y, x)`.
 
     Parameters
     ----------
@@ -37,14 +50,20 @@ def match_template_dft_2d(
         `(h_im, w_im // 2 + 1)` fourier transform (rfft) of the real space image.
         Any filters etc are assumed to have already been applied to this image.
     template_dft : torch.Tensor
-        `(d, h, w // 2 + 1)` fftshifted fourier transform (rfft) of the real valued
-        template volume to take Fourier slices from.
+        `(d, d, d // 2 + 1)` fftshifted fourier transform (rfft) of the real valued
+        cubic template volume to take Fourier slices from. See above for the
+        expected preparation.
     rotation_matrices : torch.Tensor
         `(b, 3, 3)` batched rotation matrices to rotate slices sampled from the
         template fourier transform.
     filters : torch.Tensor
-        `(..., h, w // 2 + 1)` filters applied to FFT slices which are fftshifted
+        `(..., d, d // 2 + 1)` filters applied to FFT slices which are fftshifted
         results of a rfft.
+    image_shape : tuple[int, int] | None
+        `(h_im, w_im)` real space shape of the image. Required when the image width
+        is odd, since the rfft of widths `2k` and `2k + 1` have the same number of
+        columns. Defaults to `(h_im, 2 * (image_dft.shape[-1] - 1))`, i.e. an even
+        image width.
 
     Returns
     -------
@@ -53,11 +72,19 @@ def match_template_dft_2d(
         orientation and defocus value. Will have shape
         (orientations, defocus_batch, H, W).
     """
-    # Grab relevant dimensions
-    _, h, w = template_dft.shape
-    h_im, w_im = image_dft.shape
-    w_im = 2 * (w_im - 1)
-    w = 2 * (w - 1)
+    # Grab relevant dimensions. The template volume is cubic, so its real space
+    # width equals its height (which can't be recovered from the rfft width alone).
+    _, h, _ = template_dft.shape
+    w = h
+    h_im, w_im_rfft = image_dft.shape
+    if image_shape is None:
+        image_shape = (h_im, 2 * (w_im_rfft - 1))
+    if image_shape[0] != h_im or image_shape[1] // 2 + 1 != w_im_rfft:
+        raise ValueError(
+            f"image_shape {tuple(image_shape)} is incompatible with image_dft of "
+            f"shape {tuple(image_dft.shape)}."
+        )
+    h_im, w_im = image_shape
 
     # Extract central slice(s) from the template volume
     fourier_slices = extract_central_slices_rfft_3d(
@@ -72,9 +99,10 @@ def match_template_dft_2d(
     filters = einops.rearrange(filters, "... h w -> ... 1 h w")
     fourier_slices = fourier_slices * filters  # (..., b, h, w)
 
-    # Inverse Fourier transform into real space and normalize
-    projections = torch.fft.irfftn(fourier_slices, dim=(-2, -1))
-    projections = torch.fft.ifftshift(projections, dim=(-2, -1))
+    # Inverse Fourier transform into real space and normalize. The irfft output
+    # has the projection centre at the array origin; move it to index n // 2.
+    projections = torch.fft.irfftn(fourier_slices, dim=(-2, -1), s=(h, w))
+    projections = torch.fft.fftshift(projections, dim=(-2, -1))
     projections = normalize_template_projection_compiled(
         projections, (h, w), (h_im, w_im)
     )
@@ -87,6 +115,6 @@ def match_template_dft_2d(
 
     # Cross correlation step by element-wise multiplication
     projections_dft = image_dft * torch.conj(projections_dft)
-    cross_correlation = torch.fft.irfftn(projections_dft, dim=(-2, -1))
+    cross_correlation = torch.fft.irfftn(projections_dft, dim=(-2, -1), s=(h_im, w_im))
 
     return cross_correlation  # (..., h_im, w_im)

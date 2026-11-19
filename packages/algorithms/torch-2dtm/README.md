@@ -46,7 +46,11 @@ image_dft = torch.fft.rfftn(image, dim=(0, 1))  # Shape: (128, 65)
 # 2. Create a random 3D template and compute its FFT
 template_size = (64, 64, 64)
 template = torch.randn(*template_size, dtype=torch.float32)
-template_dft = torch.fft.rfftn(template, dim=(0, 1, 2))  # Shape: (64, 64, 33)
+# The template centre (index d // 2) is moved to the array origin before the FFT,
+# then the two non-rfft dimensions are fftshifted
+template_dft = torch.fft.ifftshift(template, dim=(0, 1, 2))
+template_dft = torch.fft.rfftn(template_dft, dim=(0, 1, 2))
+template_dft = torch.fft.fftshift(template_dft, dim=(0, 1))  # Shape: (64, 64, 33)
 
 # 3. Create a batch of random rotation matrices with shape (b, 3, 3)
 num_orientations = 10
@@ -62,7 +66,8 @@ cross_correlation = torch_2dtm.match_template_dft_2d(
     image_dft=image_dft,
     template_dft=template_dft,
     rotation_matrices=rotation_matrices,
-    filters=filters
+    filters=filters,
+    image_shape=image_size,  # needed when the image width is odd
 )
 # The result has shape (..., num_orientations, image_height, image_width)
 ```
