@@ -27,7 +27,7 @@ def defocus_field_from_1d_fits(
     defocus_model: Literal["grid", "linear"],
     defocus_grid_resolution: tuple[int, int, int],
     initial_defocus: float,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     frequency_fit_range_angstroms: tuple[float, float],
     voltage_kev: float,
     spherical_aberration_mm: float,
