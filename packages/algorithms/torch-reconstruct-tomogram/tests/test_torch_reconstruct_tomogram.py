@@ -315,3 +315,56 @@ def test_two_image_stacks_share_one_tilt_series_alignment(device, tmp_path):
     assert half_a.shape == (16, 16, 16)
     assert half_b.shape == (16, 16, 16)
     assert not torch.allclose(half_a, half_b)
+
+
+def _delta_images(tilt_series, size):
+    """One bright pixel at the image centre [size // 2] of every tilt."""
+    images = torch.zeros((len(tilt_series.tilt_angles), size, size))
+    images[:, size // 2, size // 2] = 1.0
+    return images
+
+
+def _argmax_zyx(volume):
+    return np.unravel_index(int(volume.argmax()), volume.shape)
+
+
+@pytest.mark.parametrize("sidelength", [8, 9])
+def test_reconstruct_subvolume_odd_sidelength_shape_and_centre(sidelength, tmp_path):
+    tilt_series = make_tilt_series(tmp_path, size=48)
+    subvolume = reconstruct_subvolume(
+        tilt_series,
+        torch.zeros(3),
+        sidelength=sidelength,
+        images=_delta_images(tilt_series, 48),
+        preprocess=False,
+    )
+    assert subvolume.shape == (sidelength,) * 3
+    assert _argmax_zyx(subvolume) == (sidelength // 2,) * 3
+
+
+def test_reconstruct_subvolume_odd_native_crop_size_stays_centred(tmp_path):
+    # 2 * 24 * (48 / 47) rounds to an odd native crop size of 49 pixels
+    tilt_series = make_tilt_series(tmp_path, size=96)
+    subvolume = reconstruct_subvolume(
+        tilt_series,
+        torch.zeros(3),
+        sidelength=24,
+        output_pixel_spacing=48 / 47,
+        images=_delta_images(tilt_series, 96),
+        preprocess=False,
+    )
+    assert _argmax_zyx(subvolume) == (12, 12, 12)
+
+
+@pytest.mark.parametrize("sidelength", [8, 9])
+def test_reconstruct_tomogram_odd_sidelength_keeps_position(sidelength, tmp_path):
+    tilt_series = make_tilt_series(tmp_path, size=48)
+    volume = reconstruct_tomogram(
+        tilt_series,
+        (32, 32, 32),
+        sidelength=sidelength,
+        images=_delta_images(tilt_series, 48),
+        preprocess=False,
+    )
+    assert volume.shape == (32, 32, 32)
+    assert _argmax_zyx(volume) == (16, 16, 16)
