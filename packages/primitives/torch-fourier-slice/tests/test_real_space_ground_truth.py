@@ -195,3 +195,32 @@ def test_project_3d_to_2d_float32_right_angles_match_real_space(
     else:
         projection = project_3d_to_2d(_tensor(volume), _tensor(rotation))
     assert _cc(projection, _project(volume, rotation.astype(np.float64))) > 0.998
+
+
+@pytest.mark.parametrize("float32_trig", [False, True])
+@pytest.mark.parametrize("sidelength", [40, 41])
+def test_project_3d_to_2d_right_angle_about_y_separates_blobs(sidelength, float32_trig):
+    # two blobs on the z axis, 6 voxels either side of the center, end up 12 voxels
+    # apart along x after a 90° rotation about y
+    center = sidelength // 2
+    grid = np.meshgrid(*[np.arange(sidelength) - center] * 3, indexing="ij")
+    volume = sum(
+        np.exp(-((grid[0] - z) ** 2 + grid[1] ** 2 + grid[2] ** 2) / (2 * 1.5**2))
+        for z in (-6, 6)
+    ).astype(np.float32)
+    if float32_trig:
+        rotation = _float32_rotation("y", 90)
+    else:
+        rotation = Rotation.from_euler("y", 90, degrees=True).as_matrix()
+
+    projection = project_3d_to_2d(_tensor(volume), _tensor(rotation)).numpy()
+
+    profile = projection.sum(axis=0)
+    x = np.arange(sidelength) - center
+    left, right = x < 0, x > 0
+    centroids = [
+        (x[side] * profile[side]).sum() / profile[side].sum() for side in (left, right)
+    ]
+    assert abs(centroids[1] - centroids[0] - 12) < 0.1
+    # and the blobs stay centred in y
+    assert np.argmax(projection.sum(axis=1)) == center

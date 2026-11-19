@@ -50,7 +50,24 @@ def _fftfreq_to_dft_coordinates(
 
     # adjacent DFT samples are `1 / n` apart, so frequency `f` is `f * n` samples
     # away from DC
-    return frequencies * image_shape_tensor + dc_index
+    coordinates = frequencies * image_shape_tensor + dc_index
+
+    # `fftfreq(n) * n` isn't exact in float32, which puts the edge samples of some
+    # sizes just outside the array, e.g. -2.4e-7 for the lowest frequency at n = 7.
+    # Samplers zero, and insertion drops, anything outside the array, so snap
+    # coordinates within `tolerance` of an edge onto it
+    tolerance = 1e-3
+    upper = image_shape_tensor - 1
+    if rfft is True:
+        upper[-1] = torch.div(image_shape_tensor[-1], 2, rounding_mode="floor")
+    lower = torch.zeros_like(upper)
+    coordinates = torch.where(
+        (coordinates < lower) & (coordinates > lower - tolerance), lower, coordinates
+    )
+    coordinates = torch.where(
+        (coordinates > upper) & (coordinates < upper + tolerance), upper, coordinates
+    )
+    return coordinates
 
 
 def _rfft_full_width(h: int, w_rfft: int) -> int:
