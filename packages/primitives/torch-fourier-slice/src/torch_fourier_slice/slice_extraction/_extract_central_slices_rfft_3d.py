@@ -97,7 +97,7 @@ def extract_central_slices_rfft_3d(
     """Extract central slice from an fftshifted rfft volume.
 
     NOTE: The proper pre-processing for a RFFT volume for this function is as follows:
-    >>> volume = torch.fft.fftshift(volume, dim=(-3, -2, -1))  # move center to corners
+    >>> volume = torch.fft.ifftshift(volume, dim=(-3, -2, -1))  # move center to corners
     >>> volume_rfft = torch.fft.rfftn(volume, dim=(-3, -2, -1))  # take RFFT
     >>> volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))  # center yz plane
 
@@ -278,7 +278,7 @@ def extract_central_slices_rfft_3d_multichannel(
     """Extract central slices from multichannel fftshifted rfft volume.
 
     NOTE: The proper pre-processing for a RFFT volume for this function is as follows:
-    >>> volume = torch.fft.fftshift(volume, dim=(-3, -2, -1))  # move center to corners
+    >>> volume = torch.fft.ifftshift(volume, dim=(-3, -2, -1))  # move center to corners
     >>> volume_rfft = torch.fft.rfftn(volume, dim=(-3, -2, -1))  # take RFFT
     >>> volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))  # center yz plane
 
