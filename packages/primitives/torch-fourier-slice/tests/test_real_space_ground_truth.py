@@ -224,3 +224,35 @@ def test_project_3d_to_2d_right_angle_about_y_separates_blobs(sidelength, float3
     assert abs(centroids[1] - centroids[0] - 12) < 0.1
     # and the blobs stay centred in y
     assert np.argmax(projection.sum(axis=1)) == center
+
+
+@pytest.mark.parametrize("sidelength", SIDELENGTHS)
+def test_project_2d_to_1d_fftfreq_max_is_low_pass(sidelength):
+    fftfreq_max = 0.25
+    image = _gaussian_blobs(sidelength, ndim=2, n_blobs=8)
+    angles = (0, 25, 70, 130, 200, 290)
+    rotations = _tensor(
+        np.stack(
+            [
+                Rotation.from_euler("z", a, degrees=True).as_matrix()[:2, :2]
+                for a in angles
+            ]
+        )
+    )
+
+    # without padding, the projection limited to fftfreq_max is the full projection
+    # with every frequency above fftfreq_max removed
+    lines = project_2d_to_1d(_tensor(image), rotations, pad_factor=1.0)
+    lines_rfft = torch.fft.rfft(torch.fft.ifftshift(lines, dim=-1), dim=-1)
+    lines_rfft[..., torch.fft.rfftfreq(sidelength) > fftfreq_max] = 0
+    expected = torch.fft.fftshift(torch.fft.irfft(lines_rfft, n=sidelength), dim=-1)
+
+    low_passed = project_2d_to_1d(
+        _tensor(image), rotations, pad_factor=1.0, fftfreq_max=fftfreq_max
+    )
+    torch.testing.assert_close(low_passed, expected, rtol=1e-4, atol=1e-4)
+
+    # with padding (the default) it runs and is close to the real-space projection
+    low_passed = project_2d_to_1d(_tensor(image), rotations, fftfreq_max=fftfreq_max)
+    for line, rotation in zip(low_passed, rotations, strict=True):
+        assert _cc(line, _project(image, rotation.numpy())) > 0.99
