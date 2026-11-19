@@ -66,8 +66,9 @@ def calculate_ctfp_and_ctfq_2d(
     fftshift : bool
         Whether to apply fftshift on the resulting CTF images.
     discontinuity_angle : float
-        Discontinuity angle in degrees (default: 0.0).
-        If > 0, mixes ctfp and ctfq based on angle threshold:
+        Discontinuity angle in degrees (default: 0.0), measured from the +ky axis
+        (increasing row index) towards +kx, as in RELION. If > 0, mixes ctfp and
+        ctfq based on angle threshold:
         - ctfp: uses ctfp at angles >= discontinuity_angle,
           ctfq at angles < discontinuity_angle
         - ctfq: uses ctfq at angles >= discontinuity_angle,
@@ -269,9 +270,9 @@ def _enforce_symmetry(
         device=device,
     )
 
-    # Get x and y coordinates
-    x_coords = fft_freq_grid[..., 0]  # (h, w//2+1) - x frequencies
-    y_coords = fft_freq_grid[..., 1]  # (h, w//2+1) - y frequencies
+    # fftfreq_grid returns (ky, kx) in its last dimension
+    y_coords = fft_freq_grid[..., 0]  # (h, w//2+1) - y frequencies
+    x_coords = fft_freq_grid[..., 1]  # (h, w//2+1) - x frequencies
 
     # Find points at x=0
     x_is_zero = torch.abs(x_coords) < eps
@@ -331,6 +332,11 @@ def _get_fourier_angle(
 ) -> torch.Tensor:
     """Get the Fourier angle for each pixel in the rfft (0-180 degrees).
 
+    The angle is measured from the +ky axis (increasing row index) towards +kx,
+    i.e. ``acos(ky / |k|)`` as in RELION's ``CTF::getCTFPImage``. It is 0 degrees
+    along +ky, 90 degrees along +kx and 180 degrees along -ky, so it spans the
+    whole rfft half-plane without ambiguity.
+
     Parameters
     ----------
     image_shape : tuple[int, int]
@@ -360,14 +366,14 @@ def _get_fourier_angle(
         device=device,
     )
 
-    # Calculate angle using atan2 (returns -π to π)
-    kx = fft_freq_grid[..., 0]
-    ky = fft_freq_grid[..., 1]
-    theta = torch.atan2(ky, kx)
+    # fftfreq_grid returns (ky, kx) in its last dimension
+    ky = fft_freq_grid[..., 0]
+    kx = fft_freq_grid[..., 1]
 
-    # Convert to 0-180 degrees range
-    # For rfft, we want angles from 0 to π (0-180 degrees)
-    # Take absolute value to get 0 to π, then convert to degrees
+    # Angle from the +ky axis, as RELION's acos(ky / |k|). In the rfft half-plane
+    # (kx >= 0), atan2(kx, ky) lies in [0, π]; abs() folds the kx < 0 half of a
+    # full fft onto the same range.
+    theta = torch.atan2(kx, ky)
     angle_radians = torch.abs(theta)
     angle_degrees = torch.rad2deg(angle_radians)
 

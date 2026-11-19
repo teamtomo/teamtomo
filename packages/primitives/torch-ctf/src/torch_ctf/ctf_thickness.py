@@ -494,7 +494,8 @@ def calculate_ctf_thickness_lpp(
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation in the xy plane (degrees).
+        Laser rotation in the xy plane (degrees), measured from the +ky axis
+        (row direction) towards +kx. See :func:`torch_ctf.make_laser_coords`.
     laser_xz_angle_deg : float
         Laser angle in the xz plane (degrees).
     laser_long_offset_angstrom : float

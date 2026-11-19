@@ -118,16 +118,28 @@ def make_laser_coords(
 ) -> torch.Tensor:
     """Make the laser coordinates for the CTF.
 
+    The coordinates are ``[k0, k1] @ R(θ)`` with ``R = [[cos, -sin], [sin, cos]]``,
+    then offset and scaled. ``Lx`` (longitudinal) is ``k0 cos θ + k1 sin θ`` and
+    ``Ly`` (transverse) is ``k1 cos θ - k0 sin θ``.
+
+    With the ``[ky, kx]`` grid from :func:`torch_grid_utils.fftfreq_grid`, which
+    is what :func:`calc_LPP_phase` and :func:`calc_LPP_ctf_2D` pass, the laser
+    axis (``Ly = 0``) points along ``(kx, ky) = (sin θ, cos θ)``. That is,
+    ``laser_xy_angle_deg`` is measured from the +ky axis (row direction)
+    towards +kx: 0 puts the laser along ky, 90 puts it along kx.
+
     Parameters
     ----------
     fft_freq_grid_angstrom : torch.Tensor
-        FFT frequency grid in Angstroms^-1, shape (..., H, W, 2) with last dim [x, y].
+        FFT frequency grid in Angstroms^-1, shape (..., H, W, 2). The last dim is
+        ``[ky, kx]`` when it comes from :func:`torch_grid_utils.fftfreq_grid`.
     electron_wavelength_angstrom : float
         Electron wavelength in Angstroms.
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation angle in degrees.
+        Laser rotation angle in degrees, measured from the axis of the first
+        grid component (+ky for a ``[ky, kx]`` grid) towards the second.
     laser_long_offset_angstrom : float
         Longitudinal offset in Angstroms.
     laser_trans_offset_angstrom : float
@@ -360,7 +372,8 @@ def calc_LPP_phase(
     Parameters
     ----------
     fft_freq_grid : torch.Tensor
-        FFT frequency grid in cycles/Å, shape (..., H, W, 2).
+        FFT frequency grid in cycles/Å, shape (..., H, W, 2), with last dim
+        ``[ky, kx]`` as from :func:`torch_grid_utils.fftfreq_grid`.
     NA : float
         Numerical aperture of the laser.
     laser_wavelength_angstrom : float
@@ -368,7 +381,8 @@ def calc_LPP_phase(
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation angle in the xy plane in degrees.
+        Laser rotation angle in the xy plane in degrees, measured from the +ky
+        axis (row direction) towards +kx. See :func:`make_laser_coords`.
     laser_xz_angle_deg : float
         Laser angle in the xz plane in degrees.
     laser_long_offset_angstrom : float
@@ -599,7 +613,8 @@ def calc_LPP_ctf_2D(
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation angle in the xy plane in degrees.
+        Laser rotation angle in the xy plane in degrees, measured from the +ky
+        axis (row direction) towards +kx. See :func:`make_laser_coords`.
     laser_xz_angle_deg : float
         Laser angle in the xz plane in degrees.
     laser_long_offset_angstrom : float
