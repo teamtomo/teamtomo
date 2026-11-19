@@ -164,3 +164,23 @@ def test_estimate_ctf_and_thickness_defaults_to_image_device(monkeypatch):
             default_thickness_params(),
         )
     assert seen.value.args[0] == torch.device("cpu")
+
+
+@pytest.mark.parametrize("use_equiphase", [False, True])
+def test_estimate_ctf_and_thickness_whole_image_non_square(use_equiphase):
+    """The 1D thickness path takes the real (h, w) of a non-square image."""
+    image = torch.randn(96, 160)
+    result = estimate_ctf_and_thickness(
+        image,
+        default_optical_params(pixel_spacing_angstroms=3.0),
+        default_fitting_params(
+            defocus_grid_resolution=(1, 1, 1),
+            frequency_fit_range_angstroms=(40.0, 7.0),
+            patch_sidelength=-1,
+        ),
+        default_thickness_params(refine_dim="1d", use_equiphase=use_equiphase),
+        device=torch.device("cpu"),
+    )
+    n_1d = min(96, 160) // 2 + 1
+    assert result.thickness1d.frequencies_1d.shape == (n_1d,)
+    assert result.thickness1d.powerspectrum_1d.shape == (n_1d,)

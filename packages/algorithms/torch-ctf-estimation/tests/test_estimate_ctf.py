@@ -739,3 +739,55 @@ def test_apply_laser_axis_mask_odd_width():
             patch_ps, mean_ps, image_shape=image_shape, **kwargs
         )
         torch.testing.assert_close(mask, expected)
+
+
+def _synthetic_ctf_image_shape(
+    image_shape: tuple[int, int], defocus: float = 1.5, pixel_spacing: float = 3.0
+) -> torch.Tensor:
+    """Two frames of CTF-filtered white noise plus noise, any (h, w)."""
+    generator = torch.Generator().manual_seed(0)
+    ctf = calculate_ctf_2d(
+        defocus=defocus,
+        astigmatism=0.0,
+        astigmatism_angle=0.0,
+        voltage=300.0,
+        spherical_aberration=2.7,
+        amplitude_contrast=0.07,
+        phase_shift=0.0,
+        pixel_size=pixel_spacing,
+        image_shape=image_shape,
+        rfft=True,
+        fftshift=False,
+    )
+    noise = torch.randn((2, *image_shape), generator=generator)
+    signal = torch.fft.irfft2(torch.fft.rfft2(noise) * ctf, s=image_shape)
+    return signal + 0.3 * torch.randn((2, *image_shape), generator=generator)
+
+
+@pytest.mark.parametrize("image_shape", [(256, 256), (256, 384), (384, 256)])
+def test_estimate_ctf_whole_image_non_square(image_shape):
+    """Whole-image mode recovers defocus for non-square images.
+
+    The 1D path used to treat a (h, w) spectrum as (min, min), assigning pixels
+    to the wrong shells (0.857 um and 1.417 um instead of 1.5 um).
+    """
+    _mean_ps, result1d, result2d = estimate_ctf(
+        _synthetic_ctf_image_shape(image_shape),
+        default_optical_params(
+            pixel_spacing_angstroms=3.0,
+            target_pixel_spacing_angstroms=3.0,
+            amplitude_contrast_fraction=0.07,
+        ),
+        default_fitting_params(
+            defocus_grid_resolution=(1, 1, 1),
+            frequency_fit_range_angstroms=(40.0, 7.0),
+            defocus_range_microns=(0.5, 3.0),
+            patch_sidelength=-1,
+            optimize_astigmatism=True,
+        ),
+        device=torch.device("cpu"),
+    )
+    assert float(result1d.ctf_model.defocus_um) == pytest.approx(1.5, rel=0.01)
+    mean_2d = (result2d.defocus_u + result2d.defocus_v) / 2
+    assert mean_2d == pytest.approx(1.5, rel=0.01)
+    assert result2d.astigmatism < 0.01

@@ -41,7 +41,7 @@ def test_extract_ctf_patches_overlapping():
         image, patch_sidelength=32, defocus_grid_resolution=(1, 2, 2)
     )
     assert not whole
-    assert sidelength == 32
+    assert sidelength == (32, 32)
     assert patches.ndim == 5
     assert centers.shape[-1] == 3
     positions = normalised_patch_positions(centers, image.shape)
@@ -49,14 +49,15 @@ def test_extract_ctf_patches_overlapping():
     assert positions.max() <= 1.0
 
 
-def test_extract_ctf_patches_whole_image():
-    image = torch.randn(1, 48, 48)
-    patches, _centers, sidelength, whole = extract_ctf_patches(
+@pytest.mark.parametrize("shape", [(48, 48), (48, 61), (61, 48)])
+def test_extract_ctf_patches_whole_image(shape):
+    image = torch.randn(1, *shape)
+    patches, _centers, patch_shape, whole = extract_ctf_patches(
         image, patch_sidelength=-1, defocus_grid_resolution=(1, 1, 1)
     )
     assert whole
-    assert sidelength == 48
-    assert patches.shape[-2:] == (48, 48)
+    assert patch_shape == shape
+    assert patches.shape[-2:] == shape
 
 
 def test_compute_patch_power_spectra_shapes():
