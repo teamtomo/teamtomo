@@ -1,5 +1,6 @@
 import math
 
+import pytest
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
 
@@ -180,3 +181,39 @@ def test_phase_permutation_fftshift():
     wo = torch.remainder(op[freq_mask].flatten() + math.pi, 2 * math.pi)
     wp = torch.remainder(out_phases[freq_mask].flatten() + math.pi, 2 * math.pi)
     assert torch.allclose(torch.sort(wo)[0], torch.sort(wp)[0], atol=1e-3, rtol=1e-4)
+
+
+@pytest.mark.parametrize("image_shape", [(20, 20), (21, 21), (21, 20), (9, 11, 10)])
+@pytest.mark.parametrize("cuton", [0.0, 0.1])
+def test_phase_randomize_rfft_keeps_magnitudes_after_round_trip(image_shape, cuton):
+    """Randomized rfft is Hermitian: a real round trip keeps every magnitude."""
+    dims = tuple(range(-len(image_shape), 0))
+    dft = torch.fft.rfftn(torch.rand(image_shape), dim=dims)
+    out = phase_randomize(dft, image_shape, rfft=True, cuton=cuton)
+    image = torch.fft.irfftn(out, s=image_shape, dim=dims)
+    round_trip = torch.fft.rfftn(image, dim=dims)
+    torch.testing.assert_close(round_trip.abs(), dft.abs(), atol=1e-3, rtol=1e-4)
+
+
+@pytest.mark.parametrize("image_shape", [(20, 20), (21, 21), (21, 20)])
+@pytest.mark.parametrize("fftshift", [False, True])
+def test_phase_randomize_full_fft_gives_real_image(image_shape, fftshift):
+    """Randomized full DFT is Hermitian, so its inverse is real."""
+    dft = torch.fft.fftn(torch.rand(image_shape))
+    shifted = torch.fft.fftshift(dft) if fftshift else dft
+    out = phase_randomize(
+        shifted, image_shape, rfft=False, cuton=0.1, fftshift=fftshift
+    )
+    if fftshift:
+        out = torch.fft.ifftshift(out)
+    torch.testing.assert_close(out.abs(), dft.abs())
+    image = torch.fft.ifftn(out)
+    assert image.imag.abs().max() < 1e-5 * image.real.abs().max()
+
+
+def test_phase_randomize_batched_inputs_get_independent_phases():
+    image_shape = (16, 17)
+    dft = torch.fft.rfftn(torch.rand(2, *image_shape), dim=(-2, -1))
+    out = phase_randomize(dft, image_shape, rfft=True, cuton=0.1)
+    assert out.shape == dft.shape
+    assert not torch.allclose(torch.angle(out[0]), torch.angle(out[1]))
