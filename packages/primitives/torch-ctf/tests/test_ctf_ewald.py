@@ -1,8 +1,10 @@
 """Tests for Ewald-sphere CTF outputs and weighting."""
 
+import pytest
 import torch
 
 from torch_ctf import calculate_ctfp_and_ctfq_2d, get_ctf_weighting
+from torch_ctf.ctf_ewald import _enforce_symmetry, _get_fourier_angle
 
 
 def test_calculate_ctfp_and_ctfq_2d():
@@ -105,7 +107,12 @@ def test_calculate_ctfp_and_ctfq_2d_discontinuity_angle_22_5():
 
     # At angles >= 22.5: ctfp should use ctfp, ctfq should use ctfq
     # At angles < 22.5: ctfp should use ctfq, ctfq should use ctfp
-    angle_mask = angles >= 22.5
+    # The kx=0, ky<0 pixels of the discontinuity_angle=0 reference are set by
+    # Friedel symmetry, so they are not plain ctfp/ctfq and are excluded here.
+    friedel_redundant = torch.zeros(10, 6, dtype=torch.bool)
+    friedel_redundant[6:, 0] = True
+    angle_mask = (angles >= 22.5) & ~friedel_redundant
+    low_angle_mask = (angles < 22.5) & ~friedel_redundant
 
     # Get reference ctfp and ctfq without mixing
     ctfp_ref, ctfq_ref = calculate_ctfp_and_ctfq_2d(
@@ -129,8 +136,8 @@ def test_calculate_ctfp_and_ctfq_2d_discontinuity_angle_22_5():
     ctfp_ref_high_angle = ctfp_ref[angle_mask]
     assert torch.allclose(ctfp_high_angle, ctfp_ref_high_angle, atol=1e-6)
 
-    ctfp_low_angle = ctfp[~angle_mask]
-    ctfq_ref_low_angle = ctfq_ref[~angle_mask]
+    ctfp_low_angle = ctfp[low_angle_mask]
+    ctfq_ref_low_angle = ctfq_ref[low_angle_mask]
     assert torch.allclose(ctfp_low_angle, ctfq_ref_low_angle, atol=1e-6)
 
     # Verify ctfq mixing (opposite of ctfp)
@@ -138,8 +145,8 @@ def test_calculate_ctfp_and_ctfq_2d_discontinuity_angle_22_5():
     ctfq_ref_high_angle = ctfq_ref[angle_mask]
     assert torch.allclose(ctfq_high_angle, ctfq_ref_high_angle, atol=1e-6)
 
-    ctfq_low_angle = ctfq[~angle_mask]
-    ctfp_ref_low_angle = ctfp_ref[~angle_mask]
+    ctfq_low_angle = ctfq[low_angle_mask]
+    ctfp_ref_low_angle = ctfp_ref[low_angle_mask]
     assert torch.allclose(ctfq_low_angle, ctfp_ref_low_angle, atol=1e-6)
 
 
@@ -321,3 +328,70 @@ def test_get_ctf_weighting():
 
     assert W3.shape == (10, 6)
     assert torch.all(torch.isfinite(W3))
+
+
+def _assert_column0_hermitian(rfft_tensor: torch.Tensor, h: int) -> None:
+    """Check out[(-i) % h, 0] == conj(out[i, 0]) for rows with a distinct mirror."""
+    col = rfft_tensor[..., 0]
+    for i in range(h):
+        j = (-i) % h
+        if i == j:  # DC and the even-h Nyquist row are their own mirror
+            continue
+        torch.testing.assert_close(col[..., j], torch.conj(col[..., i]))
+
+
+@pytest.mark.parametrize("image_shape", [(20, 20), (21, 21), (21, 20)])
+@pytest.mark.parametrize("fftshift", [False, True])
+def test_enforce_symmetry_makes_kx0_column_hermitian(image_shape, fftshift):
+    """_enforce_symmetry makes the kx=0 column Hermitian for any parity."""
+    h, w = image_shape
+    generator = torch.Generator().manual_seed(0)
+    data = torch.complex(
+        torch.randn(h, w // 2 + 1, generator=generator),
+        torch.randn(h, w // 2 + 1, generator=generator),
+    )
+    if fftshift:
+        data = torch.fft.fftshift(data, dim=-2)
+    out = _enforce_symmetry(data, image_shape=image_shape, fftshift=fftshift)
+    if fftshift:
+        out = torch.fft.ifftshift(out, dim=-2)
+        data = torch.fft.ifftshift(data, dim=-2)
+    _assert_column0_hermitian(out, h)
+    # rows with ky > 0 and all other columns are unchanged
+    torch.testing.assert_close(out[..., 1:], data[..., 1:])
+    torch.testing.assert_close(out[: (h + 1) // 2, 0], data[: (h + 1) // 2, 0])
+
+
+@pytest.mark.parametrize("image_shape", [(20, 20), (21, 21), (21, 20)])
+def test_ctfp_ctfq_kx0_column_hermitian(image_shape):
+    """With discontinuity_angle=0, ctfp and ctfq are Hermitian on kx=0."""
+    h, _ = image_shape
+    ctfp, ctfq = calculate_ctfp_and_ctfq_2d(
+        defocus=1.5,
+        astigmatism=0.2,
+        astigmatism_angle=30,
+        voltage=300,
+        spherical_aberration=2.7,
+        amplitude_contrast=0.07,
+        phase_shift=0,
+        pixel_size=2.0,
+        image_shape=image_shape,
+        rfft=True,
+        fftshift=False,
+    )
+    _assert_column0_hermitian(ctfp, h)
+    _assert_column0_hermitian(ctfq, h)
+
+
+@pytest.mark.parametrize("n", [20, 21])
+def test_get_fourier_angle_convention(n):
+    """Angle is measured from +ky (rows) towards +kx, as RELION's acos(ky/|k|)."""
+    angles = _get_fourier_angle(image_shape=(n, n), rfft=True, fftshift=False)
+    assert angles.shape == (n, n // 2 + 1)
+    assert angles[1, 0] == pytest.approx(0.0)  # pure +ky
+    assert angles[0, 1] == pytest.approx(90.0)  # pure +kx
+    assert angles[n - 1, 0] == pytest.approx(180.0)  # pure -ky
+    assert angles[1, 1] == pytest.approx(45.0, abs=1e-4)  # +ky, +kx diagonal
+    assert angles[n - 1, 1] == pytest.approx(135.0, abs=1e-4)  # -ky, +kx diagonal
+    assert angles.min() >= 0.0
+    assert angles.max() <= 180.0
