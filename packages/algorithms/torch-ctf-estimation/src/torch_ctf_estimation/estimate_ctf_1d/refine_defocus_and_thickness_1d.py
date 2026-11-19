@@ -22,11 +22,12 @@ from torch_ctf_estimation.models.results_models import (
     _Background1DResult,
 )
 from torch_ctf_estimation.utils.fitting_bounds import resolve_defocus_bounds
+from torch_ctf_estimation.utils.rfft_shape import profile_sidelength
 
 
 def refine_defocus_and_thickness_1d(
     power_spectrum: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     frequency_fit_range_angstroms: tuple[float, float],
     initial_defocus_um: float,
     initial_thickness_angstroms: float,
@@ -61,8 +62,10 @@ def refine_defocus_and_thickness_1d(
     ----------
     power_spectrum : torch.Tensor
         Mean (or single) rFFT power spectrum, shape ``(h, w_rfft)``.
-    image_sidelength : int
-        Real-space sidelength used for the 1D CTF.
+    image_sidelength : int or tuple[int, int]
+        Real-space ``(h, w)`` of the 2D images prior to rfft calculation, or
+        ``N`` for square ``(N, N)`` images. The 1D profile has
+        ``min(h, w) // 2 + 1`` samples.
     frequency_fit_range_angstroms : tuple[float, float]
         ``(low, high)`` fit band in Angstroms.
     initial_defocus_um : float
@@ -174,7 +177,7 @@ def refine_defocus_and_thickness_1d(
             amplitude_contrast=amplitude_contrast,
             phase_shift=phase_shift_deg,
             pixel_size=pixel_spacing_angstroms,
-            n_samples=image_sidelength // 2 + 1,
+            n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
             image_sidelength=_ctf_1d_image_sidelength(image_sidelength, use_equiphase),
         )
@@ -214,7 +217,7 @@ def refine_defocus_and_thickness_1d(
             amplitude_contrast=amplitude_contrast,
             phase_shift=phase_shift_deg,
             pixel_size=pixel_spacing_angstroms,
-            n_samples=image_sidelength // 2 + 1,
+            n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
             image_sidelength=_ctf_1d_image_sidelength(image_sidelength, use_equiphase),
         )

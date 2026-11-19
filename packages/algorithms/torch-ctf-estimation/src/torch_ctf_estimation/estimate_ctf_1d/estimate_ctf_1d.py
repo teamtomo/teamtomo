@@ -21,7 +21,7 @@ from torch_ctf_estimation.utils.fitting_bounds import (
 
 def estimate_ctf_1d(
     power_spectrum: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     frequency_fit_range_angstroms: tuple[float, float],
     voltage_kev: float,
     spherical_aberration_mm: float,
@@ -61,8 +61,10 @@ def estimate_ctf_1d(
     ----------
     power_spectrum : torch.Tensor
         (h, w) array containing 2D rfft (no fftshift applied).
-    image_sidelength : int
-        Sidelength of 2D images prior to rfft calculation.
+    image_sidelength : int or tuple[int, int]
+        Real-space ``(h, w)`` of the 2D images prior to rfft calculation, or
+        ``N`` for square ``(N, N)`` images. The 1D profile has
+        ``min(h, w) // 2 + 1`` samples.
     frequency_fit_range_angstroms : tuple[float, float]
         (low, high) spatial frequency cutoffs for fitting in angstroms.
     defocus_range_microns : tuple[float, float] or None

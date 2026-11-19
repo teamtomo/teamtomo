@@ -34,6 +34,7 @@ from torch_ctf_estimation.models import (
     LinearDefocusModel,
     OpticalParams,
 )
+from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
 
 
 def _tensor_to_float(x: float | torch.Tensor) -> float:
@@ -84,26 +85,21 @@ def _iy_float_from_ky_vectorized(
     ky: torch.Tensor,
     h: int,
     pixel_spacing: float,
-    device: torch.device,
-    dtype: torch.dtype,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
-    """Map spatial frequency ky (cycles/Å) to fractional row index in rFFT layout."""
-    fy = torch.fft.fftfreq(h, d=pixel_spacing, device=device, dtype=dtype)
-    iy = torch.arange(h, device=device, dtype=dtype)
-    order = torch.argsort(fy)
-    fy_s = fy[order]
-    iy_s = iy[order]
-    ky_flat = ky.reshape(-1)
-    idx = torch.searchsorted(fy_s, ky_flat)
-    idx = idx.clamp(1, h - 1)
-    f0 = fy_s[idx - 1]
-    f1 = fy_s[idx]
-    t = (ky_flat - f0) / (f1 - f0 + 1e-20)
-    t = t.clamp(0.0, 1.0)
-    iy0 = iy_s[idx - 1].to(dtype)
-    iy1 = iy_s[idx].to(dtype)
-    out = iy0 * (1.0 - t) + iy1 * t
-    return out.reshape(ky.shape)
+    """Map spatial frequency ky (cycles/Å) to fractional row index in ``[0, h)``.
+
+    Row ``i`` holds ``fftfreq(h)[i]``, so ``iy = ky * h * Δx`` modulo ``h``.
+    Values in ``(h - 1, h)`` lie between row ``h - 1`` and row 0 (the wrap from
+    the most negative ky to ky = 0). ``|ky * h * Δx|`` is clamped to ``h / 2``.
+    """
+    del device
+    iy = ky * (h * pixel_spacing)
+    if dtype is not None:
+        iy = iy.to(dtype)
+    iy = iy.clamp(-0.5 * h, 0.5 * h)
+    return torch.remainder(iy, h)
 
 
 def _ix_float_from_kx_vectorized(
@@ -176,11 +172,13 @@ def warp_rfft_power_isotropic(
     ix_f = _ix_float_from_kx_vectorized(
         kx_in, w, w_rfft, pixel_spacing_angstroms, device, dtype
     )
-    iy_f = iy_f.clamp(0.0, float(h - 1))
     ix_f = ix_f.clamp(0.0, float(w_rfft - 1))
     coordinates = torch.stack([iy_f, ix_f], dim=-1)
+    # Append row 0 below row h - 1 so rows in (h - 1, h) interpolate across the
+    # wrap from the most negative ky to ky = 0, not through the middle rows.
+    power_wrapped = torch.cat([power_rfft, power_rfft[:1]], dim=0)
     out = sample_image_2d(
-        power_rfft.float(),
+        power_wrapped.float(),
         coordinates,
         interpolation="bilinear",
     )
@@ -334,8 +332,13 @@ def tilt_corrected_mean_ps_1d(
     equiphase_n_theta: int = 64,
     defocus_average_um: float | None = None,
     eps_defocus_avg: float = 1e-12,
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[torch.Tensor, TiltCorrectedPsAux]:
-    """Mean tilt-corrected 2D spectrum, then 1D equiphase or rotational average."""
+    """Mean tilt-corrected 2D spectrum, then 1D equiphase or rotational average.
+
+    ``image_shape`` is the real-space ``(h, w)`` of the patches; if None, square
+    patches are assumed when that matches the rfft width.
+    """
     mean_2d, aux = _mean_tilt_corrected_ps_2d_rfft(
         result1d,
         result2d,
@@ -354,13 +357,13 @@ def tilt_corrected_mean_ps_1d(
     else:
         phase_deg = _tensor_to_float(result1d.ctf_model.phase_shift_degrees)
 
-    ph, _pw_r = mean_2d.shape
+    patch_shape = resolve_rfft_image_shape(mean_2d.shape, image_shape)
     pixel = optical_params.pixel_spacing_angstroms
 
     if use_equiphase:
         ps_1d = equiphase_average_power_to_1d_rfft(
             mean_2d,
-            ph,
+            patch_shape,
             pixel,
             defocus_um=d_avg_ref,
             astigmatism_um=astig,
@@ -375,7 +378,7 @@ def tilt_corrected_mean_ps_1d(
     else:
         averaged, _ = rotational_average_dft_2d(
             mean_2d.cpu(),
-            image_shape=(ph, ph),
+            image_shape=patch_shape,
             rfft=True,
             fftshifted=False,
         )

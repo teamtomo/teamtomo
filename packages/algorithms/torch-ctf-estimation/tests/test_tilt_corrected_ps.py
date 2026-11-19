@@ -1,5 +1,6 @@
 """Tests for tilt-corrected mean power spectrum (CTFFIND5-style scaling)."""
 
+import pytest
 import torch
 from torch_fourier_filter.dft_utils import rotational_average_dft_2d
 
@@ -162,3 +163,26 @@ def test_tilt_corrected_1d_equiphase_smoke_with_astigmatism():
     assert ps_1d.ndim == 1
     assert ps_1d.shape[0] == h // 2 + 1
     assert torch.all(torch.isfinite(ps_1d))
+
+
+@pytest.mark.parametrize("n", [20, 21])
+def test_warp_rfft_power_wraps_negative_ky(n):
+    """Row n - 1 (ky = -1/n) reads between rows n - 1 and 0, not the middle rows.
+
+    With scale 0.95 it samples ky = -0.95/n, i.e. fractional row n - 0.95.
+    """
+    from torch_ctf_estimation.utils.tilt_corrected_ps import (
+        warp_rfft_power_isotropic,
+    )
+
+    ky = torch.fft.fftfreq(n).reshape(-1, 1)
+    kx = torch.fft.rfftfreq(n).reshape(1, -1)
+    power = ky**2 + kx**2
+    out = warp_rfft_power_isotropic(
+        power, image_sidelength=n, pixel_spacing_angstroms=1.0, scale_factor=0.95
+    )
+    expected = 0.95 * power[n - 1, 0] + 0.05 * power[0, 0]
+    torch.testing.assert_close(out[n - 1, 0], expected)
+    # interior: (0.95 k)^2 up to bilinear interpolation error
+    # (bilinear error of a quadratic is at most 1/(4n^2) per axis)
+    torch.testing.assert_close(out, 0.95**2 * power, rtol=0.0, atol=0.6 / n**2)

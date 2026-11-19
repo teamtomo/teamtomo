@@ -26,6 +26,7 @@ from torch_ctf_estimation.utils.fitting_bounds import (
     resolve_defocus_bounds,
     resolve_phase_shift_bounds,
 )
+from torch_ctf_estimation.utils.rfft_shape import as_image_shape, profile_sidelength
 
 
 def _grid_search_defocus_range(
@@ -41,7 +42,7 @@ def _grid_search_phase_shift_range(
 
 
 def profile_fftfreqs(
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     use_equiphase: bool,
     device: torch.device | None = None,
 ) -> torch.Tensor:
@@ -55,10 +56,13 @@ def profile_fftfreqs(
     - rotational: ``rotational_average_dft_2d`` bins have centres at
       ``linspace(0, 0.5, N // 2 + 1)``.
 
+    For a non-square ``(h, w)`` image, ``N = min(h, w)``.
+
     Parameters
     ----------
-    image_sidelength : int
-        Real-space sidelength ``N`` of the image behind the 2D spectrum.
+    image_sidelength : int or tuple[int, int]
+        Real-space sidelength ``N`` (or ``(h, w)``) of the image behind the 2D
+        spectrum.
     use_equiphase : bool
         True for the equiphase profile, False for the rotational average.
     device : torch.device or None, optional
@@ -69,18 +73,21 @@ def profile_fftfreqs(
     torch.Tensor
         ``(N // 2 + 1,)`` frequencies in cycles/pixel.
     """
+    n = profile_sidelength(image_sidelength)
     if use_equiphase:
-        return torch.fft.rfftfreq(image_sidelength, device=device)
-    return torch.linspace(0, 0.5, steps=image_sidelength // 2 + 1, device=device)
+        return torch.fft.rfftfreq(n, device=device)
+    return torch.linspace(0, 0.5, steps=n // 2 + 1, device=device)
 
 
-def _ctf_1d_image_sidelength(image_sidelength: int, use_equiphase: bool) -> int | None:
+def _ctf_1d_image_sidelength(
+    image_sidelength: int | tuple[int, int], use_equiphase: bool
+) -> int | None:
     """``image_sidelength`` for ``calculate_ctf_1d`` matching :func:`profile_fftfreqs`.
 
     ``None`` keeps ``calculate_ctf_1d``'s ``linspace(0, 0.5, n)`` grid (rotational
-    bin centres); ``N`` samples at ``rfftfreq(N)`` (equiphase).
+    bin centres); ``n = min(h, w)`` samples at ``rfftfreq(n)`` (equiphase).
     """
-    return image_sidelength if use_equiphase else None
+    return profile_sidelength(image_sidelength) if use_equiphase else None
 
 
 def _fit_band(
@@ -105,7 +112,7 @@ def compute_final_1d_l2_cross_correlation(
     raps_in_fit_range: torch.Tensor,
     spatial_freqs: torch.Tensor,
     fit_mask: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     defocus_um: float,
     *,
     envelope_B: float | None,
@@ -123,7 +130,7 @@ def compute_final_1d_l2_cross_correlation(
     ``use_equiphase`` selects the profile's frequency axis (see
     :func:`profile_fftfreqs`).
     """
-    h = image_sidelength
+    h = profile_sidelength(image_sidelength)
     device = raps_in_fit_range.device
     dtype = raps_in_fit_range.dtype
     d = torch.tensor(defocus_um, device=device, dtype=dtype).unsqueeze(0)
@@ -157,7 +164,7 @@ if TYPE_CHECKING:
 
 def _average_power_to_1d_rfft(
     power_spectrum: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     *,
     use_equiphase: bool,
     equiphase_defocus_um: float | None,
@@ -172,7 +179,7 @@ def _average_power_to_1d_rfft(
     equiphase_n_theta: int,
 ) -> torch.Tensor:
     """Rotational or equiphase 1D profile (same length as rfftfreq bins)."""
-    h, w = image_sidelength, image_sidelength
+    h, w = as_image_shape(image_sidelength)
     if not use_equiphase:
         ps_cpu = power_spectrum.cpu()
         averaged, _ = rotational_average_dft_2d(
@@ -211,7 +218,7 @@ def _average_power_to_1d_rfft(
 
 def get_background_result(
     power_spectrum: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     frequency_fit_range_angstroms: tuple[float, float],
     pixel_spacing_angstroms: float,
     background_result: _Background1DResult | None = None,
@@ -238,8 +245,10 @@ def get_background_result(
     ----------
     power_spectrum : torch.Tensor
         (h, w) array containing 2D rfft (no fftshift applied).
-    image_sidelength : int
-        Sidelength of 2D images prior to rfft calculation.
+    image_sidelength : int or tuple[int, int]
+        Real-space ``(h, w)`` of the 2D images prior to rfft calculation, or
+        ``N`` for square ``(N, N)`` images. The 1D profile has
+        ``min(h, w) // 2 + 1`` samples.
     frequency_fit_range_angstroms : tuple[float, float]
         (low, high) spatial frequency cutoffs for fitting in angstroms.
     pixel_spacing_angstroms : float
@@ -342,7 +351,7 @@ def get_background_result(
 
 def fit_background_spline_1d(
     power_spectrum: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     frequency_fit_range_angstroms: tuple[float, float],
     pixel_spacing_angstroms: float,
     n_spline_iterations: int = 200,
@@ -367,8 +376,10 @@ def fit_background_spline_1d(
     ----------
     power_spectrum : torch.Tensor
         (h, w) array containing 2D rfft (no fftshift applied).
-    image_sidelength : int
-        Sidelength of 2D images prior to rfft calculation.
+    image_sidelength : int or tuple[int, int]
+        Real-space ``(h, w)`` of the 2D images prior to rfft calculation, or
+        ``N`` for square ``(N, N)`` images. The 1D profile has
+        ``min(h, w) // 2 + 1`` samples.
     frequency_fit_range_angstroms : tuple[float, float]
         (low, high) spatial frequency cutoffs for fitting in angstroms.
     pixel_spacing_angstroms : float
@@ -534,7 +545,7 @@ def grid_search_defocus_and_envelope_1d(
     raps_in_fit_range: torch.Tensor,
     spatial_freqs: torch.Tensor,
     fit_mask: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     defocus_range_microns: tuple[float, float] | None,
     voltage_kev: float,
     spherical_aberration_mm: float,
@@ -563,8 +574,10 @@ def grid_search_defocus_and_envelope_1d(
         Spatial frequencies (1/Å) for the full 1D spectrum.
     fit_mask : torch.Tensor
         Boolean mask indicating which frequencies are in the fit range.
-    image_sidelength : int
-        Sidelength of 2D images (used for CTF n_samples).
+    image_sidelength : int or tuple[int, int]
+        Real-space ``(h, w)`` of the 2D images prior to rfft calculation, or
+        ``N`` for square ``(N, N)`` images. The 1D profile has
+        ``min(h, w) // 2 + 1`` samples.
     defocus_range_microns : tuple[float, float] or None
         (low, high) defoci in microns for the grid. If None, a wide internal
         search range is used; refinement is not clamped unless bounds are set.
@@ -603,7 +616,7 @@ def grid_search_defocus_and_envelope_1d(
     """
     device = raps_in_fit_range.device
     dtype = raps_in_fit_range.dtype
-    h = image_sidelength
+    h = profile_sidelength(image_sidelength)
     # Normalise observed spectrum so ZNCC is just inner product with normalised model
     normalised_raps_in_fit_range = raps_in_fit_range / torch.linalg.norm(
         raps_in_fit_range
@@ -762,7 +775,7 @@ def refine_defocus_and_b_factor_1d(
     raps_in_fit_range: torch.Tensor,
     spatial_freqs: torch.Tensor,
     fit_mask: torch.Tensor,
-    image_sidelength: int,
+    image_sidelength: int | tuple[int, int],
     voltage_kev: float,
     spherical_aberration_mm: float,
     amplitude_contrast: float,
@@ -796,8 +809,10 @@ def refine_defocus_and_b_factor_1d(
         Spatial frequencies (1/Å) for the full 1D spectrum.
     fit_mask : torch.Tensor
         Boolean mask indicating which frequencies are in the fit range.
-    image_sidelength : int
-        Sidelength of 2D images (used for CTF n_samples).
+    image_sidelength : int or tuple[int, int]
+        Real-space ``(h, w)`` of the 2D images prior to rfft calculation, or
+        ``N`` for square ``(N, N)`` images. The 1D profile has
+        ``min(h, w) // 2 + 1`` samples.
     voltage_kev, spherical_aberration_mm, amplitude_contrast : float
         CTF parameters.
     pixel_spacing_angstroms : float
@@ -883,7 +898,7 @@ def refine_defocus_and_b_factor_1d(
     PHASE_SHIFT_UNIT_CIRCLE_PENALTY = 0.1
 
     # Gradient steps: clamp defocus, get phase from (u,v), simulate CTF², maximise ZNCC
-    h = image_sidelength
+    h = profile_sidelength(image_sidelength)
     for _ in range(n_iterations):
         optimiser.zero_grad()
         defocus_low, defocus_high = defocus_range_microns

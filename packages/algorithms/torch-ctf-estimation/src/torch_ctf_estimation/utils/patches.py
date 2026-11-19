@@ -11,7 +11,7 @@ def extract_ctf_patches(
     image: torch.Tensor,
     patch_sidelength: int,
     defocus_grid_resolution: tuple[int, int, int],
-) -> tuple[torch.Tensor, torch.Tensor, int, bool]:
+) -> tuple[torch.Tensor, torch.Tensor, tuple[int, int], bool]:
     """Extract overlapping patches or a single whole-image patch.
 
     Parameters
@@ -29,8 +29,11 @@ def extract_ctf_patches(
         Shape ``(t, gh, gw, ph, pw)``.
     patch_centers : torch.Tensor
         Patch centers in pixel coordinates, shape ``(t, gh, gw, 3)``.
-    image_sidelength_for_1d : int
-        Sidelength to pass to 1D estimators.
+    patch_shape : tuple[int, int]
+        Real-space ``(ph, pw)`` of each patch: ``(h, w)`` in whole-image mode,
+        ``(patch_sidelength, patch_sidelength)`` otherwise. Pass it as
+        ``image_sidelength`` to the 1D estimators and as ``image_shape`` to the
+        2D ones; the rfft width alone cannot tell odd from even widths.
     use_whole_image : bool
         Whether whole-image mode was used.
     """
@@ -57,17 +60,17 @@ def extract_ctf_patches(
             patch_shape=(1, h, w),
             patch_step=(1, h, w),
         )
-        image_sidelength_for_1d = min(h, w)
+        patch_shape = (h, w)
     else:
         patches, patch_centers = patch_grid(
             images=image,
             patch_shape=(1, patch_sidelength, patch_sidelength),
             patch_step=(1, patch_sidelength // 2, patch_sidelength // 2),
         )
-        image_sidelength_for_1d = patch_sidelength
+        patch_shape = (patch_sidelength, patch_sidelength)
 
     patches = einops.rearrange(patches, "t gh gw 1 ph pw -> t gh gw ph pw")
-    return patches, patch_centers, image_sidelength_for_1d, use_whole_image
+    return patches, patch_centers, patch_shape, use_whole_image
 
 
 def compute_patch_power_spectra(
