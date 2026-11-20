@@ -12,7 +12,6 @@ from torch_ctf.ctf_thickness import calculate_ctf_thickness_1d
 from torch_grid_utils.fftfreq_grid import fftfreq_to_spatial_frequency
 
 from torch_ctf_estimation.estimate_ctf_1d.estimate_ctf_1d_utils import (
-    _ctf_1d_image_sidelength,
     get_background_result,
 )
 from torch_ctf_estimation.metrics.fit_metrics import l2_normalized_cross_correlation
@@ -179,7 +178,7 @@ def refine_defocus_and_thickness_1d(
             pixel_size=pixel_spacing_angstroms,
             n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
-            image_sidelength=_ctf_1d_image_sidelength(image_sidelength),
+            image_sidelength=profile_sidelength(image_sidelength),
         )
         if simulated.ndim > 1:
             simulated = simulated.reshape(-1)
@@ -219,7 +218,7 @@ def refine_defocus_and_thickness_1d(
             pixel_size=pixel_spacing_angstroms,
             n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
-            image_sidelength=_ctf_1d_image_sidelength(image_sidelength),
+            image_sidelength=profile_sidelength(image_sidelength),
         )
         if simulated.ndim > 1:
             simulated = simulated.reshape(-1)
