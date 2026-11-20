@@ -131,10 +131,14 @@ class ProjectionAlignmentConfig(BaseModelTeamTomo):
     fftfreq_max : float or None
         High-frequency cutoff (cycles/pixel) applied to the projections.
         Passed to ``project_3d_to_2d``.
+    rotation_batch_size : int
+        Number of candidate rotations projected per batch.  Reduce if you run
+        out of memory; increase for faster throughput.
     pixel_size_angstroms : float or None
         If provided, ``AlignmentResult.translation_angstroms`` is populated.
     """
 
     angular_step_degrees: float = Field(default=15.0, gt=0.0)
     fftfreq_max: float | None = None
+    rotation_batch_size: int = Field(default=64, ge=1)
     pixel_size_angstroms: float | None = None
