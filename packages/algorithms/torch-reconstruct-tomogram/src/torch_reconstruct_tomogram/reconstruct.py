@@ -96,7 +96,7 @@ def _reconstruct_subvolume(
         dim=(-3, -2, -1),
     )
 
-    patches = torch.fft.ifftshift(patches, dim=(-3, -2, -1))
+    patches = torch.fft.fftshift(patches, dim=(-3, -2, -1))
 
     grid = fftfreq_grid(
         image_shape=(sidelength_padded_output,) * 3,
