@@ -15,6 +15,7 @@ def calculate_ctf_1d(
     pixel_size: float | torch.Tensor,
     n_samples: int,
     oversampling_factor: int,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
     """Calculate the Contrast Transfer Function (CTF) for a 1D signal.
 
@@ -36,6 +37,13 @@ def calculate_ctf_1d(
         Number of samples in CTF.
     oversampling_factor : int
         Factor by which to oversample the CTF.
+    image_sidelength : int | None, optional
+        Real-space side length ``N`` of the image whose spectrum the CTF is
+        compared with. If given, the CTF is sampled at ``rfftfreq(N)``, i.e. at
+        ``k / N`` for ``k = 0 ... N // 2``, and ``n_samples`` must equal
+        ``N // 2 + 1``. This matches the ky=0 row of an rfft for both even and
+        odd ``N``. If None (default), the CTF is sampled at
+        ``linspace(0, 0.5, n_samples)``, which always ends at Nyquist.
 
     Returns
     -------
@@ -71,6 +79,7 @@ def calculate_ctf_1d(
         pixel_size=pixel_size,
         n_samples=n_samples,
         oversampling_factor=oversampling_factor,
+        image_sidelength=image_sidelength,
     )
 
     # calculate ctf: sin(chi) is negative at underfocus, so positive potential is dark
@@ -102,6 +111,7 @@ def _setup_ctf_1d(
     pixel_size: float | torch.Tensor,
     n_samples: int,
     oversampling_factor: int,
+    image_sidelength: int | None = None,
 ) -> tuple[
     torch.Tensor,
     torch.Tensor,
@@ -131,6 +141,13 @@ def _setup_ctf_1d(
         Number of samples in CTF.
     oversampling_factor : int
         Factor by which to oversample the CTF.
+    image_sidelength : int | None, optional
+        Real-space side length ``N`` of the image whose spectrum the CTF is
+        compared with. If given, the CTF is sampled at ``rfftfreq(N)``, i.e. at
+        ``k / N`` for ``k = 0 ... N // 2``, and ``n_samples`` must equal
+        ``N // 2 + 1``. This matches the ky=0 row of an rfft for both even and
+        odd ``N``. If None (default), the CTF is sampled at
+        ``linspace(0, 0.5, n_samples)``, which always ends at Nyquist.
 
     Returns
     -------
@@ -167,10 +184,22 @@ def _setup_ctf_1d(
     pixel_size = torch.as_tensor(pixel_size, dtype=torch.float, device=device)
 
     # construct frequency vector and rescale cycles / px -> cycles / Å
-    fftfreq_grid = torch.linspace(0, 0.5, steps=n_samples, device=device)  # (n_samples,
+    if image_sidelength is not None:
+        if n_samples != image_sidelength // 2 + 1:
+            raise ValueError(
+                f"n_samples ({n_samples}) must equal image_sidelength // 2 + 1 "
+                f"({image_sidelength // 2 + 1}) when image_sidelength is given."
+            )
+        # identical to torch.fft.rfftfreq(image_sidelength)
+        fftfreq_grid = (
+            torch.arange(n_samples, dtype=torch.float, device=device) / image_sidelength
+        )
+        frequency_delta = 1 / image_sidelength
+    else:
+        fftfreq_grid = torch.linspace(0, 0.5, steps=n_samples, device=device)
+        frequency_delta = 0.5 / (n_samples - 1)
     # oversampling...
     if oversampling_factor > 1:
-        frequency_delta = 0.5 / (n_samples - 1)
         oversampled_frequency_delta = frequency_delta / oversampling_factor
         oversampled_interval_length = oversampled_frequency_delta * (
             oversampling_factor - 1

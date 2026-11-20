@@ -40,7 +40,7 @@ def polar_grid(
 
     # Create Cartesian coordinate grid
     if center is None:
-        center = (image_shape[0] / 2, image_shape[1] / 2)
+        center = (image_shape[0] // 2, image_shape[1] // 2)
 
     cartesian_grid = coordinate_grid(
         image_shape=image_shape,

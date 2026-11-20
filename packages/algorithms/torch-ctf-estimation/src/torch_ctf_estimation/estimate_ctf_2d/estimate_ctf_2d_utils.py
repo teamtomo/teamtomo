@@ -255,6 +255,7 @@ def estimate_defocus_2d_at_1x1(
     fixed_phase_shift_deg: float | None = None,
     early_stopper: Callable[[float], bool] | None = None,
     use_amplitude: bool = False,
+    image_shape: tuple[int, int] | None = None,
 ) -> Defocus2DResults:
     """
     Run 2D defocus estimation at 1x1 spatial resolution (center only).
@@ -310,6 +311,11 @@ def estimate_defocus_2d_at_1x1(
     use_amplitude : bool, optional
         If True, fit against the CTF amplitude rather than CTF squared.
         Default False.
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. Needed to tell odd from even
+        widths, since both give the same rfft width. If None, square patches
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -365,6 +371,7 @@ def estimate_defocus_2d_at_1x1(
         fixed_phase_shift_deg=fixed_phase_shift_deg,
         early_stopper=early_stopper,
         use_amplitude=use_amplitude,
+        image_shape=image_shape,
     )
 
 

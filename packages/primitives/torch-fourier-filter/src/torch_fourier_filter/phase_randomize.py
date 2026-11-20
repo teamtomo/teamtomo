@@ -1,7 +1,37 @@
 """Phase randomization and permutation (fixed magnitude spectrum)."""
 
 import torch
-from torch_grid_utils.fftfreq_grid import fftfreq_grid
+from torch_grid_utils.fftfreq_grid import (
+    fftfreq_grid,
+    fftshift_2d,
+    fftshift_3d,
+)
+
+
+def _random_hermitian_phase_factors(
+    image_shape: tuple[int, int] | tuple[int, int, int],
+    batch_shape: tuple[int, ...],
+    rfft: bool,
+    fftshift: bool,
+    device: torch.device,
+) -> torch.Tensor:
+    """Unit-magnitude random phase factors with Hermitian symmetry.
+
+    Taken from the DFT of real white noise, so the phases are uniformly random
+    while ``F[-k] == conj(F[k])`` holds: the inverse transform stays real and,
+    for an rfft, the self-conjugate samples (x=0 plane mirrors, DC and even-size
+    Nyquist) are consistent, for odd and even sizes.
+    """
+    noise = torch.randn((*batch_shape, *image_shape), device=device)
+    dims = tuple(range(-len(image_shape), 0))
+    noise_dft = (
+        torch.fft.rfftn(noise, dim=dims) if rfft else torch.fft.fftn(noise, dim=dims)
+    )
+    phase_factors = noise_dft / noise_dft.abs().clamp_min(1e-12)
+    if fftshift:
+        shift = fftshift_2d if len(image_shape) == 2 else fftshift_3d
+        phase_factors = shift(phase_factors, rfft=rfft)
+    return phase_factors
 
 
 def phase_randomize(
@@ -37,51 +67,34 @@ def phase_randomize(
     # Get magnitude spectrum
     magnitudes = torch.abs(dft)
 
+    random_phase_factors = _random_hermitian_phase_factors(
+        image_shape=image_shape,
+        batch_shape=tuple(dft.shape[: dft.ndim - len(image_shape)]),
+        rfft=rfft,
+        fftshift=fftshift,
+        device=dft.device,
+    )
+
     if cuton <= 0:
         # Full spectrum: random phases everywhere (no frequency grid needed)
-        random_phases = (
-            torch.rand(dft.shape, device=dft.device, dtype=torch.float32)
-            * (2 * torch.pi)
-            - torch.pi
-        )
-        phase_factors = torch.complex(
-            torch.cos(random_phases), torch.sin(random_phases)
-        )
-        return magnitudes * phase_factors
+        return magnitudes * random_phase_factors
 
     # Create frequency grid
-    # image_shape = dft.shape[-2:]
     freq_grid = fftfreq_grid(
         image_shape=image_shape,
         rfft=rfft,
         fftshift=fftshift,
         norm=True,
-        device=device,
+        device=dft.device,
     )
 
-    # Create mask for frequencies at or above cuton (using absolute value)
+    # Randomize phases only where |freq| >= cuton. |freq| is symmetric under
+    # k -> -k, so mixing original and random phases keeps Hermitian symmetry.
     freq_mask = torch.abs(freq_grid) >= cuton
+    original_phase_factors = torch.polar(torch.ones_like(magnitudes), torch.angle(dft))
+    phase_factors = torch.where(freq_mask, random_phase_factors, original_phase_factors)
 
-    # Generate random phases between -π and π only where |freq| >= cuton
-    random_phases = torch.zeros_like(dft, dtype=torch.float32)
-    random_phases[..., freq_mask] = (
-        torch.rand(freq_mask.sum(), device=dft.device) * (2 * torch.pi) - torch.pi
-    )
-
-    # Convert to complex numbers (e^(iθ))
-    phase_factors = torch.complex(torch.cos(random_phases), torch.sin(random_phases))
-
-    # Keep original phases where |freq| < cuton
-    original_phases = torch.angle(dft)
-    original_phase_factors = torch.complex(
-        torch.cos(original_phases), torch.sin(original_phases)
-    )
-    phase_factors[..., ~freq_mask] = original_phase_factors[..., ~freq_mask]
-
-    # Combine with original magnitudes
-    randomized = magnitudes * phase_factors
-
-    return randomized
+    return magnitudes * phase_factors
 
 
 def phase_permutation(

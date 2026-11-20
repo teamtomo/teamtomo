@@ -90,7 +90,7 @@ class _DefocusPipeline(NamedTuple):
     patch_ps_power: torch.Tensor  # background-subtracted, always power (not amplitude)
     positions: torch.Tensor
     pixel_spacing_angstroms: float
-    image_sidelength_for_1d: int
+    patch_shape: tuple[int, int]  # real-space (h, w) of each patch
     bg_mean: Any | None
     axis_mask: torch.Tensor | None
     phase_shift_deg: float
@@ -112,12 +112,10 @@ def _estimate_defocus(
     )
     t, h, w = image.shape
 
-    patches, patch_centers, image_sidelength_for_1d, use_whole_image = (
-        extract_ctf_patches(
-            image,
-            patch_sidelength=fitting_params.patch_sidelength,
-            defocus_grid_resolution=fitting_params.defocus_grid_resolution,
-        )
+    patches, patch_centers, patch_shape, _use_whole_image = extract_ctf_patches(
+        image,
+        patch_sidelength=fitting_params.patch_sidelength,
+        defocus_grid_resolution=fitting_params.defocus_grid_resolution,
     )
     patch_ps_raw, mean_ps = compute_patch_power_spectra(patches)
 
@@ -129,6 +127,7 @@ def _estimate_defocus(
             laser_xy_angle_deg=laser_params.laser_xy_angle_deg,
             dual_laser=laser_params.dual_laser,
             mask_width=fitting_params.laser_axis_mask_width,
+            image_shape=patch_shape,
         )
 
     _nt, nh, nw = fitting_params.defocus_grid_resolution
@@ -139,7 +138,7 @@ def _estimate_defocus(
     if use_1d_spatial:
         bg_mean = fit_background_spline_1d(
             power_spectrum=mean_ps,
-            image_sidelength=image_sidelength_for_1d,
+            image_sidelength=patch_shape,
             frequency_fit_range_angstroms=fitting_params.frequency_fit_range_angstroms,
             pixel_spacing_angstroms=new_spacing,
         )
@@ -152,7 +151,7 @@ def _estimate_defocus(
     )
     result1d = estimate_ctf_1d(
         power_spectrum=mean_ps,
-        image_sidelength=image_sidelength_for_1d,
+        image_sidelength=patch_shape,
         frequency_fit_range_angstroms=fitting_params.frequency_fit_range_angstroms,
         defocus_range_microns=defocus_bounds,
         voltage_kev=optical_params.voltage_kev,
@@ -170,14 +169,9 @@ def _estimate_defocus(
         early_stopper=fitting_params.build_early_stopper(),
     )
 
-    image_shape_2d = (
-        (h, w)
-        if use_whole_image
-        else (image_sidelength_for_1d, image_sidelength_for_1d)
-    )
     background_2d_power = estimate_background_2d(
         power_spectrum=mean_ps,
-        image_sidelength=image_shape_2d,
+        image_sidelength=patch_shape,
     )
     patch_ps_power = patch_ps_raw - background_2d_power
     if fitting_params.use_amplitude_2d:
@@ -185,7 +179,7 @@ def _estimate_defocus(
         mean_amp = torch.sqrt(mean_ps.clamp(min=0.0))
         background_2d_amp = estimate_background_2d(
             power_spectrum=mean_amp,
-            image_sidelength=image_shape_2d,
+            image_sidelength=patch_shape,
         )
         patch_ps_2d = patch_amp - background_2d_amp
     else:
@@ -210,7 +204,6 @@ def _estimate_defocus(
         laser_params=laser_params,
         new_spacing=new_spacing,
         image_hw=(h, w),
-        image_sidelength_for_1d=image_sidelength_for_1d,
         use_1d_spatial=use_1d_spatial,
         bg_mean=bg_mean,
         defocus_bounds=defocus_bounds,
@@ -221,6 +214,7 @@ def _estimate_defocus(
         initial_envelope_B_2d=initial_envelope_B_2d,
         initial_phase_shift_2d=initial_phase_shift_2d,
         axis_mask=axis_mask,
+        patch_shape=patch_shape,
     )
 
     return _DefocusPipeline(
@@ -230,7 +224,7 @@ def _estimate_defocus(
         patch_ps_power=patch_ps_power,
         positions=positions,
         pixel_spacing_angstroms=new_spacing,
-        image_sidelength_for_1d=image_sidelength_for_1d,
+        patch_shape=patch_shape,
         bg_mean=bg_mean,
         axis_mask=axis_mask,
         phase_shift_deg=phase_shift_deg,
@@ -246,7 +240,6 @@ def _run_defocus_2d(
     laser_params: LaserParams | None,
     new_spacing: float,
     image_hw: tuple[int, int],
-    image_sidelength_for_1d: int,
     use_1d_spatial: bool,
     bg_mean: Any,
     defocus_bounds: tuple[float, float],
@@ -257,6 +250,7 @@ def _run_defocus_2d(
     initial_envelope_B_2d: float,
     initial_phase_shift_2d: float,
     axis_mask: torch.Tensor | None,
+    patch_shape: tuple[int, int],
 ) -> Defocus2DResults:
     """2D defocus branch (1D-spatial or full 2D fit)."""
     h, w = image_hw
@@ -287,6 +281,7 @@ def _run_defocus_2d(
             phase_shift_bounds_degrees=phase_bounds,
             early_stopper=fitting_params.build_early_stopper(),
             use_amplitude=fitting_params.use_amplitude_2d,
+            image_shape=patch_shape,
         )
         result2d = defocus_field_from_1d_fits(
             patch_power_spectra=patch_ps,
@@ -295,7 +290,7 @@ def _run_defocus_2d(
             defocus_model=fitting_params.defocus_model,
             defocus_grid_resolution=fitting_params.defocus_grid_resolution,
             initial_defocus=initial_defocus_2d,
-            image_sidelength=image_sidelength_for_1d,
+            image_sidelength=patch_shape,
             frequency_fit_range_angstroms=fitting_params.frequency_fit_range_angstroms,
             defocus_range_microns=defocus_bounds,
             defocus_search_window_microns=(
@@ -377,6 +372,7 @@ def _run_defocus_2d(
             phase_shift_bounds_degrees=phase_bounds,
             early_stopper=fitting_params.build_early_stopper(),
             use_amplitude=fitting_params.use_amplitude_2d,
+            image_shape=patch_shape,
         )
         fix_defocus_0_val = float(result_1x1.defocus_model.data.mean().cpu().item())
         if result_1x1.astigmatism is not None:
@@ -417,6 +413,7 @@ def _run_defocus_2d(
         phase_shift_bounds_degrees=phase_bounds,
         early_stopper=fitting_params.build_early_stopper(),
         use_amplitude=fitting_params.use_amplitude_2d,
+        image_shape=patch_shape,
     )
     if result2d.defocus_model_type == "linear":
         axis_deg, tilt_deg = linear_tilt_axis_and_magnitude_deg(
@@ -542,7 +539,7 @@ def estimate_ctf_and_thickness(
         else pipeline.phase_shift_deg
     )
     thickness_ps = pipeline.mean_ps
-    thickness_sidelength = pipeline.image_sidelength_for_1d
+    thickness_sidelength: tuple[int, int] = pipeline.patch_shape
     thickness_bg = pipeline.bg_mean
     if thickness_params.use_tilt_corrected_ps:
         if result2d.defocus_model_type == "grid":
@@ -562,8 +559,8 @@ def estimate_ctf_and_thickness(
             optical_params=optics_fit,
             laser_params=laser_params,
             defocus_average_um=d_avg,
+            image_shape=pipeline.patch_shape,
         )
-        thickness_sidelength = int(thickness_ps.shape[0])
         thickness_bg = None
     use_equiphase = thickness_params.use_equiphase
     if use_equiphase:
@@ -658,6 +655,7 @@ def estimate_ctf_and_thickness(
             laser_params=laser_params,
             axis_mask=pipeline.axis_mask,
             early_stopper=thickness_params.build_early_stopper(),
+            image_shape=pipeline.patch_shape,
         )
 
     return CTFEstimationResult(

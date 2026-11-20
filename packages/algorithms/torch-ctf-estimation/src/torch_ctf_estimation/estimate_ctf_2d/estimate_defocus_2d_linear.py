@@ -13,6 +13,7 @@ from typing import Any, Literal, TypeAlias
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid1d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_ctf2_t,
@@ -74,14 +75,20 @@ class _LinearDefocusParams:
 def _setup_linear_spectra_and_shape(
     patch_power_spectra: torch.Tensor,
     defocus_grid_resolution: tuple[int, int, int],
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[torch.Tensor, tuple[int, int], torch.device, int]:
     """
     Derive image shape and optionally collapse time when nt==1.
 
     Returns (patch_power_spectra, image_shape, device, T).
     """
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     nt = defocus_grid_resolution[0]
     if nt == 1:
@@ -459,6 +466,7 @@ def estimate_defocus_2d_linear(
     fixed_phase_shift_deg: float | None = None,
     early_stopper: Callable[[float], bool] | None = None,
     use_amplitude: bool = False,
+    image_shape: tuple[int, int] | None = None,
 ) -> Defocus2DResults:
     """
     Estimate defocus in 2D using a linear (tilt) model in (x, y).
@@ -475,7 +483,9 @@ def estimate_defocus_2d_linear(
         image_shape,
         device,
         T,
-    ) = _setup_linear_spectra_and_shape(patch_power_spectra, defocus_grid_resolution)
+    ) = _setup_linear_spectra_and_shape(
+        patch_power_spectra, defocus_grid_resolution, image_shape
+    )
     nt = defocus_grid_resolution[0]
     linear_params = _setup_linear_defocus_params(
         nt,

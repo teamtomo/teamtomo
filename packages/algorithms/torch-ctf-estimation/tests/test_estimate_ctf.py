@@ -619,3 +619,181 @@ def test_estimate_ctf_defaults_to_image_device(monkeypatch):
             torch.randn(64, 64), default_optical_params(), default_fitting_params()
         )
     assert seen.value.args[0] == torch.device("cpu")
+
+
+def _perfect_ctf2(
+    image_shape: tuple[int, int], defocus: float = 1.5, pixel_spacing: float = 3.0
+) -> torch.Tensor:
+    """Noise-free rfft CTF² for an image of the given real-space shape."""
+    return (
+        calculate_ctf_2d(
+            defocus=defocus,
+            astigmatism=0.0,
+            astigmatism_angle=0.0,
+            voltage=300.0,
+            spherical_aberration=2.7,
+            amplitude_contrast=0.07,
+            phase_shift=0.0,
+            pixel_size=pixel_spacing,
+            image_shape=image_shape,
+            rfft=True,
+            fftshift=False,
+        )
+        ** 2
+    )
+
+
+@pytest.mark.parametrize("n", [255, 256])
+def test_estimate_defocus_2d_grid_no_false_astigmatism_odd_even(n):
+    """A perfect CTF² patch gives no astigmatism for odd and even patch sizes.
+
+    An odd patch used to be modelled at width n - 1, so kx was off by n/(n-1)
+    and the fit reported spurious astigmatism (~0.006 um at n=255).
+    """
+    from torch_ctf_estimation.estimate_ctf_2d.estimate_defocus_2d_grid import (
+        estimate_defocus_2d_grid,
+    )
+
+    ps = _perfect_ctf2((n, n)).reshape(1, 1, 1, n, n // 2 + 1)
+    result = estimate_defocus_2d_grid(
+        ps,
+        torch.full((1, 1, 1, 3), 0.5),
+        defocus_grid_resolution=(1, 1, 1),
+        frequency_fit_range_angstroms=(40.0, 7.0),
+        initial_defocus=1.45,
+        pixel_spacing_angstroms=3.0,
+        optimize_astigmatism=True,
+        n_iterations=100,
+        amplitude_contrast_fraction=0.07,
+    )
+    defocus = float(result.defocus_model.data.mean())
+    assert result.astigmatism < 1e-3
+    assert defocus == pytest.approx(1.5, rel=2e-3)
+
+
+@pytest.mark.parametrize("n", [127, 128, 255, 256])
+@pytest.mark.parametrize("use_equiphase", [False, True])
+def test_estimate_ctf_1d_odd_even_unbiased(n, use_equiphase):
+    """1D defocus is unbiased for odd and even sizes on both averaging paths.
+
+    Both profiles sit at the shell centres rfftfreq(N). The model used to be
+    sampled at linspace(0, 0.5, N//2+1), biasing odd sizes (-1.3% at N=127).
+    """
+    from torch_ctf_estimation import estimate_ctf_1d
+
+    ps = 0.5 + _perfect_ctf2((n, n))
+    result = estimate_ctf_1d(
+        ps,
+        n,
+        frequency_fit_range_angstroms=(40.0, 7.0),
+        voltage_kev=300.0,
+        spherical_aberration_mm=2.7,
+        amplitude_contrast=0.07,
+        pixel_spacing_angstroms=3.0,
+        defocus_range_microns=(0.5, 3.0),
+        optimize_envelope=False,
+        use_equiphase=use_equiphase,
+        equiphase_defocus_um=1.5,
+        equiphase_astigmatism_um=0.0,
+        equiphase_astigmatism_angle_deg=0.0,
+        equiphase_phase_shift_deg=0.0,
+    )
+    defocus = float(result.ctf_model.defocus_um)
+    assert abs(defocus - 1.5) / 1.5 < 5e-3
+    expected_last = (n // 2) / n
+    last_fftfreq = float(result.frequencies_1d[-1]) * 3.0
+    assert last_fftfreq == pytest.approx(expected_last, abs=1e-6)
+
+
+def test_apply_laser_axis_mask_non_square_needs_image_shape():
+    """A non-square rfft spectrum is ambiguous without image_shape: raise."""
+    from torch_ctf_estimation.utils.laser_axis_mask import apply_laser_axis_mask
+
+    patch_ps = torch.ones(1, 1, 1, 16, 13)
+    mean_ps = torch.ones(16, 13)
+    kwargs = {"laser_xy_angle_deg": 30.0, "dual_laser": False, "mask_width": 0.1}
+    with pytest.raises(ValueError, match="square/cubic"):
+        apply_laser_axis_mask(patch_ps, mean_ps, **kwargs)
+    for image_shape in [(16, 24), (16, 25)]:
+        _, _, mask = apply_laser_axis_mask(
+            patch_ps, mean_ps, image_shape=image_shape, **kwargs
+        )
+        assert mask.shape == (16, 13)
+    with pytest.raises(ValueError, match="does not match"):
+        apply_laser_axis_mask(patch_ps, mean_ps, image_shape=(16, 26), **kwargs)
+
+
+def test_apply_laser_axis_mask_odd_width():
+    """The laser-axis mask of an odd patch is built on rfftfreq(21), not 20."""
+    from torch_ctf_estimation.utils.laser_axis_mask import (
+        apply_laser_axis_mask,
+        build_laser_axis_mask,
+    )
+
+    patch_ps = torch.ones(1, 1, 1, 21, 11)
+    mean_ps = torch.ones(21, 11)
+    kwargs = {"laser_xy_angle_deg": 30.0, "dual_laser": False, "mask_width": 0.1}
+    expected = build_laser_axis_mask(image_shape=(21, 21), **kwargs)
+    # same thing, written out on the true rfftfreq(21) grid
+    ky = torch.fft.fftfreq(21).reshape(-1, 1)
+    kx = torch.fft.rfftfreq(21).reshape(1, -1)
+    theta = math.radians(30.0)
+    manual = (torch.abs(ky * math.cos(theta) - kx * math.sin(theta)) >= 0.05).float()
+    torch.testing.assert_close(expected, manual)
+    for image_shape in [(21, 21), None]:
+        _, _, mask = apply_laser_axis_mask(
+            patch_ps, mean_ps, image_shape=image_shape, **kwargs
+        )
+        torch.testing.assert_close(mask, expected)
+
+
+def _synthetic_ctf_image_shape(
+    image_shape: tuple[int, int], defocus: float = 1.5, pixel_spacing: float = 3.0
+) -> torch.Tensor:
+    """Two frames of CTF-filtered white noise plus noise, any (h, w)."""
+    generator = torch.Generator().manual_seed(0)
+    ctf = calculate_ctf_2d(
+        defocus=defocus,
+        astigmatism=0.0,
+        astigmatism_angle=0.0,
+        voltage=300.0,
+        spherical_aberration=2.7,
+        amplitude_contrast=0.07,
+        phase_shift=0.0,
+        pixel_size=pixel_spacing,
+        image_shape=image_shape,
+        rfft=True,
+        fftshift=False,
+    )
+    noise = torch.randn((2, *image_shape), generator=generator)
+    signal = torch.fft.irfft2(torch.fft.rfft2(noise) * ctf, s=image_shape)
+    return signal + 0.3 * torch.randn((2, *image_shape), generator=generator)
+
+
+@pytest.mark.parametrize("image_shape", [(256, 256), (256, 384), (384, 256)])
+def test_estimate_ctf_whole_image_non_square(image_shape):
+    """Whole-image mode recovers defocus for non-square images.
+
+    The 1D path used to treat a (h, w) spectrum as (min, min), assigning pixels
+    to the wrong shells (0.857 um and 1.417 um instead of 1.5 um).
+    """
+    _mean_ps, result1d, result2d = estimate_ctf(
+        _synthetic_ctf_image_shape(image_shape),
+        default_optical_params(
+            pixel_spacing_angstroms=3.0,
+            target_pixel_spacing_angstroms=3.0,
+            amplitude_contrast_fraction=0.07,
+        ),
+        default_fitting_params(
+            defocus_grid_resolution=(1, 1, 1),
+            frequency_fit_range_angstroms=(40.0, 7.0),
+            defocus_range_microns=(0.5, 3.0),
+            patch_sidelength=-1,
+            optimize_astigmatism=True,
+        ),
+        device=torch.device("cpu"),
+    )
+    assert float(result1d.ctf_model.defocus_um) == pytest.approx(1.5, rel=0.01)
+    mean_2d = (result2d.defocus_u + result2d.defocus_v) / 2
+    assert mean_2d == pytest.approx(1.5, rel=0.01)
+    assert result2d.astigmatism < 0.01

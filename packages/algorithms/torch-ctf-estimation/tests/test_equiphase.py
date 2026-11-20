@@ -1,5 +1,6 @@
 """Tests for equiphase 1D averaging (torch_ctf chi) and 1D spatial + EPA integration."""
 
+import pytest
 import torch
 from torch_fourier_filter.dft_utils import rotational_average_dft_2d
 
@@ -174,3 +175,34 @@ def test_estimate_ctf_whole_image_use_1d_spatial_equiphase_smoke():
     )
     assert r2d.defocus_model_type == "grid"
     assert r2d.defocus_model.data.numel() == 1
+
+
+@pytest.mark.parametrize("image_shape", [(40, 40), (41, 41), (40, 57), (57, 40)])
+def test_equiphase_radial_power_any_shape(image_shape):
+    """With zero astigmatism, sample i of a |k|^2 spectrum is (i / n)^2.
+
+    The profile sits at rfftfreq(n), n = min(h, w), for square and
+    non-square images (bilinear interpolation error is below 1 / n^2).
+    """
+    h, w = image_shape
+    n = min(h, w)
+    ky = torch.fft.fftfreq(h).reshape(-1, 1)
+    kx = torch.fft.rfftfreq(w).reshape(1, -1)
+    ps = ky**2 + kx**2
+    epa = equiphase_average_power_to_1d_rfft(
+        ps,
+        image_shape,
+        1.0,
+        defocus_um=1.5,
+        astigmatism_um=0.0,
+        astigmatism_angle_deg=0.0,
+        phase_shift_deg=0.0,
+        voltage_kev=300.0,
+        spherical_aberration_mm=2.7,
+        amplitude_contrast=0.1,
+        laser_params=None,
+        n_theta=32,
+    )
+    expected = torch.fft.rfftfreq(n) ** 2
+    assert epa.shape == (n // 2 + 1,)
+    torch.testing.assert_close(epa, expected, rtol=0.0, atol=1.0 / n**2)

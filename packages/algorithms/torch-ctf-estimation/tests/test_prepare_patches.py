@@ -1,5 +1,6 @@
 """Tests for prepare_image and patch/power-spectrum primitives."""
 
+import pytest
 import torch
 
 from torch_ctf_estimation.utils.patches import (
@@ -40,7 +41,7 @@ def test_extract_ctf_patches_overlapping():
         image, patch_sidelength=32, defocus_grid_resolution=(1, 2, 2)
     )
     assert not whole
-    assert sidelength == 32
+    assert sidelength == (32, 32)
     assert patches.ndim == 5
     assert centers.shape[-1] == 3
     positions = normalised_patch_positions(centers, image.shape)
@@ -48,14 +49,15 @@ def test_extract_ctf_patches_overlapping():
     assert positions.max() <= 1.0
 
 
-def test_extract_ctf_patches_whole_image():
-    image = torch.randn(1, 48, 48)
-    patches, _centers, sidelength, whole = extract_ctf_patches(
+@pytest.mark.parametrize("shape", [(48, 48), (48, 61), (61, 48)])
+def test_extract_ctf_patches_whole_image(shape):
+    image = torch.randn(1, *shape)
+    patches, _centers, patch_shape, whole = extract_ctf_patches(
         image, patch_sidelength=-1, defocus_grid_resolution=(1, 1, 1)
     )
     assert whole
-    assert sidelength == 48
-    assert patches.shape[-2:] == (48, 48)
+    assert patch_shape == shape
+    assert patches.shape[-2:] == shape
 
 
 def test_compute_patch_power_spectra_shapes():
@@ -63,3 +65,16 @@ def test_compute_patch_power_spectra_shapes():
     patch_ps, mean_ps = compute_patch_power_spectra(patches)
     assert patch_ps.shape == (1, 2, 2, 16, 9)
     assert mean_ps.shape == (16, 9)
+
+
+def test_prepare_image_returns_achieved_spacing():
+    """The returned spacing is what the rescale achieved, not the target."""
+    image = torch.randn(409, 409)
+    prepared, spacing = prepare_image_for_ctf(
+        image,
+        pixel_spacing_angstroms=1.0,
+        target_pixel_spacing_angstroms=3.0,
+        device=torch.device("cpu"),
+    )
+    assert prepared.shape[-2:] == (136, 136)
+    assert spacing == pytest.approx(409 / 136)

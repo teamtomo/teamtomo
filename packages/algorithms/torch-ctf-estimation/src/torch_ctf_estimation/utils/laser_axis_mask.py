@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import torch
+from torch_grid_utils import image_shape_from_dft_shape
 
 
 def build_laser_axis_mask(
@@ -75,6 +76,7 @@ def apply_laser_axis_mask(
     laser_xy_angle_deg: float,
     dual_laser: bool,
     mask_width: float,
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Zero FFT strips along the laser axis on patch and mean power spectra.
 
@@ -90,6 +92,10 @@ def apply_laser_axis_mask(
         If True, also mask the orthogonal axis.
     mask_width : float
         Strip width in fftfreq units.
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. If None, square patches
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -100,8 +106,11 @@ def apply_laser_axis_mask(
     axis_mask : torch.Tensor
         The applied mask, shape ``(ph, pw_rfft)``.
     """
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_ps.shape[-2:], rfft=True, image_shape=image_shape, assume_square=True
+    )
     axis_mask = build_laser_axis_mask(
-        image_shape=(patch_ps.shape[-2], (patch_ps.shape[-1] - 1) * 2),
+        image_shape=(real_h, real_w),
         laser_xy_angle_deg=laser_xy_angle_deg,
         dual_laser=dual_laser,
         mask_width=mask_width,

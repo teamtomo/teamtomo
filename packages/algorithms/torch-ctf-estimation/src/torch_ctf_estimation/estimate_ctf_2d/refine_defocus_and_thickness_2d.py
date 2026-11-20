@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_thickness_ctf_ps_t,
@@ -55,6 +56,7 @@ def refine_defocus_and_thickness_2d(
     laser_params: LaserParams | None = None,
     axis_mask: torch.Tensor | None = None,
     early_stopper: Callable[[float], bool] | None = None,
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[Defocus2DResults, Thickness2DResults]:
     """Jointly refine 2D defocus and thickness with the thickness-modulated CTF.
 
@@ -93,6 +95,11 @@ def refine_defocus_and_thickness_2d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. Needed to tell odd from even
+        widths, since both give the same rfft width. If None, square patches
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -105,8 +112,13 @@ def refine_defocus_and_thickness_2d(
     if thickness_grid_resolution is None:
         thickness_grid_resolution = (1, 1, 1)
 
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     T = patch_power_spectra.shape[0]
     phase_shift_deg = (
