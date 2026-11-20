@@ -42,41 +42,6 @@ def _grid_search_phase_shift_range(
     return resolve_phase_shift_bounds(phase_shift_range)
 
 
-def profile_fftfreqs(
-    image_sidelength: int | tuple[int, int],
-    device: torch.device | None = None,
-) -> torch.Tensor:
-    """Frequency (cycles/pixel) of each sample of a 1D power profile.
-
-    Both 1D averages sample the DFT shell centres ``k / N`` for ``k = 0 .. N // 2``,
-    i.e. ``rfftfreq(N)``: the equiphase profile references each shell to the rfft pixel
-    on the kx axis, and ``rotational_average_dft_2d`` bins at
-    ``fftfreq_shell_centers(N)``. For a non-square ``(h, w)`` image, ``N = min(h, w)``.
-
-    Parameters
-    ----------
-    image_sidelength : int or tuple[int, int]
-        Real-space sidelength ``N`` (or ``(h, w)``) of the image behind the 2D
-        spectrum.
-    device : torch.device or None, optional
-        Device for the output.
-
-    Returns
-    -------
-    torch.Tensor
-        ``(N // 2 + 1,)`` frequencies in cycles/pixel.
-    """
-    return fftfreq_shell_centers(profile_sidelength(image_sidelength), device=device)
-
-
-def _ctf_1d_image_sidelength(image_sidelength: int | tuple[int, int]) -> int:
-    """``image_sidelength`` for ``calculate_ctf_1d`` matching :func:`profile_fftfreqs`.
-
-    ``calculate_ctf_1d`` then samples at ``rfftfreq(n)`` with ``n = min(h, w)``.
-    """
-    return profile_sidelength(image_sidelength)
-
-
 def _fit_band(
     freqs: torch.Tensor,
     frequency_fit_range_angstroms: tuple[float, float],
@@ -128,7 +93,7 @@ def compute_final_1d_l2_cross_correlation(
             pixel_size=pixel_spacing_angstroms,
             n_samples=h // 2 + 1,
             oversampling_factor=3,
-            image_sidelength=_ctf_1d_image_sidelength(h),
+            image_sidelength=h,
         )
         ** 2
     )
@@ -283,9 +248,10 @@ def get_background_result(
             laser_params=laser_params,
             equiphase_n_theta=equiphase_n_theta,
         )
-        # The reused background may come from the other averaging path, so take
-        # the frequency axis (and fit band) of this profile, not the stored one.
-        freqs = profile_fftfreqs(image_sidelength, device=device)
+        # Both averaging paths sample the shell centres k / n, n = min(h, w)
+        freqs = fftfreq_shell_centers(
+            profile_sidelength(image_sidelength), device=device
+        )
         fit_mask, spatial_freqs = _fit_band(
             freqs, frequency_fit_range_angstroms, pixel_spacing_angstroms
         )
@@ -414,8 +380,9 @@ def fit_background_spline_1d(
         equiphase_n_theta=equiphase_n_theta,
     )
 
-    # Frequency axis of this profile and mask for fit range (angstroms -> fftfreq)
-    freqs = profile_fftfreqs(image_sidelength, device=device)
+    # Both averaging paths sample the shell centres k / n, n = min(h, w); mask for
+    # fit range (angstroms -> fftfreq)
+    freqs = fftfreq_shell_centers(profile_sidelength(image_sidelength), device=device)
     fit_mask, spatial_freqs = _fit_band(
         freqs, frequency_fit_range_angstroms, pixel_spacing_angstroms
     )
@@ -633,7 +600,7 @@ def grid_search_defocus_and_envelope_1d(
                 pixel_size=pixel_spacing_angstroms,
                 n_samples=h // 2 + 1,
                 oversampling_factor=3,
-                image_sidelength=_ctf_1d_image_sidelength(h),
+                image_sidelength=h,
             )
             ** 2
         )
@@ -655,7 +622,7 @@ def grid_search_defocus_and_envelope_1d(
                     pixel_size=pixel_spacing_angstroms,
                     n_samples=h // 2 + 1,
                     oversampling_factor=3,
-                    image_sidelength=_ctf_1d_image_sidelength(h),
+                    image_sidelength=h,
                 )
                 ** 2
             )
@@ -896,7 +863,7 @@ def refine_defocus_and_b_factor_1d(
                 pixel_size=pixel_spacing_angstroms,
                 n_samples=h // 2 + 1,
                 oversampling_factor=3,
-                image_sidelength=_ctf_1d_image_sidelength(h),
+                image_sidelength=h,
             )
             ** 2
         )
