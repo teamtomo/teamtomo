@@ -179,7 +179,7 @@ def refine_defocus_and_thickness_1d(
             pixel_size=pixel_spacing_angstroms,
             n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
-            image_sidelength=_ctf_1d_image_sidelength(image_sidelength, use_equiphase),
+            image_sidelength=_ctf_1d_image_sidelength(image_sidelength),
         )
         if simulated.ndim > 1:
             simulated = simulated.reshape(-1)
@@ -219,7 +219,7 @@ def refine_defocus_and_thickness_1d(
             pixel_size=pixel_spacing_angstroms,
             n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
-            image_sidelength=_ctf_1d_image_sidelength(image_sidelength, use_equiphase),
+            image_sidelength=_ctf_1d_image_sidelength(image_sidelength),
         )
         if simulated.ndim > 1:
             simulated = simulated.reshape(-1)

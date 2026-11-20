@@ -141,7 +141,7 @@ def estimate_thickness_1d(
             pixel_size=pixel_spacing_angstroms,
             n_samples=profile_sidelength(image_sidelength) // 2 + 1,
             oversampling_factor=3,
-            image_sidelength=_ctf_1d_image_sidelength(image_sidelength, use_equiphase),
+            image_sidelength=_ctf_1d_image_sidelength(image_sidelength),
         )
         rows.append(ps_t)
     simulated_ps = torch.stack(rows, dim=0).to(device=device, dtype=dtype)
