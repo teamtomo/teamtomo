@@ -219,6 +219,37 @@ def _construct_fftfreq_grid_3d(
     return einops.rearrange([freq_zz, freq_yy, freq_xx], "freq ... -> ... freq")
 
 
+def fftfreq_shell_centers(
+    sidelength: int, device: torch.device | None = None
+) -> torch.Tensor:
+    """Centers of the ``sidelength // 2 + 1`` frequency shells of a DFT.
+
+    Notes
+    -----
+    Shells are spaced ``1 / sidelength`` apart, from DC to the highest frequency sampled
+    along a dimension of length ``sidelength``. That is ``(n // 2) / n`` for both rfft
+    and full DFTs: Nyquist (0.5) for even ``n`` and ``0.5 - 1 / (2n)`` for odd ``n``.
+    The values match ``torch.fft.rfftfreq(sidelength)``.
+
+    Parameters
+    ----------
+    sidelength: int
+        Real-space length ``n`` of the dimension setting the shell spacing, usually
+        the smallest dimension of the image.
+    device: torch.device | None
+        PyTorch device on which the returned tensor will be stored.
+
+    Returns
+    -------
+    shell_centers: torch.Tensor
+        ``(sidelength // 2 + 1, )`` array of shell centers in cycles per pixel.
+    """
+    n_shells = sidelength // 2 + 1
+    return torch.linspace(
+        0, (sidelength // 2) / sidelength, steps=n_shells, device=device
+    )
+
+
 def dft_center(
     image_shape: tuple[int, ...],
     rfft: bool,

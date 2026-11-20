@@ -11,6 +11,7 @@ from torch_grid_utils.fft_shape import (
 from torch_grid_utils.fftfreq_grid import (
     dft_center,
     fftfreq_grid,
+    fftfreq_shell_centers,
     fftfreq_to_spatial_frequency,
     fftshift_1d,
     fftshift_2d,
@@ -54,6 +55,7 @@ __all__ = [
     "dft_center",
     "fftfreq_grid",
     "fftfreq_grid_polar",
+    "fftfreq_shell_centers",
     "fftfreq_to_spatial_frequency",
     "fftshift_1d",
     "fftshift_2d",

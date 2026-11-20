@@ -1,6 +1,11 @@
+import pytest
 import torch
 
-from torch_grid_utils import fftfreq_grid, transform_fftfreq_grid
+from torch_grid_utils import (
+    fftfreq_grid,
+    fftfreq_shell_centers,
+    transform_fftfreq_grid,
+)
 
 
 def test_fftfreq_grid_2d_basic():
@@ -694,3 +699,18 @@ def test_fftfreq_grid_2d_with_transform_matrix_fftshifted():
         fftshift=True,
     )
     assert not torch.allclose(grid, grid_untransformed, atol=1e-6)
+
+
+@pytest.mark.parametrize("n", [1, 2, 7, 20, 21, 96, 97])
+def test_fftfreq_shell_centers_match_rfftfreq(n):
+    """Shells are 1 / n apart and end at the highest sampled frequency (n // 2) / n."""
+    centers = fftfreq_shell_centers(n)
+    assert centers.shape == (n // 2 + 1,)
+    assert torch.allclose(centers, torch.fft.rfftfreq(n), atol=1e-7)
+    assert torch.allclose(centers[-1], torch.fft.fftfreq(n).abs().max())
+
+
+@pytest.mark.parametrize("n", [20, 21])
+def test_fftfreq_shell_centers_end_at_nyquist_only_for_even_sizes(n):
+    expected_last = 0.5 if n % 2 == 0 else 0.5 - 1 / (2 * n)
+    assert fftfreq_shell_centers(n)[-1].item() == pytest.approx(expected_last)
