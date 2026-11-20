@@ -31,37 +31,6 @@ def calculate_num_freq_bins(image_shape: tuple[int, ...]) -> int:
     return int((largest_dim // 2 + 1) * len(image_shape) ** 0.5 + 1)
 
 
-def real_space_shape_from_dft_shape(
-    dft_shape: tuple[int, ...],
-    rfft: bool,
-    image_shape: tuple[int, ...] | None = None,
-) -> tuple[int, ...]:
-    """Calculate the real-space shape from a DFT shape and rfft argument.
-
-    Parameters
-    ----------
-    dft_shape: tuple[int, ...]
-        Shape of the DFT.
-    rfft: bool
-        Whether the input is from an rfft (True) or full fft (False).
-    image_shape: tuple[int, ...], optional
-        Real-space shape of the image over the same dimensions as `dft_shape`.
-        Required for an rfft, since real widths 2k and 2k+1 both give k+1 columns.
-
-    Returns
-    -------
-    tuple[int, ...]
-        Shape of the real-space image.
-
-    Raises
-    ------
-    ValueError
-        If `rfft` is True and `image_shape` is not given, or if `image_shape` does
-        not match `dft_shape`.
-    """
-    return image_shape_from_dft_shape(dft_shape, rfft, image_shape=image_shape)
-
-
 def power_spectral_density(
     image_dft: torch.Tensor,
     rfft: bool = True,
@@ -120,8 +89,8 @@ def power_spectral_density(
     dim = _handle_dim(dim, image_dft.ndim)
     shape_over_dim = tuple(image_dft.shape[d] for d in dim)
 
-    real_space_shape = real_space_shape_from_dft_shape(
-        shape_over_dim, rfft, image_shape
+    real_space_shape = image_shape_from_dft_shape(
+        shape_over_dim, rfft, image_shape=image_shape
     )
 
     # Construct 1-dimensional grid of frequencies for binning
@@ -243,7 +212,9 @@ def whitening_filter(
     device = image_dft.device
     dim = _handle_dim(dim, image_dft.ndim)
     shape_over_dim = tuple(image_dft.shape[d] for d in dim)
-    image_shape = real_space_shape_from_dft_shape(shape_over_dim, rfft, image_shape)
+    image_shape = image_shape_from_dft_shape(
+        shape_over_dim, rfft, image_shape=image_shape
+    )
 
     power_spec_1d = power_spectral_density(
         image_dft=image_dft,

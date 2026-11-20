@@ -5,43 +5,8 @@ import torch
 
 from torch_fourier_filter.whitening import (
     power_spectral_density,
-    real_space_shape_from_dft_shape,
     whitening_filter,
 )
-
-
-def test_real_space_shape_from_dft_shape():
-    """Basic tests for real_space_shape_from_dft_shape."""
-    # Test 2D shape
-    dft_shape = (64, 64)
-    real_space_shape = real_space_shape_from_dft_shape(dft_shape, rfft=False)
-    assert real_space_shape == (64, 64), "Real space shape incorrect for 2D input"
-
-    # Test 2D shape with rfft
-    dft_shape = (64, 33)
-    real_space_shape = real_space_shape_from_dft_shape(
-        dft_shape, rfft=True, image_shape=(64, 64)
-    )
-    assert real_space_shape == (
-        64,
-        64,
-    ), "Real space shape incorrect for 2D input with rfft"
-
-    # Test 3D shape
-    dft_shape = (32, 64, 64)
-    real_space_shape = real_space_shape_from_dft_shape(dft_shape, rfft=False)
-    assert real_space_shape == (32, 64, 64), "Real space shape incorrect for 3D input"
-
-    # Test 3D shape with rfft
-    dft_shape = (32, 64, 33)
-    real_space_shape = real_space_shape_from_dft_shape(
-        dft_shape, rfft=True, image_shape=(32, 64, 64)
-    )
-    assert real_space_shape == (
-        32,
-        64,
-        64,
-    ), "Real space shape incorrect for 3D input with rfft"
 
 
 def test_power_spectral_density():
@@ -103,8 +68,6 @@ def test_whitening_rfft_without_image_shape_raises(shape):
         power_spectral_density(half)
     with pytest.raises(ValueError, match="ambiguous"):
         whitening_filter(half)
-    with pytest.raises(ValueError, match="ambiguous"):
-        real_space_shape_from_dft_shape(half.shape, rfft=True)
 
 
 def test_whitening_full_dft_needs_no_image_shape():
