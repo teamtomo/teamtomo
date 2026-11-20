@@ -676,7 +676,7 @@ def test_estimate_defocus_2d_grid_no_false_astigmatism_odd_even(n):
 def test_estimate_ctf_1d_odd_even_unbiased(n, use_equiphase):
     """1D defocus is unbiased for odd and even sizes on both averaging paths.
 
-    The equiphase profile sits at rfftfreq(N) while the model used to be
+    Both profiles sit at the shell centres rfftfreq(N). The model used to be
     sampled at linspace(0, 0.5, N//2+1), biasing odd sizes (-1.3% at N=127).
     """
     from torch_ctf_estimation import estimate_ctf_1d
@@ -700,7 +700,7 @@ def test_estimate_ctf_1d_odd_even_unbiased(n, use_equiphase):
     )
     defocus = float(result.ctf_model.defocus_um)
     assert abs(defocus - 1.5) / 1.5 < 5e-3
-    expected_last = (n // 2) / n if use_equiphase else 0.5
+    expected_last = (n // 2) / n
     last_fftfreq = float(result.frequencies_1d[-1]) * 3.0
     assert last_fftfreq == pytest.approx(expected_last, abs=1e-6)
 

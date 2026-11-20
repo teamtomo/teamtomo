@@ -190,9 +190,9 @@ def simulate_thin_power_1d(
 ) -> torch.Tensor:
     """Thin-sample 1D power spectrum (CTF²) on the rFFT frequency grid.
 
-    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
-    ``rfftfreq(N)`` (equiphase profiles), None at
-    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at the shell
+    centres ``rfftfreq(N)`` of both 1D profiles, None keeps torch-ctf's
+    ``linspace(0, 0.5, n_samples)``.
     """
     ctf = calculate_ctf_1d(
         defocus=defocus_um,
@@ -221,9 +221,9 @@ def simulate_thin_abs_ctf_1d(
 ) -> torch.Tensor:
     """Thin-sample |CTF| on the 1D rFFT frequency grid (CTFFind amplitude model).
 
-    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
-    ``rfftfreq(N)`` (equiphase profiles), None at
-    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at the shell
+    centres ``rfftfreq(N)`` of both 1D profiles, None keeps torch-ctf's
+    ``linspace(0, 0.5, n_samples)``.
     """
     ctf = calculate_ctf_1d(
         defocus=defocus_um,
@@ -253,9 +253,9 @@ def simulate_thickness_abs_ctf_1d(
 ) -> torch.Tensor:
     """|CTF_t| amplitude transfer (sinc * sin chi).
 
-    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
-    ``rfftfreq(N)`` (equiphase profiles), None at
-    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at the shell
+    centres ``rfftfreq(N)`` of both 1D profiles, None keeps torch-ctf's
+    ``linspace(0, 0.5, n_samples)``.
     """
     ctf = calculate_ctf_thickness_1d(
         return_power_spectrum=False,
@@ -370,9 +370,9 @@ def simulate_thickness_power_1d(
 ) -> torch.Tensor:
     """CTF_t 1D power spectrum (McMullan / CTFFind5 form).
 
-    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at
-    ``rfftfreq(N)`` (equiphase profiles), None at
-    ``linspace(0, 0.5, n_samples)`` (rotational averages).
+    ``image_sidelength`` is passed to torch-ctf: ``N`` samples at the shell
+    centres ``rfftfreq(N)`` of both 1D profiles, None keeps torch-ctf's
+    ``linspace(0, 0.5, n_samples)``.
     """
     return calculate_ctf_thickness_1d(
         return_power_spectrum=True,
