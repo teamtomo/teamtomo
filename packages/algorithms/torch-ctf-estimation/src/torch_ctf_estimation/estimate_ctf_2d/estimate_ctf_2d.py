@@ -153,7 +153,8 @@ def estimate_ctf_2d(
     image_shape : tuple[int, int] or None, optional
         Real-space ``(h, w)`` of the patches. Needed to tell odd from even
         widths, since both give the same rfft width. If None, square patches
-        ``(ph, ph)`` are assumed when that matches the rfft width.
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------

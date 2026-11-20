@@ -22,6 +22,7 @@ from typing import TypedDict
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
 from torch_fourier_filter.dft_utils import rotational_average_dft_2d
+from torch_grid_utils import image_shape_from_dft_shape
 from torch_image_interpolation import sample_image_2d
 
 from torch_ctf_estimation.estimate_ctf_1d.equiphase_ctf_1d import (
@@ -34,7 +35,6 @@ from torch_ctf_estimation.models import (
     LinearDefocusModel,
     OpticalParams,
 )
-from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
 
 
 def _tensor_to_float(x: float | torch.Tensor) -> float:
@@ -337,7 +337,8 @@ def tilt_corrected_mean_ps_1d(
     """Mean tilt-corrected 2D spectrum, then 1D equiphase or rotational average.
 
     ``image_shape`` is the real-space ``(h, w)`` of the patches; if None, square
-    patches are assumed when that matches the rfft width.
+    patches are assumed; a ValueError is raised if that does not match the
+    rfft width.
     """
     mean_2d, aux = _mean_tilt_corrected_ps_2d_rfft(
         result1d,
@@ -357,7 +358,9 @@ def tilt_corrected_mean_ps_1d(
     else:
         phase_deg = _tensor_to_float(result1d.ctf_model.phase_shift_degrees)
 
-    patch_shape = resolve_rfft_image_shape(mean_2d.shape, image_shape)
+    patch_shape = image_shape_from_dft_shape(
+        mean_2d.shape, rfft=True, image_shape=image_shape, assume_square=True
+    )
     pixel = optical_params.pixel_spacing_angstroms
 
     if use_equiphase:

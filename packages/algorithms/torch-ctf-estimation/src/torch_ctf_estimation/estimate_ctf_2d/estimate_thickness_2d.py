@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_thickness_ctf_ps_t,
@@ -30,7 +31,6 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
 )
 from torch_ctf_estimation.metrics.fit_metrics import pearson_r_flat
 from torch_ctf_estimation.models import LaserParams, Thickness2DResults
-from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
 
 
 def _eval_defocus_at_positions(
@@ -134,7 +134,8 @@ def estimate_thickness_2d(
     image_shape : tuple[int, int] or None, optional
         Real-space ``(h, w)`` of the patches. Needed to tell odd from even
         widths, since both give the same rfft width. If None, square patches
-        ``(ph, ph)`` are assumed when that matches the rfft width.
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -143,7 +144,12 @@ def estimate_thickness_2d(
         per-iteration model traces.
     """
     # --- Setup: collapse time dim when nt==1, derive image shape ---
-    image_shape = resolve_rfft_image_shape(patch_power_spectra.shape[-2:], image_shape)
+    image_shape = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
     device = patch_power_spectra.device
     nt = thickness_grid_resolution[0]
     if nt == 1:

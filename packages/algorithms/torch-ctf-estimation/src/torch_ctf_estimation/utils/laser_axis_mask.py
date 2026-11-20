@@ -5,8 +5,7 @@ from __future__ import annotations
 import math
 
 import torch
-
-from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
+from torch_grid_utils import image_shape_from_dft_shape
 
 
 def build_laser_axis_mask(
@@ -95,7 +94,8 @@ def apply_laser_axis_mask(
         Strip width in fftfreq units.
     image_shape : tuple[int, int] or None, optional
         Real-space ``(h, w)`` of the patches. If None, square patches
-        ``(ph, ph)`` are assumed when that matches the rfft width.
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -107,7 +107,9 @@ def apply_laser_axis_mask(
         The applied mask, shape ``(ph, pw_rfft)``.
     """
     axis_mask = build_laser_axis_mask(
-        image_shape=resolve_rfft_image_shape(patch_ps.shape[-2:], image_shape),
+        image_shape=image_shape_from_dft_shape(
+            patch_ps.shape[-2:], rfft=True, image_shape=image_shape, assume_square=True
+        ),
         laser_xy_angle_deg=laser_xy_angle_deg,
         dual_laser=dual_laser,
         mask_width=mask_width,
