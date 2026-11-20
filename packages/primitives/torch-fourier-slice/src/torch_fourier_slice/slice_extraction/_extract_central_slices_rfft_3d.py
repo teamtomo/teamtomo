@@ -1,10 +1,9 @@
 import einops
 import torch
-from torch_grid_utils import image_shape_from_dft_shape
+from torch_grid_utils import fftfreq_to_dft_coordinates, image_shape_from_dft_shape
 from torch_grid_utils.fftfreq_grid import fftfreq_grid, transform_fftfreq_grid
 from torch_image_interpolation import sample_image_2d, sample_image_3d
 
-from .._dft_utils import _fftfreq_to_dft_coordinates
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -247,8 +246,8 @@ def extract_central_slices_rfft_3d(
     )
 
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=volume_shape, rfft=True
+    rotated_coords = fftfreq_to_dft_coordinates(
+        frequencies=rotated_coords, image_shape=volume_shape, rfft=True, fftshift=True
     )
     samples = sample_image_3d(
         image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
@@ -432,8 +431,8 @@ def extract_central_slices_rfft_3d_multichannel(
     )
 
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=volume_shape, rfft=True
+    rotated_coords = fftfreq_to_dft_coordinates(
+        frequencies=rotated_coords, image_shape=volume_shape, rfft=True, fftshift=True
     )
     samples = sample_image_3d(
         image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
@@ -500,8 +499,11 @@ def transform_slice_2d(
     )  # (h, w, 2) yx coords
 
     # Convert transformed frequencies to DFT array coordinates
-    transformed_coords = _fftfreq_to_dft_coordinates(
-        frequencies=transformed_freqs, image_shape=image_shape_2d, rfft=True
+    transformed_coords = fftfreq_to_dft_coordinates(
+        frequencies=transformed_freqs,
+        image_shape=image_shape_2d,
+        rfft=True,
+        fftshift=True,
     )
 
     # Flatten coordinates: (h, w, 2) -> (h*w, 2)
@@ -600,8 +602,11 @@ def transform_slice_2d_multichannel(
     )  # (h, w, 2) yx coords
 
     # Convert transformed frequencies to DFT array coordinates
-    transformed_coords = _fftfreq_to_dft_coordinates(
-        frequencies=transformed_freqs, image_shape=image_shape_2d, rfft=True
+    transformed_coords = fftfreq_to_dft_coordinates(
+        frequencies=transformed_freqs,
+        image_shape=image_shape_2d,
+        rfft=True,
+        fftshift=True,
     )
 
     # Flatten coordinates: (h, w, 2) -> (h*w, 2)

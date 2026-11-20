@@ -82,12 +82,13 @@ def _setup_linear_spectra_and_shape(
 
     Returns (patch_power_spectra, image_shape, device, T).
     """
-    image_shape = image_shape_from_dft_shape(
+    real_h, real_w = image_shape_from_dft_shape(
         patch_power_spectra.shape[-2:],
         rfft=True,
         image_shape=image_shape,
         assume_square=True,
     )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     nt = defocus_grid_resolution[0]
     if nt == 1:

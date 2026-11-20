@@ -1,8 +1,8 @@
 import einops
 import torch
+from torch_grid_utils import fftfreq_to_dft_coordinates
 from torch_image_interpolation import sample_image_2d
 
-from .._dft_utils import _fftfreq_to_dft_coordinates
 from .._grids import _central_line_fftfreq_grid
 
 
@@ -65,8 +65,8 @@ def extract_central_slices_rfft_2d(
     rotated_coords[conjugate_mask, ...] *= -1
 
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=image_shape, rfft=True
+    rotated_coords = fftfreq_to_dft_coordinates(
+        frequencies=rotated_coords, image_shape=image_shape, rfft=True, fftshift=True
     )  # (...) rfft
     samples = sample_image_2d(
         image=image_rfft, coordinates=rotated_coords, interpolation="bilinear"

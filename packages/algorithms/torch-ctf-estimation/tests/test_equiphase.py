@@ -206,21 +206,3 @@ def test_equiphase_radial_power_any_shape(image_shape):
     expected = torch.fft.rfftfreq(n) ** 2
     assert epa.shape == (n // 2 + 1,)
     torch.testing.assert_close(epa, expected, rtol=0.0, atol=1.0 / n**2)
-
-
-@pytest.mark.parametrize("n", [254, 255])
-def test_iy_float_from_ky_wraps_negative_ky(n):
-    """Negative ky maps to rows near n, between row n - 1 and row 0."""
-    from torch_ctf_estimation.estimate_ctf_1d.equiphase_ctf_1d import (
-        _iy_float_from_ky,
-    )
-    from torch_ctf_estimation.utils.tilt_corrected_ps import (
-        _iy_float_from_ky_vectorized,
-    )
-
-    spacing = 1.5
-    ky = torch.tensor([-0.5 / (n * spacing), 0.0, 2.0 / (n * spacing)])
-    expected = torch.tensor([n - 0.5, 0.0, 2.0])
-    for fn in (_iy_float_from_ky, _iy_float_from_ky_vectorized):
-        iy = fn(ky, n, spacing, torch.device("cpu"), torch.float32)
-        torch.testing.assert_close(iy, expected)

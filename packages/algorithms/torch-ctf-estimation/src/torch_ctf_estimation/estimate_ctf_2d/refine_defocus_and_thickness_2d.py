@@ -112,12 +112,13 @@ def refine_defocus_and_thickness_2d(
     if thickness_grid_resolution is None:
         thickness_grid_resolution = (1, 1, 1)
 
-    image_shape = image_shape_from_dft_shape(
+    real_h, real_w = image_shape_from_dft_shape(
         patch_power_spectra.shape[-2:],
         rfft=True,
         image_shape=image_shape,
         assume_square=True,
     )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     T = patch_power_spectra.shape[0]
     phase_shift_deg = (

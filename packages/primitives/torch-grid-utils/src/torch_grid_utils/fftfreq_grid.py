@@ -277,6 +277,96 @@ def fftfreq_shell_centers(
     )
 
 
+def fftfreq_to_dft_coordinates(
+    frequencies: torch.Tensor,
+    image_shape: Sequence[int],
+    rfft: bool,
+    fftshift: bool = False,
+) -> torch.Tensor:
+    """Convert DFT sample frequencies into continuous array coordinates of a DFT.
+
+    Adjacent DFT samples are `1 / n` apart along a dimension of length `n`, so
+    frequency `f` (cycles per pixel) is `f * n` samples away from DC:
+
+    - `fftshift=True`: DC sits at index `n // 2` of each full dimension (`n / 2` for
+       even `n`, `(n - 1) / 2` for odd `n`), so coordinates are
+      `f * n + n // 2`, in `[0, n - 1]`.
+    - `fftshift=False`: DC sits at index 0 and negative frequencies of each full
+      dimension wrap to the end of the array, so coordinates are `(f * n) mod n`, in
+      `[0, n)`. Values in `(n - 1, n)` lie between the last sample and sample 0, so
+      interpolation there must wrap around.
+    - `rfft=True`: the last dimension is the non-redundant half from an rfft, which
+      starts at DC (index 0) with or without fftshift and is not wrapped.
+
+    `fftfreq(n) * n` isn't exact in float32, which can put edge samples just
+    outside the array (e.g. -2.4e-7 for the lowest frequency at n = 7). Samplers
+    zero, and insertion drops, anything outside the array, so coordinates within
+    1e-3 of an edge are snapped onto it.
+
+    Parameters
+    ----------
+    frequencies: torch.Tensor
+        `(..., d)` array of multidimensional DFT sample frequencies in cycles per
+        pixel.
+    image_shape: Sequence[int]
+        Length `d` real-space shape of the image. For an rfft, the last dimension is
+        the length of the full (real space) dimension, not the half transform.
+    rfft: bool
+        Whether the DFT is the non-redundant half transform from `rfft`.
+    fftshift: bool
+        Whether the DFT is fftshifted.
+
+    Returns
+    -------
+    coordinates: torch.Tensor
+        `(..., d)` array of continuous coordinates into the DFT.
+    """
+    n = torch.as_tensor(
+        tuple(image_shape), device=frequencies.device, dtype=frequencies.dtype
+    )
+    coordinates = frequencies * n
+    tolerance = 1e-3
+
+    # highest in-array coordinate along the rfft dimension, from DC at index 0
+    rfft_upper = torch.div(n[-1], 2, rounding_mode="floor")
+
+    if fftshift is True:
+        dc_index = torch.div(n, 2, rounding_mode="floor")
+        if rfft is True:
+            dc_index[-1] = 0
+        coordinates = coordinates + dc_index
+        upper = n - 1
+        if rfft is True:
+            upper[-1] = rfft_upper
+        lower = torch.zeros_like(upper)
+        coordinates = torch.where(
+            (coordinates < lower) & (coordinates > lower - tolerance),
+            lower,
+            coordinates,
+        )
+        coordinates = torch.where(
+            (coordinates > upper) & (coordinates < upper + tolerance),
+            upper,
+            coordinates,
+        )
+        return coordinates
+
+    # DC at index 0: snap tiny negative values onto DC before wrapping
+    coordinates = torch.where(
+        (coordinates < 0) & (coordinates > -tolerance),
+        torch.zeros_like(coordinates),
+        coordinates,
+    )
+    if rfft is True:
+        full = coordinates[..., :-1]
+        half = coordinates[..., -1:]
+        half = torch.where(
+            (half > rfft_upper) & (half < rfft_upper + tolerance), rfft_upper, half
+        )
+        return torch.cat([torch.remainder(full, n[:-1]), half], dim=-1)
+    return torch.remainder(coordinates, n)
+
+
 def dft_center(
     image_shape: tuple[int, ...],
     rfft: bool,
