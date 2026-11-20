@@ -44,7 +44,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 # add your package dependencies here
-dependencies = ["torch", "numpy", "einops"]
+dependencies = ["torch", "numpy", "einops", "torch-grid-utils"]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"

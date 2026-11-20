@@ -714,3 +714,20 @@ def test_fftfreq_shell_centers_match_rfftfreq(n):
 def test_fftfreq_shell_centers_end_at_nyquist_only_for_even_sizes(n):
     expected_last = 0.5 if n % 2 == 0 else 0.5 - 1 / (2 * n)
     assert fftfreq_shell_centers(n)[-1].item() == pytest.approx(expected_last)
+
+
+@pytest.mark.parametrize("w", [20, 21])
+@pytest.mark.parametrize("rfft", [True, False])
+@pytest.mark.parametrize("fftshift", [True, False])
+def test_fftfreq_grid_1d(w, rfft, fftshift):
+    """1D grids are (w, 1), matching the (*image_shape, ndim) layout of 2D/3D."""
+    grid = fftfreq_grid((w,), rfft=rfft, fftshift=fftshift, spacing=2.0)
+    expected = torch.fft.rfftfreq(w, d=2.0) if rfft else torch.fft.fftfreq(w, d=2.0)
+    if fftshift and not rfft:
+        expected = torch.fft.fftshift(expected)
+    assert grid.shape == (expected.shape[0], 1)
+    torch.testing.assert_close(grid[..., 0], expected)
+    torch.testing.assert_close(
+        fftfreq_grid((w,), rfft=rfft, fftshift=fftshift, spacing=2.0, norm=True),
+        expected.abs(),
+    )
