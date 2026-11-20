@@ -67,7 +67,7 @@ cross_correlation = torch_2dtm.match_template_dft_2d(
     template_dft=template_dft,
     rotation_matrices=rotation_matrices,
     filters=filters,
-    image_shape=image_size,  # needed when the image width is odd
+    image_shape=image_size,  # real-space (h, w); rfft widths are ambiguous
 )
 # The result has shape (..., num_orientations, image_height, image_width)
 ```

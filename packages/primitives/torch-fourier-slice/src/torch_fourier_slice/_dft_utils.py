@@ -68,27 +68,3 @@ def _fftfreq_to_dft_coordinates(
         (coordinates > upper) & (coordinates < upper + tolerance), upper, coordinates
     )
     return coordinates
-
-
-def _rfft_full_width(h: int, w_rfft: int) -> int:
-    """Recover the real space width of a square/cubic array from its rfft.
-
-    The rfft halves the last dimension to `w // 2 + 1`, which is the same for an
-    even `w` and for `w + 1`, so `w` can't be recovered from the half transform
-    alone. Take it from the full dimension `h` before it when the two agree, which
-    they do for square/cubic arrays of either parity, and fall back to the even
-    width otherwise.
-
-    Parameters
-    ----------
-    h: int
-        Length of the full dimension before the half transformed one.
-    w_rfft: int
-        Length of the half transformed last dimension, `w // 2 + 1`.
-
-    Returns
-    -------
-    w: int
-        Length of the last dimension of the real space array.
-    """
-    return h if h // 2 + 1 == w_rfft else 2 * (w_rfft - 1)

@@ -1,10 +1,12 @@
 """Cross-correlation functions."""
 
-import torch
 import platform
+
 import einops
+import torch
 from einops._torch_specific import allow_ops_in_compiled_graph
 from torch_fourier_slice import extract_central_slices_rfft_3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_2dtm.utils import normalize_template_projection
 
@@ -60,10 +62,9 @@ def match_template_dft_2d(
         `(..., d, d // 2 + 1)` filters applied to FFT slices which are fftshifted
         results of a rfft.
     image_shape : tuple[int, int] | None
-        `(h_im, w_im)` real space shape of the image. Required when the image width
-        is odd, since the rfft of widths `2k` and `2k + 1` have the same number of
-        columns. Defaults to `(h_im, 2 * (image_dft.shape[-1] - 1))`, i.e. an even
-        image width.
+        `(h_im, w_im)` real space shape of the image. Required, since the rfft of
+        widths `2k` and `2k + 1` have the same number of columns; a `ValueError` is
+        raised when it is missing or does not match `image_dft`.
 
     Returns
     -------
@@ -74,17 +75,12 @@ def match_template_dft_2d(
     """
     # Grab relevant dimensions. The template volume is cubic, so its real space
     # width equals its height (which can't be recovered from the rfft width alone).
-    _, h, _ = template_dft.shape
-    w = h
-    h_im, w_im_rfft = image_dft.shape
-    if image_shape is None:
-        image_shape = (h_im, 2 * (w_im_rfft - 1))
-    if image_shape[0] != h_im or image_shape[1] // 2 + 1 != w_im_rfft:
-        raise ValueError(
-            f"image_shape {tuple(image_shape)} is incompatible with image_dft of "
-            f"shape {tuple(image_dft.shape)}."
-        )
-    h_im, w_im = image_shape
+    _, h, w = image_shape_from_dft_shape(
+        template_dft.shape, rfft=True, assume_square=True
+    )
+    h_im, w_im = image_shape_from_dft_shape(
+        image_dft.shape, rfft=True, image_shape=image_shape
+    )
 
     # Extract central slice(s) from the template volume
     fourier_slices = extract_central_slices_rfft_3d(

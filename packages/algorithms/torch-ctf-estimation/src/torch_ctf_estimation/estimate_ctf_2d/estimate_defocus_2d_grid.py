@@ -12,6 +12,7 @@ from typing import Literal
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_ctf2_t,
@@ -42,7 +43,6 @@ from torch_ctf_estimation.utils.fitting_bounds import (
     resolve_defocus_bounds,
     resolve_phase_shift_bounds,
 )
-from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
 
 
 def _setup_grid_spectra_and_shape(
@@ -55,7 +55,12 @@ def _setup_grid_spectra_and_shape(
 
     Returns (patch_power_spectra, image_shape, device, T).
     """
-    image_shape = resolve_rfft_image_shape(patch_power_spectra.shape[-2:], image_shape)
+    image_shape = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
     device = patch_power_spectra.device
     nt = defocus_grid_resolution[0]
     if nt == 1:

@@ -705,16 +705,22 @@ def test_estimate_ctf_1d_odd_even_unbiased(n, use_equiphase):
     assert last_fftfreq == pytest.approx(expected_last, abs=1e-6)
 
 
-def test_resolve_rfft_image_shape():
-    """Square default for both parities; explicit shapes are validated."""
-    from torch_ctf_estimation.utils.rfft_shape import resolve_rfft_image_shape
+def test_apply_laser_axis_mask_non_square_needs_image_shape():
+    """A non-square rfft spectrum is ambiguous without image_shape: raise."""
+    from torch_ctf_estimation.utils.laser_axis_mask import apply_laser_axis_mask
 
-    assert resolve_rfft_image_shape((21, 11)) == (21, 21)
-    assert resolve_rfft_image_shape((20, 11)) == (20, 20)
-    assert resolve_rfft_image_shape((21, 11), (21, 20)) == (21, 20)
-    assert resolve_rfft_image_shape((16, 13)) == (16, 24)  # non-square: even guess
-    with pytest.raises(ValueError, match="incompatible"):
-        resolve_rfft_image_shape((21, 11), (21, 22))
+    patch_ps = torch.ones(1, 1, 1, 16, 13)
+    mean_ps = torch.ones(16, 13)
+    kwargs = {"laser_xy_angle_deg": 30.0, "dual_laser": False, "mask_width": 0.1}
+    with pytest.raises(ValueError, match="square/cubic"):
+        apply_laser_axis_mask(patch_ps, mean_ps, **kwargs)
+    for image_shape in [(16, 24), (16, 25)]:
+        _, _, mask = apply_laser_axis_mask(
+            patch_ps, mean_ps, image_shape=image_shape, **kwargs
+        )
+        assert mask.shape == (16, 13)
+    with pytest.raises(ValueError, match="does not match"):
+        apply_laser_axis_mask(patch_ps, mean_ps, image_shape=(16, 26), **kwargs)
 
 
 def test_apply_laser_axis_mask_odd_width():

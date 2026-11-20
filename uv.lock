@@ -4231,6 +4231,7 @@ dependencies = [
     { name = "setuptools" },
     { name = "torch" },
     { name = "torch-fourier-slice" },
+    { name = "torch-grid-utils" },
 ]
 
 [package.dev-dependencies]
@@ -4254,6 +4255,7 @@ requires-dist = [
     { name = "setuptools" },
     { name = "torch" },
     { name = "torch-fourier-slice", editable = "packages/primitives/torch-fourier-slice" },
+    { name = "torch-grid-utils", editable = "packages/primitives/torch-grid-utils" },
 ]
 
 [package.metadata.requires-dev]

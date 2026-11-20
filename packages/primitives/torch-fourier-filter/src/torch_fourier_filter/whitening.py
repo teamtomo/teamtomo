@@ -3,6 +3,7 @@
 from typing import Optional
 
 import torch
+from torch_grid_utils import image_shape_from_dft_shape
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
 
 from torch_fourier_filter.utils import (
@@ -31,7 +32,9 @@ def calculate_num_freq_bins(image_shape: tuple[int, ...]) -> int:
 
 
 def real_space_shape_from_dft_shape(
-    dft_shape: tuple[int, ...], rfft: bool, real_space_last_dim: int | None = None
+    dft_shape: tuple[int, ...],
+    rfft: bool,
+    image_shape: tuple[int, ...] | None = None,
 ) -> tuple[int, ...]:
     """Calculate the real-space shape from a DFT shape and rfft argument.
 
@@ -40,29 +43,23 @@ def real_space_shape_from_dft_shape(
     dft_shape: tuple[int, ...]
         Shape of the DFT.
     rfft: bool
-        Whether the input is from an rfft (True) or full fft (False). The default is
-        True.
-
-    real_space_last_dim: int, optional
-        Original length of the last transformed axis. An rfft of length 2k or
-        2k+1 has k+1 bins. When omitted, assume the even length.
+        Whether the input is from an rfft (True) or full fft (False).
+    image_shape: tuple[int, ...], optional
+        Real-space shape of the image over the same dimensions as `dft_shape`.
+        Required for an rfft, since real widths 2k and 2k+1 both give k+1 columns.
 
     Returns
     -------
     tuple[int, ...]
         Shape of the real-space image.
-    """
-    real_space_shape = list(dft_shape)
-    if real_space_last_dim is not None:
-        bins = real_space_last_dim // 2 + 1 if rfft else real_space_last_dim
-        if real_space_last_dim < 1 or bins != dft_shape[-1]:
-            raise ValueError("real_space_last_dim is incompatible with the DFT shape")
-        real_space_shape[-1] = real_space_last_dim
-    elif rfft:
-        last_dim = 2 * (real_space_shape[-1] - 1)
-        real_space_shape[-1] = last_dim
 
-    return tuple(real_space_shape)
+    Raises
+    ------
+    ValueError
+        If `rfft` is True and `image_shape` is not given, or if `image_shape` does
+        not match `dft_shape`.
+    """
+    return image_shape_from_dft_shape(dft_shape, rfft, image_shape=image_shape)
 
 
 def power_spectral_density(
@@ -73,7 +70,7 @@ def power_spectral_density(
     num_freq_bins: Optional[int] = None,
     max_freq: Optional[float] = None,
     do_power_spectrum: Optional[bool] = True,
-    real_space_last_dim: int | None = None,
+    image_shape: tuple[int, ...] | None = None,
 ) -> torch.Tensor:
     """Calculates the power spectral density of an image in 1-dimension.
 
@@ -104,9 +101,9 @@ def power_spectral_density(
         Weather to use the power (intensity) spectrum or the amplitude spectrum. If
         True, the power spectrum is calculated, otherwise the amplitude spectrum is
         calculated. The default is True.
-    real_space_last_dim: int, optional
-        Length of the last transformed input axis before the FFT. Pass the original
-        length when computing a spectrum from an odd-sized real image.
+    image_shape: tuple[int, ...], optional
+        Real-space shape of the image over the dimensions in `dim`. Required for an
+        rfft input, since real widths 2k and 2k+1 both give k+1 columns.
 
     Returns
     -------
@@ -124,7 +121,7 @@ def power_spectral_density(
     shape_over_dim = tuple(image_dft.shape[d] for d in dim)
 
     real_space_shape = real_space_shape_from_dft_shape(
-        shape_over_dim, rfft, real_space_last_dim
+        shape_over_dim, rfft, image_shape
     )
 
     # Construct 1-dimensional grid of frequencies for binning
@@ -196,7 +193,7 @@ def whitening_filter(
     output_shape: Optional[tuple[int, ...]] = None,
     output_rfft: Optional[bool] = None,
     output_fftshift: Optional[bool] = None,
-    real_space_last_dim: int | None = None,
+    image_shape: tuple[int, ...] | None = None,
 ) -> torch.Tensor:
     """Create a whitening filter the discrete Fourier transform of an input.
 
@@ -225,17 +222,18 @@ def whitening_filter(
         True, the power spectrum is calculated, otherwise the amplitude spectrum is
         calculated. The default is True.
     output_shape: tuple[int, ...], optional
-        The shape of the output filter. If None, then the shape is the same as
-        `image_dft`. The default is None. NOTE: This shape is in real space.
+        The real-space shape of the output filter. If None, then the real-space
+        shape of `image_dft` over `dim` (see `image_shape`). The default is None.
     output_rfft: bool, optional
         Whether to return the filter in rfft form. If None, then the same as `rfft`.
         The default is None.
     output_fftshift: bool, optional
         Whether to return the filter fftshifted. If None, then the same as `fftshift`.
         The default is None.
-    real_space_last_dim: int, optional
-        Length of the last transformed input axis before the FFT. This sets the
-        input frequency grid independently of the requested output shape.
+    image_shape: tuple[int, ...], optional
+        Real-space shape of the image over the dimensions in `dim`. This sets the
+        input frequency grid independently of the requested output shape. Required
+        for an rfft input, since real widths 2k and 2k+1 both give k+1 columns.
 
     Returns
     -------
@@ -244,6 +242,8 @@ def whitening_filter(
     """
     device = image_dft.device
     dim = _handle_dim(dim, image_dft.ndim)
+    shape_over_dim = tuple(image_dft.shape[d] for d in dim)
+    image_shape = real_space_shape_from_dft_shape(shape_over_dim, rfft, image_shape)
 
     power_spec_1d = power_spectral_density(
         image_dft=image_dft,
@@ -252,7 +252,7 @@ def whitening_filter(
         dim=dim,
         num_freq_bins=num_freq_bins,
         do_power_spectrum=do_power_spectrum,
-        real_space_last_dim=real_space_last_dim,
+        image_shape=image_shape,
     )
 
     # Create the filter from the power spectrum
@@ -287,9 +287,7 @@ def whitening_filter(
 
     # Construct FFT frequency grid
     if output_shape is None:
-        output_shape = real_space_shape_from_dft_shape(
-            image_dft.shape, rfft, real_space_last_dim
-        )
+        output_shape = image_shape
 
     if output_rfft is None:
         output_rfft = rfft

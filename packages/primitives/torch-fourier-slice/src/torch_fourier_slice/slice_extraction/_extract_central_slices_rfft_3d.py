@@ -1,9 +1,10 @@
 import einops
 import torch
+from torch_grid_utils import image_shape_from_dft_shape
 from torch_grid_utils.fftfreq_grid import fftfreq_grid, transform_fftfreq_grid
 from torch_image_interpolation import sample_image_2d, sample_image_3d
 
-from .._dft_utils import _fftfreq_to_dft_coordinates, _rfft_full_width
+from .._dft_utils import _fftfreq_to_dft_coordinates
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -150,7 +151,10 @@ def extract_central_slices_rfft_3d(
 
     # Get the shape of the original volume from the actual rfft tensor
     d, h, w_rfft = volume_rfft.shape[-3:]
-    volume_shape = (d, h, _rfft_full_width(h, w_rfft))
+    # cubic volume: real space width from the height (rfft widths are ambiguous)
+    volume_shape = image_shape_from_dft_shape(
+        (d, h, w_rfft), rfft=True, assume_square=True
+    )
 
     # rotation matrices rotate xyz coordinates, make them rotate zyx coordinates
     # xyz:
@@ -332,7 +336,10 @@ def extract_central_slices_rfft_3d_multichannel(
 
     # Get the shape of the original volume from the actual rfft tensor
     d, h, w_rfft = volume_rfft.shape[-3:]
-    volume_shape = (d, h, _rfft_full_width(h, w_rfft))
+    # cubic volume: real space width from the height (rfft widths are ambiguous)
+    volume_shape = image_shape_from_dft_shape(
+        (d, h, w_rfft), rfft=True, assume_square=True
+    )
 
     # rotation matrices rotate xyz coordinates, make them rotate zyx coordinates
     # xyz:
@@ -476,7 +483,9 @@ def transform_slice_2d(
     """
     # Calculate full 2D image shape from rfft shape
     # rfft_shape is (h, w_rfft) where w_rfft = n//2 + 1
-    image_shape_2d = (rfft_shape[0], _rfft_full_width(*rfft_shape))
+    image_shape_2d = image_shape_from_dft_shape(
+        rfft_shape, rfft=True, assume_square=True
+    )
 
     # Generate 2D frequency grid
     freq_grid = fftfreq_grid(
@@ -575,7 +584,9 @@ def transform_slice_2d_multichannel(
         Transformed projection image DFTs with same shape as input.
     """
     # Calculate full 2D image shape from rfft shape
-    image_shape_2d = (rfft_shape[0], _rfft_full_width(*rfft_shape))
+    image_shape_2d = image_shape_from_dft_shape(
+        rfft_shape, rfft=True, assume_square=True
+    )
 
     # Generate 2D frequency grid
     freq_grid = fftfreq_grid(

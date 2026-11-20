@@ -38,6 +38,7 @@ def test_template_match_dft_2d():
         template_dft=template_dft,
         rotation_matrices=rotation_matrices,
         filters=filters,
+        image_shape=image_size,
     )
 
     # correct output shape is (..., num_orientations, h, w)
@@ -136,4 +137,33 @@ def test_match_template_dft_2d_incompatible_image_shape(image_shape):
             rotation_matrices=torch.eye(3).unsqueeze(0),
             filters=filters,
             image_shape=image_shape,
+        )
+
+
+def test_match_template_dft_2d_without_image_shape_raises():
+    """The image width is ambiguous from its rfft (64 and 65 give 33 columns)."""
+    image_dft = torch.zeros(64, 33, dtype=torch.complex64)
+    template_dft = torch.zeros(16, 16, 9, dtype=torch.complex64)
+    filters = torch.ones(16, 9, dtype=torch.complex64)
+    with pytest.raises(ValueError, match="ambiguous"):
+        torch_2dtm.match_template_dft_2d(
+            image_dft=image_dft,
+            template_dft=template_dft,
+            rotation_matrices=torch.eye(3).unsqueeze(0),
+            filters=filters,
+        )
+
+
+@pytest.mark.parametrize("template_shape", [(32, 32, 18), (32, 32, 16)])
+def test_match_template_dft_2d_rejects_non_cubic_template(template_shape):
+    image_dft = torch.zeros(64, 33, dtype=torch.complex64)
+    template_dft = torch.zeros(template_shape, dtype=torch.complex64)
+    filters = torch.ones(32, 17, dtype=torch.complex64)
+    with pytest.raises(ValueError, match="square/cubic"):
+        torch_2dtm.match_template_dft_2d(
+            image_dft=image_dft,
+            template_dft=template_dft,
+            rotation_matrices=torch.eye(3).unsqueeze(0),
+            filters=filters,
+            image_shape=(64, 64),
         )
