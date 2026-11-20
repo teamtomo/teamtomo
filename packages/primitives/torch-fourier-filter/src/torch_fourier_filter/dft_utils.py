@@ -6,7 +6,7 @@ import einops
 import torch
 import torch.nn.functional as F
 from torch_grid_utils.coordinate_grid import coordinate_grid
-from torch_grid_utils.fftfreq_grid import fftfreq_grid
+from torch_grid_utils.fftfreq_grid import fftfreq_grid, fftfreq_shell_centers
 
 
 def rotational_average_dft_2d(
@@ -39,14 +39,17 @@ def rotational_average_dft_2d(
     torch.Tensor
         Rotational average of the input DFT
     """
-    # calculate the number of frequency bins
+    # shells are 1 / n apart for the smallest dimension n, ending at (n // 2) / n
     h, w = image_shape[-2:]
-    n_bins = min((d // 2) + 1 for d in (h, w))
+    frequency_bins = fftfreq_shell_centers(min(h, w), device=dft.device)
 
     # split data into frequency bins
-    frequency_bins = _frequency_bin_centers(n_bins, device=dft.device)
     shell_data = _split_into_frequency_bins_2d(
-        dft, n_bins=n_bins, image_shape=(h, w), rfft=rfft, fftshifted=fftshifted
+        dft,
+        bin_centers=frequency_bins,
+        image_shape=(h, w),
+        rfft=rfft,
+        fftshifted=fftshifted,
     )
 
     # calculate mean over each shell
@@ -103,14 +106,17 @@ def rotational_average_dft_3d(
     torch.Tensor
         Rotational average of the input DFT
     """
-    # calculate the number of frequency bins
+    # shells are 1 / n apart for the smallest of h and w, ending at (n // 2) / n
     d, h, w = image_shape[-3:]
-    n_bins = min((i // 2) + 1 for i in (h, w))
+    frequency_bins = fftfreq_shell_centers(min(h, w), device=dft.device)
 
     # split data into frequency bins
-    frequency_bins = _frequency_bin_centers(n_bins, device=dft.device)
     shell_data = _split_into_frequency_bins_3d(
-        dft, n_bins=n_bins, image_shape=(d, h, w), rfft=rfft, fftshifted=fftshifted
+        dft,
+        bin_centers=frequency_bins,
+        image_shape=(d, h, w),
+        rfft=rfft,
+        fftshifted=fftshifted,
     )
 
     # calculate mean over each shell
@@ -217,7 +223,7 @@ def _find_shell_indices_3d(
 
 def _split_into_frequency_bins_2d(
     dft: torch.Tensor,
-    n_bins: int,
+    bin_centers: torch.Tensor,
     image_shape: tuple[int, int],
     rfft: bool = False,
     fftshifted: bool = False,
@@ -230,8 +236,8 @@ def _split_into_frequency_bins_2d(
     dft : torch.Tensor
         Complex tensor containing 2D Fourier transform(s). Can be batched with shape
         (batch, h, w) or unbatched (h, w).
-    n_bins : int
-        Number of frequency bins to split the DFT into
+    bin_centers : torch.Tensor
+        `(n_bins, )` centers of the frequency bins to split the DFT into
     image_shape : tuple[int, int]
         Shape of the input image
     rfft : bool
@@ -252,7 +258,7 @@ def _split_into_frequency_bins_2d(
         device=dft.device,
     )
     frequency_grid = einops.rearrange(frequency_grid, "h w -> (h w)")
-    shell_borders = _frequency_bin_split_values(n_bins, device=dft.device)
+    shell_borders = _frequency_bin_split_values(bin_centers)
     shell_indices = _find_shell_indices_1d(frequency_grid, split_values=shell_borders)
     dft = einops.rearrange(dft, "... h w -> ... (h w)")
     shells = [dft[..., shell_idx] for shell_idx in shell_indices]
@@ -261,7 +267,7 @@ def _split_into_frequency_bins_2d(
 
 def _split_into_frequency_bins_3d(
     dft: torch.Tensor,
-    n_bins: int,
+    bin_centers: torch.Tensor,
     image_shape: tuple[int, int, int],
     rfft: bool = False,
     fftshifted: bool = False,
@@ -274,8 +280,8 @@ def _split_into_frequency_bins_3d(
     dft : torch.Tensor
         Complex tensor containing 3D Fourier transform(s). Can be batched with shape
         (batch, d, h, w) or unbatched (d, h, w).
-    n_bins : int
-        Number of frequency bins to split the DFT into
+    bin_centers : torch.Tensor
+        `(n_bins, )` centers of the frequency bins to split the DFT into
     image_shape : tuple[int, int, int]
         Shape of the input image
     rfft : bool
@@ -296,7 +302,7 @@ def _split_into_frequency_bins_3d(
         device=dft.device,
     )
     frequency_grid = einops.rearrange(frequency_grid, "d h w -> (d h w)")
-    shell_borders = _frequency_bin_split_values(n_bins, device=dft.device)
+    shell_borders = _frequency_bin_split_values(bin_centers)
     shell_indices = _find_shell_indices_1d(frequency_grid, split_values=shell_borders)
     dft = einops.rearrange(dft, "... d h w -> ... (d h w)")
     shells = [dft[..., shell_idx] for shell_idx in shell_indices]
@@ -344,7 +350,8 @@ def _1d_to_rotational_average_2d_dft(
         norm=True,
         device=values.device,
     )
-    split_values = _frequency_bin_split_values(n=values.shape[-1], device=values.device)
+    bin_centers = fftfreq_shell_centers(min(real_h, real_w), device=values.device)
+    split_values = _frequency_bin_split_values(bin_centers)
     shell_idx = _find_shell_indices_2d(values=grid, split_values=split_values)[:-1]
 
     # insert data into each shell
@@ -402,7 +409,8 @@ def _1d_to_rotational_average_3d_dft(
         norm=True,
         device=values.device,
     )
-    split_values = _frequency_bin_split_values(n=values.shape[-1], device=values.device)
+    bin_centers = fftfreq_shell_centers(min(real_h, real_w), device=values.device)
+    split_values = _frequency_bin_split_values(bin_centers)
     shell_idx = _find_shell_indices_3d(values=grid, split_values=split_values)[:-1]
 
     # insert data into each shell
@@ -415,47 +423,21 @@ def _1d_to_rotational_average_3d_dft(
     return average_3d
 
 
-def _frequency_bin_centers(n: int, device: torch.device | None = None) -> torch.Tensor:
-    """
-    Centers of DFT sample frequency bins.
+def _frequency_bin_split_values(bin_centers: torch.Tensor) -> torch.Tensor:
+    """Values at the borders of DFT sample frequency bins.
 
     Parameters
     ----------
-    n : int
-        Number of frequency bins
-    device : torch.device
-        Device to place the tensor on
+    bin_centers : torch.Tensor
+        `(b, )` evenly spaced centers of the frequency bins
 
     Returns
     -------
     torch.Tensor
-        Centers of the frequency bins
+        `(b, )` upper borders of the frequency bins
     """
-    return torch.linspace(0, 0.5, steps=n, device=device)
-
-
-def _frequency_bin_split_values(
-    n: int,
-    device: torch.device | None = None,
-) -> torch.Tensor:
-    """
-    Values at the borders of DFT sample frequency bins.
-
-    Parameters
-    ----------
-    n : int
-        Number of frequency bins
-    device : torch.device
-        Device to place the tensor on
-
-    Returns
-    -------
-    torch.Tensor
-        Borders of the frequency bins
-    """
-    bin_centers = _frequency_bin_centers(n, device=device)
-    df = torch.atleast_1d(bin_centers[1])
-    bin_centers = torch.concatenate([bin_centers, 0.5 + df], dim=0)  # (b+1, )
+    df = torch.atleast_1d(bin_centers[1] - bin_centers[0])
+    bin_centers = torch.concatenate([bin_centers, bin_centers[-1:] + df], dim=0)
     adjacent_bins = bin_centers.unfold(dimension=0, size=2, step=1)  # (b, 2)
     return einops.reduce(adjacent_bins, "b high_low -> b", reduction="mean")
 

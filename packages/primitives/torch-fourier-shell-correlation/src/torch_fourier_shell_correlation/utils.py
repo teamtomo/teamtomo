@@ -4,6 +4,7 @@ from typing import Sequence
 
 import einops
 import torch
+from torch_grid_utils import fftfreq_shell_centers
 
 
 def _prepare_fft_data(
@@ -65,10 +66,7 @@ def _compute_frequency_bins_weighted(
     """
     # Use minimum dimension to define number of shells
     # This ensures all frequency components can contribute via interpolation
-    min_dim = min(image_shape)
-    bin_centers = torch.fft.rfftfreq(min_dim, device=device)
-
-    return bin_centers
+    return fftfreq_shell_centers(min(image_shape), device=device)
 
 
 def _frequency_to_bin_coordinates(
