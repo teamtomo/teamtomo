@@ -559,6 +559,7 @@ def estimate_ctf_and_thickness(
             optical_params=optics_fit,
             laser_params=laser_params,
             defocus_average_um=d_avg,
+            image_shape=pipeline.patch_shape,
         )
         thickness_bg = None
     use_equiphase = thickness_params.use_equiphase

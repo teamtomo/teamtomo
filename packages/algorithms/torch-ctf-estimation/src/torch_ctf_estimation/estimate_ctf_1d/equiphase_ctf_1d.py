@@ -10,42 +10,12 @@ from torch_ctf._ctf_core import _prepare_inputs
 from torch_ctf.ctf_aberrations import apply_astigmatism_to_defocus
 from torch_ctf.ctf_lpp import _make_lpp_phase_shift_provider
 from torch_ctf.ctf_utils import calculate_total_phase_shift
+from torch_grid_utils import fftfreq_to_dft_coordinates
 
 from torch_ctf_estimation.utils.rfft_shape import as_image_shape
 
 if TYPE_CHECKING:
     from torch_ctf_estimation.models import LaserParams
-
-
-def _iy_float_from_ky(
-    ky: torch.Tensor,
-    h: int,
-    pixel_spacing: float,
-    device: torch.device | None = None,
-    dtype: torch.dtype | None = None,
-) -> torch.Tensor:
-    """Map ky (cycles/Å) to a fractional rFFT row index in ``[0, h)``.
-
-    Row ``i`` holds ``fftfreq(h)[i]``, so ``iy = ky * h * Δx`` modulo ``h``:
-    negative ky wrap to the bottom rows. A value in ``(h - 1, h)`` lies between
-    row ``h - 1`` and row 0. ``|ky * h * Δx|`` is clamped to ``h / 2`` (Nyquist).
-    """
-    del device
-    iy = ky * (h * pixel_spacing)
-    if dtype is not None:
-        iy = iy.to(dtype)
-    iy = iy.clamp(-0.5 * h, 0.5 * h)
-    return torch.remainder(iy, h)
-
-
-def _ix_float_from_kx(
-    kx: torch.Tensor,
-    image_width: int,
-    w_rfft: int,
-    pixel_spacing: float,
-) -> torch.Tensor:
-    """Map kx (cycles/Å) to rFFT column index: ``ix = kx * W * Δx``."""
-    return (kx * image_width * pixel_spacing).clamp(0.0, float(w_rfft - 1))
 
 
 def _fold_hermitian_rfft_kxy(
@@ -347,8 +317,15 @@ def equiphase_average_power_to_1d_rfft(
     kx = s_sol * cphi
     ky = s_sol * sphi
     kx, ky = _fold_hermitian_rfft_kxy(kx, ky)
-    ix_f = _ix_float_from_kx(kx, w, w_rfft, pixel_spacing_angstroms)
-    iy_f = _iy_float_from_ky(ky, h, pixel_spacing_angstroms, dtype=qdtype)
+    # fractional (row, column) in the unshifted rfft: negative ky wrap to rows in
+    # (h - 1, h), between row h - 1 and row 0; |ky| is capped at Nyquist
+    fftfreqs = torch.stack(
+        [(ky * pixel_spacing_angstroms).clamp(-0.5, 0.5), kx * pixel_spacing_angstroms],
+        dim=-1,
+    ).to(qdtype)
+    coordinates = fftfreq_to_dft_coordinates(fftfreqs, (h, w), rfft=True)
+    iy_f = coordinates[..., 0]
+    ix_f = coordinates[..., 1].clamp(0.0, float(w_rfft - 1))
     x_norm = 2.0 * ix_f / max(w_rfft - 1, 1) - 1.0
     y_norm = 2.0 * iy_f / h - 1.0  # padded height h + 1, align_corners
     grid = torch.stack([x_norm, y_norm], dim=-1).reshape(1, 1, n_bins * n_theta, 2)

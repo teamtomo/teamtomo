@@ -144,12 +144,13 @@ def estimate_thickness_2d(
         per-iteration model traces.
     """
     # --- Setup: collapse time dim when nt==1, derive image shape ---
-    image_shape = image_shape_from_dft_shape(
+    real_h, real_w = image_shape_from_dft_shape(
         patch_power_spectra.shape[-2:],
         rfft=True,
         image_shape=image_shape,
         assume_square=True,
     )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     nt = thickness_grid_resolution[0]
     if nt == 1:

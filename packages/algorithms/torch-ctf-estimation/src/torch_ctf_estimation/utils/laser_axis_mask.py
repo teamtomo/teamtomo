@@ -106,10 +106,11 @@ def apply_laser_axis_mask(
     axis_mask : torch.Tensor
         The applied mask, shape ``(ph, pw_rfft)``.
     """
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_ps.shape[-2:], rfft=True, image_shape=image_shape, assume_square=True
+    )
     axis_mask = build_laser_axis_mask(
-        image_shape=image_shape_from_dft_shape(
-            patch_ps.shape[-2:], rfft=True, image_shape=image_shape, assume_square=True
-        ),
+        image_shape=(real_h, real_w),
         laser_xy_angle_deg=laser_xy_angle_deg,
         dual_laser=dual_laser,
         mask_width=mask_width,

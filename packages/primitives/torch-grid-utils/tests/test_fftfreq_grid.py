@@ -4,6 +4,7 @@ import torch
 from torch_grid_utils import (
     fftfreq_grid,
     fftfreq_shell_centers,
+    fftfreq_to_dft_coordinates,
     transform_fftfreq_grid,
 )
 
@@ -731,3 +732,44 @@ def test_fftfreq_grid_1d(w, rfft, fftshift):
         fftfreq_grid((w,), rfft=rfft, fftshift=fftshift, spacing=2.0, norm=True),
         expected.abs(),
     )
+
+
+@pytest.mark.parametrize(
+    "image_shape", [(7,), (20,), (7, 7), (20, 21), (21, 20), (5, 20, 21), (51, 51)]
+)
+@pytest.mark.parametrize("rfft", [True, False])
+@pytest.mark.parametrize("fftshift", [True, False])
+def test_fftfreq_to_dft_coordinates_round_trips_sample_indices(
+    image_shape, rfft, fftshift
+):
+    """Every DFT sample's frequency maps back to its own array index."""
+    grid = fftfreq_grid(image_shape, rfft=rfft, fftshift=fftshift)
+    coordinates = fftfreq_to_dft_coordinates(
+        grid, image_shape, rfft=rfft, fftshift=fftshift
+    )
+    dft_shape = grid.shape[:-1]
+    indices = torch.stack(
+        torch.meshgrid(*[torch.arange(n) for n in dft_shape], indexing="ij"), dim=-1
+    ).float()
+    torch.testing.assert_close(coordinates, indices, atol=1e-4, rtol=0)
+
+
+@pytest.mark.parametrize("n", [254, 255])
+def test_fftfreq_to_dft_coordinates_unshifted_wraps_negative_frequencies(n):
+    """Negative frequencies sit at the end; (n - 1, n) is between n - 1 and 0."""
+    frequencies = torch.tensor([[-0.5 / n], [0.0], [2.0 / n], [-1.0 / n]])
+    coordinates = fftfreq_to_dft_coordinates(frequencies, (n,), rfft=False)
+    expected = torch.tensor([[n - 0.5], [0.0], [2.0], [n - 1.0]])
+    torch.testing.assert_close(coordinates, expected)
+
+
+@pytest.mark.parametrize("fftshift", [True, False])
+def test_fftfreq_to_dft_coordinates_rfft_dimension_is_not_wrapped(fftshift):
+    """The rfft dimension starts at DC with or without fftshift."""
+    frequencies = torch.tensor([[0.0, 0.25], [0.0, 0.5]])
+    coordinates = fftfreq_to_dft_coordinates(
+        frequencies, (20, 20), rfft=True, fftshift=fftshift
+    )
+    dc_row = 10 if fftshift else 0
+    expected = torch.tensor([[dc_row, 5.0], [dc_row, 10.0]])
+    torch.testing.assert_close(coordinates, expected)
