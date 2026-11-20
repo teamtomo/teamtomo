@@ -23,6 +23,12 @@ def insert_central_slices_rfft_3d(
     surface following an Ewald sphere. Wavelength is computed from `ewald_voltage_kv`
     using relativistic electron wavelength formula. If False (default), a flat
     central slice is used.
+
+    Each rotation matrix rotates the slice's frequency coordinates (image frame)
+    into the volume frame, a passive rotation: a slice inserted with R is that
+    of the volume rotated by R^T. `backproject_2d_to_3d` takes the active
+    rotation R. Rotation matrices left-multiply xyz column vectors unless
+    `zyx_matrices` is True.
     """
     rotation_matrices = rotation_matrices.to(torch.float32)
 
@@ -143,6 +149,12 @@ def insert_central_slices_rfft_3d_multichannel(
     surface following an Ewald sphere. Wavelength is computed from `ewald_voltage_kv`
     using relativistic electron wavelength formula. If False (default), a flat
     central slice is used.
+
+    Each rotation matrix rotates the slice's frequency coordinates (image frame)
+    into the volume frame, a passive rotation: a slice inserted with R is that
+    of the volume rotated by R^T. `backproject_2d_to_3d` takes the active
+    rotation R. Rotation matrices left-multiply xyz column vectors unless
+    `zyx_matrices` is True.
     """
     rotation_matrices = rotation_matrices.to(torch.float32)
     ft_dtype = image_rfft.dtype

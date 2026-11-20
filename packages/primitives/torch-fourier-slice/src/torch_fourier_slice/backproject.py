@@ -26,8 +26,12 @@ def backproject_2d_to_3d(
     images: torch.Tensor
         `(..., d, d)` array of 2D projection images.
     rotation_matrices: torch.Tensor
-        `(..., 3, 3)` array of rotation matrices for insert of `images`.
-        Rotation matrices left-multiply column vectors containing xyz coordinates.
+        `(..., 3, 3)` array of rotation matrices, one per image, in the same
+        convention as `project_3d_to_2d`: each image is a projection along z of
+        the volume rotated by its matrix (an active rotation). Rotation
+        matrices left-multiply column vectors containing xyz coordinates.
+        These are the transpose of the matrices `insert_central_slices_rfft_3d`
+        takes for the same image.
     pad_factor: float
         Factor determining the size after padding relative to the original size.
         A pad_factor of 2.0 doubles the box size, 3.0 triples it, etc.
@@ -76,11 +80,12 @@ def backproject_2d_to_3d(
     images = torch.fft.rfftn(images, dim=(-2, -1))
     images = torch.fft.fftshift(images, dim=(-2,))  # actual fftshift
 
-    # insert image DFTs into a 3D rfft as central slices
+    # insert image DFTs into a 3D rfft as central slices, the slice inserter takes
+    # the inverse (image -> volume) rotation of the active rotation we accept here
     dft, weights = insert_central_slices_rfft_3d(
         image_rfft=images,
         volume_shape=volume_shape,
-        rotation_matrices=rotation_matrices,
+        rotation_matrices=rotation_matrices.transpose(-1, -2),
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
         apply_ewald_curvature=apply_ewald_curvature,
@@ -128,9 +133,12 @@ def backproject_2d_to_3d_multichannel(
     images: torch.Tensor
         `(..., c, d, d)` multichannel tensors of 2D projection images.
     rotation_matrices: torch.Tensor
-        `(..., 3, 3)` array of rotation matrices to insert each channel of
-        `images`. Rotation matrices left-multiply column vectors containing
-        xyz coordinates.
+        `(..., 3, 3)` array of rotation matrices, one per multichannel image, in
+        the same convention as `project_3d_to_2d_multichannel`: each image is a
+        projection along z of the volume rotated by its matrix (an active
+        rotation). Rotation matrices left-multiply column vectors containing
+        xyz coordinates. These are the transpose of the matrices
+        `insert_central_slices_rfft_3d_multichannel` takes for the same image.
     pad_factor: float
         Factor determining the size after padding relative to the original size.
         A pad_factor of 2.0 doubles the box size, 3.0 triples it, etc.
@@ -179,11 +187,12 @@ def backproject_2d_to_3d_multichannel(
     images = torch.fft.rfftn(images, dim=(-2, -1))
     images = torch.fft.fftshift(images, dim=(-2,))  # actual fftshift
 
-    # insert image DFTs into a 3D rfft as central slices
+    # insert image DFTs into a 3D rfft as central slices, the slice inserter takes
+    # the inverse (image -> volume) rotation of the active rotation we accept here
     dft, weights = insert_central_slices_rfft_3d_multichannel(
         image_rfft=images,
         volume_shape=volume_shape,
-        rotation_matrices=rotation_matrices,
+        rotation_matrices=rotation_matrices.transpose(-1, -2),
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
         apply_ewald_curvature=apply_ewald_curvature,
