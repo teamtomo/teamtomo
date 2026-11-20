@@ -1,12 +1,10 @@
 """DFT utilities but currently only contains rotational averaging functions."""
 
-from collections.abc import Sequence
-
 import einops
 import torch
 import torch.nn.functional as F
+from torch_grid_utils import fftfreq_grid, fftfreq_shell_centers, rfft_shape
 from torch_grid_utils.coordinate_grid import coordinate_grid
-from torch_grid_utils.fftfreq_grid import fftfreq_grid, fftfreq_shell_centers
 
 
 def rotational_average_dft_2d(
@@ -440,27 +438,6 @@ def _frequency_bin_split_values(bin_centers: torch.Tensor) -> torch.Tensor:
     bin_centers = torch.concatenate([bin_centers, bin_centers[-1:] + df], dim=0)
     adjacent_bins = bin_centers.unfold(dimension=0, size=2, step=1)  # (b, 2)
     return einops.reduce(adjacent_bins, "b high_low -> b", reduction="mean")
-
-
-def rfft_shape(
-    input_shape: Sequence[int],
-) -> tuple[int, ...]:
-    """
-    Get the output shape of an rfft on an input with input_shape.
-
-    Parameters
-    ----------
-    input_shape : Sequence[int]
-        The shape of the input tensor
-
-    Returns
-    -------
-    Tuple[int]
-        The shape of the output tensor
-    """
-    rfft_shape = list(input_shape)
-    rfft_shape[-1] = int((rfft_shape[-1] / 2) + 1)
-    return tuple(rfft_shape)
 
 
 def bin_or_interpolate_to_output_size(

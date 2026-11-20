@@ -10,14 +10,17 @@ from torch_grid_utils.fft_shape import rfft_shape
 
 # no lru_cache as it interferes with gradient calculation (see torch-fourier-shift PR#5)
 def fftfreq_grid(
-    image_shape: tuple[int, int] | tuple[int, int, int],
+    image_shape: tuple[int] | tuple[int, int] | tuple[int, int, int],
     rfft: bool,
     fftshift: bool = False,
-    spacing: float | tuple[float, float] | tuple[float, float, float] = 1,
+    spacing: float
+    | tuple[float]
+    | tuple[float, float]
+    | tuple[float, float, float] = 1,
     norm: bool = False,
     device: torch.device | None = None,
 ) -> torch.Tensor:
-    """Construct a 2D or 3D grid of DFT sample frequencies.
+    """Construct a 1D, 2D or 3D grid of DFT sample frequencies.
 
     For a 2D image with shape `(h, w)` and `rfft=False` this function will produce
     a `(h, w, 2)` array of DFT sample frequencies in the `h` and `w` dimensions.
@@ -26,13 +29,13 @@ def fftfreq_grid(
 
     Parameters
     ----------
-    image_shape: tuple[int, int] | tuple[int, int, int]
-        Shape of the 2D or 3D image before computing the DFT.
+    image_shape: tuple[int] | tuple[int, int] | tuple[int, int, int]
+        Shape of the 1D, 2D or 3D image before computing the DFT.
     rfft: bool
         Whether the output should contain frequencies for a real-valued DFT.
     fftshift: bool
         Whether to fftshift the output grid.
-    spacing: float | tuple[float, float] | tuple[float, float, float]
+    spacing: float | tuple[float] | tuple[float, float] | tuple[float, float, float]
         Spacing between samples in each dimension. Sampling is considered to be
         isotropic if a single value is passed.
     norm: bool
@@ -46,7 +49,18 @@ def fftfreq_grid(
         `(*image_shape, ndim)` array of DFT sample frequencies in each
         image dimension if `norm` is `False` else `(*image_shape, )`.
     """
-    if len(image_shape) == 2:
+    if len(image_shape) == 1:
+        frequency_grid = _construct_fftfreq_grid_1d(
+            image_shape=image_shape,  # type: ignore[arg-type]
+            rfft=rfft,
+            spacing=spacing,  # type: ignore[arg-type]
+            device=device,
+        )
+        if fftshift is True:
+            frequency_grid = einops.rearrange(frequency_grid, "... freq -> freq ...")
+            frequency_grid = fftshift_1d(frequency_grid, rfft=rfft)
+            frequency_grid = einops.rearrange(frequency_grid, "freq ... -> ... freq")
+    elif len(image_shape) == 2:
         frequency_grid = _construct_fftfreq_grid_2d(
             image_shape=image_shape,
             rfft=rfft,
@@ -71,7 +85,7 @@ def fftfreq_grid(
     else:
         raise NotImplementedError(
             "Construction of fftfreq grids is currently only supported for "
-            "2D and 3D images."
+            "1D, 2D and 3D images."
         )
     if norm is True:
         frequency_grid = (
@@ -139,6 +153,19 @@ def transform_fftfreq_grid(
     transformed_grid = einops.rearrange(frequency_grid, "... d 1 -> ... d")
 
     return transformed_grid
+
+
+def _construct_fftfreq_grid_1d(
+    image_shape: tuple[int],
+    rfft: bool,
+    spacing: float | tuple[float] = 1,
+    device: torch.device | None = None,
+) -> torch.Tensor:
+    """Construct a `(w, 1)` grid of DFT sample freqs for a 1D signal `(w, )`."""
+    (dw,) = spacing if isinstance(spacing, Sequence) else [spacing]
+    frequency_func = torch.fft.rfftfreq if rfft is True else torch.fft.fftfreq
+    (w,) = image_shape
+    return frequency_func(w, d=dw, device=device).unsqueeze(-1)
 
 
 def _construct_fftfreq_grid_2d(

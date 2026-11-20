@@ -6,9 +6,8 @@ import einops
 import torch
 import torch.nn.functional as F
 from torch_fourier_shift import fourier_shift_dft_3d, fourier_shift_image_3d
-from torch_grid_utils import coordinate_grid
+from torch_grid_utils import coordinate_grid, dft_center
 
-from torch_subpixel_crop.dft_utils import dft_center
 from torch_subpixel_crop.grid_sample_utils import array_to_grid_sample
 
 
@@ -65,7 +64,7 @@ def subpixel_crop_3d(
 
     # generate coordinate grids for sampling around each integer position
     pd, ph, pw = (sidelength, sidelength, sidelength)
-    center = dft_center((pd, ph, pw), rfft=False, fftshifted=True, device=image.device)
+    center = dft_center((pd, ph, pw), rfft=False, fftshift=True, device=image.device)
     grid = coordinate_grid(
         image_shape=(pd, ph, pw), center=center, device=image.device
     )  # (d, h, w, 2)

@@ -1,6 +1,6 @@
 import einops
 import torch
-from torch_grid_utils.fftfreq_grid import rfft_shape
+from torch_grid_utils import rfft_shape
 
 from .._dft_utils import _fftfreq_to_dft_coordinates
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
