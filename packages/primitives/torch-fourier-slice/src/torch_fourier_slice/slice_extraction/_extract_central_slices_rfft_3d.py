@@ -151,6 +151,10 @@ def extract_central_slices_rfft_3d(
     # Get the shape of the original volume from the actual rfft tensor
     d, h, w_rfft = volume_rfft.shape[-3:]
     # cubic volume: real space width from the height (rfft widths are ambiguous)
+    if d != h:
+        raise ValueError(
+            f"Expected a cubic volume, but the rfft has depth {d} and height {h}."
+        )
     _, _, w = image_shape_from_dft_shape((d, h, w_rfft), rfft=True, assume_square=True)
     volume_shape = (d, h, w)
 
@@ -335,6 +339,10 @@ def extract_central_slices_rfft_3d_multichannel(
     # Get the shape of the original volume from the actual rfft tensor
     d, h, w_rfft = volume_rfft.shape[-3:]
     # cubic volume: real space width from the height (rfft widths are ambiguous)
+    if d != h:
+        raise ValueError(
+            f"Expected a cubic volume, but the rfft has depth {d} and height {h}."
+        )
     _, _, w = image_shape_from_dft_shape((d, h, w_rfft), rfft=True, assume_square=True)
     volume_shape = (d, h, w)
 

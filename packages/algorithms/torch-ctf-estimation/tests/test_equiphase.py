@@ -261,3 +261,33 @@ def test_equiphase_profile_is_mean_defocus_ctf(sidelength, astigmatism_angle_deg
     mse = ((epa[None, 4:] - ctf_1d[:, 4:] ** 2) ** 2).mean(dim=-1)
     best_defocus = float(defoci[mse.argmin()])
     assert best_defocus == pytest.approx(1.5, abs=0.02)
+
+
+@pytest.mark.parametrize(
+    ("ps_shape", "stale_sidelength"),
+    [((48, 31), 48), ((48, 31), (60, 60)), ((61, 25), (48, 48))],
+)
+def test_rotational_profile_rejects_mismatched_image_sidelength(
+    ps_shape, stale_sidelength
+):
+    """The rotational path checks image_sidelength against the spectrum too."""
+    from torch_ctf_estimation.estimate_ctf_1d.estimate_ctf_1d_utils import (
+        _average_power_to_1d_rfft,
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        _average_power_to_1d_rfft(
+            torch.ones(ps_shape),
+            stale_sidelength,
+            use_equiphase=False,
+            equiphase_defocus_um=None,
+            equiphase_astigmatism_um=None,
+            equiphase_astigmatism_angle_deg=None,
+            equiphase_phase_shift_deg=None,
+            voltage_kev=300.0,
+            spherical_aberration_mm=2.7,
+            amplitude_contrast=0.07,
+            pixel_spacing_angstroms=1.0,
+            laser_params=None,
+            equiphase_n_theta=8,
+        )

@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import operator
+
 
 def as_image_shape(image_sidelength: int | tuple[int, int]) -> tuple[int, int]:
-    """``(h, w)`` from a sidelength (square image) or an ``(h, w)`` shape."""
-    if isinstance(image_sidelength, int):
-        return (image_sidelength, image_sidelength)
-    h, w = image_sidelength[-2], image_sidelength[-1]
-    return (int(h), int(w))
+    """``(h, w)`` from a sidelength (square image) or an ``(h, w)`` shape.
+
+    Any integer scalar is accepted as a sidelength, including ``np.int64`` and 0-d
+    integer tensors.
+    """
+    try:
+        n = operator.index(image_sidelength)  # type: ignore[arg-type]
+    except TypeError:
+        h, w = image_sidelength[-2], image_sidelength[-1]  # type: ignore[index]
+        return (int(h), int(w))
+    return (n, n)
 
 
 def profile_sidelength(image_sidelength: int | tuple[int, int]) -> int:

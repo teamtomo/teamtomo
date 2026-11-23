@@ -140,7 +140,7 @@ def test_match_template_dft_2d_incompatible_image_shape(image_shape):
         )
 
 
-def test_match_template_dft_2d_without_image_shape_raises():
+def test_match_template_dft_2d_with_image_shape_none_raises():
     """The image width is ambiguous from its rfft (64 and 65 give 33 columns)."""
     image_dft = torch.zeros(64, 33, dtype=torch.complex64)
     template_dft = torch.zeros(16, 16, 9, dtype=torch.complex64)
@@ -151,6 +151,7 @@ def test_match_template_dft_2d_without_image_shape_raises():
             template_dft=template_dft,
             rotation_matrices=torch.eye(3).unsqueeze(0),
             filters=filters,
+            image_shape=None,
         )
 
 

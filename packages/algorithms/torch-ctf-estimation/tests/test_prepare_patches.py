@@ -1,5 +1,8 @@
 """Tests for prepare_image and patch/power-spectrum primitives."""
 
+import warnings
+
+import numpy as np
 import pytest
 import torch
 
@@ -9,6 +12,7 @@ from torch_ctf_estimation.utils.patches import (
     normalised_patch_positions,
 )
 from torch_ctf_estimation.utils.prepare_image import prepare_image_for_ctf
+from torch_ctf_estimation.utils.rfft_shape import as_image_shape
 
 
 def test_prepare_image_for_ctf_packs_and_rescales():
@@ -78,3 +82,44 @@ def test_prepare_image_returns_achieved_spacing():
     )
     assert prepared.shape[-2:] == (136, 136)
     assert spacing == pytest.approx(409 / 136)
+
+
+def test_prepare_image_small_spacing_mismatch_does_not_warn():
+    """h/w spacings 5e-4 apart (relative) are within tolerance: no warning."""
+    image = torch.randn(2000, 900)  # 2000 / 667 vs 900 / 300 Angstrom
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _prepared, spacing = prepare_image_for_ctf(
+            image,
+            pixel_spacing_angstroms=1.0,
+            target_pixel_spacing_angstroms=3.0,
+            device=torch.device("cpu"),
+        )
+    assert spacing == pytest.approx(0.5 * (2000 / 667 + 3.0))
+
+
+def test_prepare_image_large_spacing_mismatch_warns():
+    """h/w spacings 1e-2 apart (relative) warn and return their mean."""
+    image = torch.randn(100, 300)  # 100 / 33 vs 300 / 100 Angstrom
+    with pytest.warns(UserWarning, match="differs between h"):
+        _prepared, spacing = prepare_image_for_ctf(
+            image,
+            pixel_spacing_angstroms=1.0,
+            target_pixel_spacing_angstroms=3.0,
+            device=torch.device("cpu"),
+        )
+    assert spacing == pytest.approx(0.5 * (100 / 33 + 3.0))
+
+
+@pytest.mark.parametrize(
+    "sidelength", [48, np.int64(48), torch.tensor(48), torch.tensor(48).int()]
+)
+def test_as_image_shape_accepts_integer_scalars(sidelength):
+    assert as_image_shape(sidelength) == (48, 48)
+
+
+@pytest.mark.parametrize(
+    "shape", [(48, 61), [48, 61], torch.Size([2, 48, 61]), np.array([48, 61])]
+)
+def test_as_image_shape_takes_last_two_of_a_shape(shape):
+    assert as_image_shape(shape) == (48, 61)
