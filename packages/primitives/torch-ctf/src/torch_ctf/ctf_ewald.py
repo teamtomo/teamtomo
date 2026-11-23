@@ -241,8 +241,9 @@ def _enforce_symmetry(
 ) -> torch.Tensor:
     """Enforce Friedel symmetry along the y-axis at x=0 in rfft.
 
-    For pixels at x=0, +y must equal the complex conjugate of -y.
-    This ensures F(0, y) = F*(0, -y) for all y.
+    For pixels at x=0, +y must equal the complex conjugate of -y. This ensures
+    ``F(0, y) = F*(0, -y)`` for all y. Rows with ky < 0 are overwritten. DC and the
+    even-h Nyquist row are their own mirror and are left unchanged.
 
     Parameters
     ----------
@@ -258,70 +259,25 @@ def _enforce_symmetry(
     rfft_tensor : torch.Tensor
         The tensor with enforced symmetry.
     """
-    device = rfft_tensor.device
-    eps = 1e-10
+    h = image_shape[0]
+    out = rfft_tensor.clone()
+    col = out[..., 0]  # kx = 0 column, (..., h)
 
-    # Get frequency grid
-    fft_freq_grid = fftfreq_grid(
-        image_shape=image_shape,
-        rfft=True,
-        fftshift=fftshift,
-        norm=False,
-        device=device,
-    )
+    if fftshift:
+        col = torch.fft.ifftshift(col, dim=-1)
 
-    # fftfreq_grid returns (ky, kx) in its last dimension
-    y_coords = fft_freq_grid[..., 0]  # (h, w//2+1) - y frequencies
-    x_coords = fft_freq_grid[..., 1]  # (h, w//2+1) - x frequencies
+    # In an unshifted column, the sample holding -ky for row i is row (-i) % h
+    idx = torch.arange(h, device=col.device)
+    mirror = (-idx) % h
+    ky = torch.fft.fftfreq(h, device=col.device)
+    replace = (ky < 0) & (mirror != idx)  # even-h Nyquist row is its own mirror
+    col = torch.where(replace, torch.conj(col[..., mirror]), col)
 
-    # Find points at x=0
-    x_is_zero = torch.abs(x_coords) < eps
+    if fftshift:
+        col = torch.fft.fftshift(col, dim=-1)
+    out[..., 0] = col
 
-    # Find Friedel redundant points: x=0 and y<0
-    y_negative = y_coords < -eps
-    friedel_redundant = x_is_zero & y_negative
-
-    rfft_tensor = rfft_tensor.clone()
-
-    # For each point at x=0 with y<0, set it to conjugate of corresponding y>0 point
-    # Get indices of redundant points
-    redundant_indices = torch.where(friedel_redundant)
-    h_neg = redundant_indices[0]
-    w_neg = redundant_indices[1]
-
-    # Only process if there are redundant points
-    if len(h_neg) > 0:
-        # For each negative y point, find its positive y counterpart
-        y_neg_vals = y_coords[h_neg, w_neg]
-        y_pos_vals = -y_neg_vals
-
-        # Find matching positive y points at x=0
-        # Use broadcasting to find all matches
-        y_diff = torch.abs(y_coords[None, ...] - y_pos_vals[:, None, None])
-        # Only consider points at x=0
-        y_diff = torch.where(x_is_zero[None, ...], y_diff, torch.inf)
-        # Find minimum difference for each negative y
-        min_diff, min_indices_flat = torch.min(y_diff.view(len(y_neg_vals), -1), dim=1)
-        # Convert flat index back to (h, w) indices
-        _, w_shape = y_coords.shape
-        h_pos = min_indices_flat // w_shape
-        w_pos = min_indices_flat % w_shape
-
-        # Only process where we found a valid match
-        valid_match = min_diff < eps
-        if valid_match.any():
-            h_neg_valid = h_neg[valid_match]
-            w_neg_valid = w_neg[valid_match]
-            h_pos_valid = h_pos[valid_match]
-            w_pos_valid = w_pos[valid_match]
-
-            # Set negative y values to conjugate of positive y values
-            # F(0, y_neg) = F*(0, y_pos)
-            rfft_tensor[..., h_neg_valid, w_neg_valid] = torch.conj(
-                rfft_tensor[..., h_pos_valid, w_pos_valid]
-            )
-
-    return rfft_tensor
+    return out
 
 
 def _get_fourier_angle(

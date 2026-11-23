@@ -347,9 +347,9 @@ def test_enforce_symmetry_makes_kx0_column_hermitian(image_shape, fftshift):
     h, w = image_shape
     generator = torch.Generator().manual_seed(0)
     data = torch.complex(
-        torch.randn(h, w // 2 + 1, generator=generator),
-        torch.randn(h, w // 2 + 1, generator=generator),
-    )
+        torch.randn(2, h, w // 2 + 1, generator=generator),
+        torch.randn(2, h, w // 2 + 1, generator=generator),
+    )  # leading batch dimension
     if fftshift:
         data = torch.fft.fftshift(data, dim=-2)
     out = _enforce_symmetry(data, image_shape=image_shape, fftshift=fftshift)
@@ -359,7 +359,9 @@ def test_enforce_symmetry_makes_kx0_column_hermitian(image_shape, fftshift):
     _assert_column0_hermitian(out, h)
     # rows with ky > 0 and all other columns are unchanged
     torch.testing.assert_close(out[..., 1:], data[..., 1:])
-    torch.testing.assert_close(out[: (h + 1) // 2, 0], data[: (h + 1) // 2, 0])
+    torch.testing.assert_close(
+        out[..., : (h + 1) // 2, 0], data[..., : (h + 1) // 2, 0]
+    )
 
 
 @pytest.mark.parametrize("image_shape", [(20, 20), (21, 21), (21, 20)])
