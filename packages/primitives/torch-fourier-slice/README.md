@@ -98,6 +98,17 @@ reconstruction = backproject_2d_to_3d_multichannel(
 # shape is (5, 30, 30, 30)
 ```
 
+## Changed in 0.7.0
+
+- rfft inputs must be cubic (volumes) or square (slices), since the real width is
+  taken from the height. A volume with depth != height, or an rfft whose width is
+  not `h // 2 + 1`, raises `ValueError`; earlier versions assumed an even width.
+- Prepare volumes with `ifftshift` before `rfftn` (as in the docstrings), which
+  matters for odd sizes: `fftshift(rfftn(ifftshift(vol)), dim=(-3, -2))`.
+- Slices at the edges of the box are no longer dropped by float32 rounding, and
+  insertion keeps the even-size Nyquist sample.
+- `project_2d_to_1d(..., fftfreq_max=...)` no longer raises.
+
 ## License
 
 This project is licensed under the BSD 3-Clause License - see the LICENSE file for details.

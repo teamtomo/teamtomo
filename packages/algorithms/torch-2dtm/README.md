@@ -72,6 +72,13 @@ cross_correlation = torch_2dtm.match_template_dft_2d(
 # The result has shape (..., num_orientations, image_height, image_width)
 ```
 
+## Changed in 0.7.0
+
+- `match_template_dft_2d` requires `image_shape`, the real-space `(h, w)` of the
+  image, since rfft widths `2k` and `2k + 1` are the same.
+- Odd image and template sizes are supported. Templates must be cubic and
+  prepared as in the example above; the cross-correlation has the image's shape.
+
 ## License
 
 This project is licensed under the BSD 3-Clause License - see the LICENSE file for details.
