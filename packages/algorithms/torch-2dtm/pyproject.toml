@@ -52,7 +52,7 @@ dependencies = [
     "torch",
     "einops",
     "torch-fourier-slice",
-    "torch-grid-utils",
+    "torch-grid-utils>=0.7.0",
     "setuptools",          # needed for torch compilation? lol
 ]
 
