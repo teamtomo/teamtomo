@@ -49,11 +49,11 @@ dependencies = [
     "scipy",
     "teamtomo-basemodel",
     "torch",
-    "torch-ctf",
+    "torch-ctf>=0.7.0",
     "torch-cubic-spline-grids",
     "torch-fourier-filter",
     "torch-fourier-rescale",
-    "torch-grid-utils",
+    "torch-grid-utils>=0.7.0",
     "torch-image-interpolation",
     "torchvision",
 ]
