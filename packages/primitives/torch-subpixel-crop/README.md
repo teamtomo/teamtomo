@@ -7,3 +7,9 @@
 [![codecov](https://codecov.io/gh/alisterburt/torch-subimage/branch/main/graph/badge.svg)](https://codecov.io/gh/alisterburt/torch-subimage)
 
 Crop 2D/3D images with subpixel precision in PyTorch
+
+## Changed in 0.7.0
+
+- With `decenter=True`, the patch center now lands at index 0 for odd sidelengths
+  too (it was at index `n - 1`). Undo it with `fftshift`. Even sidelengths are
+  unchanged.

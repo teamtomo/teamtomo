@@ -67,6 +67,16 @@ has not changed; it now agrees with `calculate_ctf_1d` and `calculate_ctf_2d`. T
 functions) are unchanged. If you multiplied projections by -1 before applying the
 CTF to get dark particles, drop that flip.
 
+Also changed in 0.7.0:
+
+- `calculate_ctf_1d` and `calculate_ctf_thickness_1d` take an optional
+  `image_sidelength` to sample at `rfftfreq(image_sidelength)`, matching the
+  `ky = 0` row of the 2D rfft CTF for odd and even sizes. The default grid is
+  unchanged.
+- `calculate_ctfp_and_ctfq_2d` with `discontinuity_angle=0` now makes the
+  `kx = 0` column Hermitian, as intended. It reads the frequency grid as
+  `[ky, kx]`; before, it read it the wrong way round and changed nothing.
+
 ## Development
 
 The easiest way to get started is to use the [github cli](https://cli.github.com)

@@ -58,3 +58,22 @@ thickness = ThicknessParams(refine_dim="2d")
 result = estimate_ctf_and_thickness(image, optical, fitting, thickness)
 result.result2d, result.thickness1d, result.thickness_joint
 ```
+
+## Changed in 0.7.0
+
+- Requires `torch-ctf>=0.7.0` and `torch-grid-utils>=0.7.0`.
+- `extract_ctf_patches` returns the patch shape as an `(h, w)` tuple instead of a
+  sidelength.
+- The 2D estimators, `apply_laser_axis_mask`, `warp_rfft_power_isotropic` and the
+  tilt-corrected power spectra take an optional `image_shape`. Without it the
+  patches are assumed square, and a spectrum whose width is not `h // 2 + 1`
+  raises `ValueError`. Pass `image_shape` for non-square patches.
+- Odd patch sizes no longer give false astigmatism (2D) or a defocus bias (1D),
+  and non-square whole images are fitted with their true shape.
+- The returned pixel spacing is the one the rescale achieved, which can differ
+  slightly from the target (e.g. 3.00073 Å instead of 3 Å).
+- The single-laser axis mask measures `laser_xy_angle_deg` from +ky, like the LPP
+  model, so it masks the strip the laser actually covers. Dual-laser masks (the
+  default) are unchanged.
+- The equiphase 1D profile is referenced to the mean defocus, so astigmatism no
+  longer shifts the fitted 1D defocus.
