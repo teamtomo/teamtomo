@@ -127,7 +127,9 @@ class LaserParams(BaseModel):
     focal_length_angstrom : float
         Focal length in Angstrom.
     laser_xy_angle_deg : float
-        Laser angle in the XY plane in degrees.
+        Laser angle in the XY plane in degrees, measured from the +ky axis (row
+        direction) towards +kx: 0 puts the laser along ky, 90 along kx. Used by
+        both the LPP model and the laser-axis mask.
     laser_xz_angle_deg : float
         Laser angle in the XZ plane in degrees.
     laser_long_offset_angstrom : float
@@ -139,7 +141,7 @@ class LaserParams(BaseModel):
     peak_phase_deg : float
         Peak phase in degrees.
     dual_laser : bool
-        Whether a dual-laser setup is used. Default is False.
+        Whether a dual-laser setup is used. Default is True.
     """
 
     model_laser: bool = False

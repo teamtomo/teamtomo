@@ -738,7 +738,8 @@ def test_apply_laser_axis_mask_odd_width():
     ky = torch.fft.fftfreq(21).reshape(-1, 1)
     kx = torch.fft.rfftfreq(21).reshape(1, -1)
     theta = math.radians(30.0)
-    manual = (torch.abs(ky * math.cos(theta) - kx * math.sin(theta)) >= 0.05).float()
+    # axis along (ky, kx) = (cos θ, sin θ), angle measured from +ky
+    manual = (torch.abs(kx * math.cos(theta) - ky * math.sin(theta)) >= 0.05).float()
     torch.testing.assert_close(expected, manual)
     for image_shape in [(21, 21), None]:
         _, _, mask = apply_laser_axis_mask(

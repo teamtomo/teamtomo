@@ -27,8 +27,11 @@ def build_laser_axis_mask(
         Real-space patch shape ``(H, W)``. The mask will have shape
         ``(H, W // 2 + 1)`` matching the rFFT output.
     laser_xy_angle_deg : float
-        Angle of the first laser axis in degrees, measured from the x-axis
-        (column direction) in the image plane.
+        Angle of the first laser axis in degrees, measured from the +ky axis
+        (row direction) towards +kx: 0 puts the axis along ky, 90 along kx. This
+        is the convention of the LPP model in torch-ctf
+        (:func:`torch_ctf.ctf_lpp.make_laser_coords`), so the mask covers the
+        same strip the modelled laser does.
     dual_laser : bool
         If True, also mask the orthogonal axis at ``laser_xy_angle_deg + 90°``.
     mask_width : float
@@ -50,22 +53,15 @@ def build_laser_axis_mask(
     ky = torch.fft.fftfreq(h, device=device).reshape(-1, 1)  # pylint: disable=not-callable
     kx = torch.fft.rfftfreq(w, device=device).reshape(1, -1)  # pylint: disable=not-callable
 
-    theta = math.radians(laser_xy_angle_deg)
-    cos_t = math.cos(theta)
-    sin_t = math.sin(theta)
+    def _distance_to_axis(angle_deg: float) -> torch.Tensor:
+        # The axis at angle θ from +ky towards +kx runs along
+        # (ky, kx) = (cos θ, sin θ); its normal is (-sin θ, cos θ).
+        theta = math.radians(angle_deg)
+        return torch.abs(kx * math.cos(theta) - ky * math.sin(theta))
 
-    # Distance from each frequency pixel to the line through origin at angle θ.
-    # The perpendicular direction to (cos θ, sin θ) is (-sin θ, cos θ), so the
-    # signed distance is: kx * (-sin θ) + ky * cos θ  (using kx for columns).
-    dist1 = torch.abs(ky * cos_t - kx * sin_t)
-    mask = dist1 >= half_width
-
+    mask = _distance_to_axis(laser_xy_angle_deg) >= half_width
     if dual_laser:
-        theta2 = theta + math.pi / 2.0
-        cos_t2 = math.cos(theta2)
-        sin_t2 = math.sin(theta2)
-        dist2 = torch.abs(ky * cos_t2 - kx * sin_t2)
-        mask = mask & (dist2 >= half_width)
+        mask = mask & (_distance_to_axis(laser_xy_angle_deg + 90.0) >= half_width)
 
     return mask.float()
 
