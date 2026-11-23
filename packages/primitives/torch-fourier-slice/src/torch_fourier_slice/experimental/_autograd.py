@@ -42,6 +42,7 @@ from ._ops import (
     run_scatter_line_2d,
     run_weight_grad,
 )
+from ._validation import even_line_sidelength
 
 
 def _reduce_to(grad: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -300,7 +301,7 @@ class InsertLineForward(torch.autograd.Function):
         interpolation: str,
     ):
         lines4 = lines.unsqueeze(0) if lines.dim() == 2 else lines
-        line_sidelength = 2 * (int(lines4.shape[2]) - 1)
+        line_sidelength = even_line_sidelength(lines4.shape[2])
         data_vol, weight_vol = run_scatter_line(
             lines,
             directions,
@@ -478,7 +479,7 @@ class InsertLine2DForward(torch.autograd.Function):
         interpolation: str,
     ):
         lines3 = lines.unsqueeze(0) if lines.dim() == 2 else lines
-        line_sidelength = 2 * (int(lines3.shape[2]) - 1)
+        line_sidelength = even_line_sidelength(lines3.shape[2])
         image_shape = (line_sidelength, line_sidelength // 2 + 1)
         img, wimg = run_scatter_line_2d(
             lines,

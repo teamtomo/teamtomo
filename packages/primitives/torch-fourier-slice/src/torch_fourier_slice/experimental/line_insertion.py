@@ -19,6 +19,10 @@ Two rank forms share one Mojo kernel; the Python layer only squeezes / transpose
 the *conjugate* 3D-shift phase ramp (the forward adjoint). ``weights`` is an
 optional real per-sample tensor matching ``lines``, accumulated into a separate
 weight volume.
+
+``lines`` must be the rfft of even-length lines, as the extractors produce: an
+odd-length line has the same rfft width, so its length can't be recovered and
+the output size is taken as ``2 * (w - 1)``.
 """
 
 from __future__ import annotations
