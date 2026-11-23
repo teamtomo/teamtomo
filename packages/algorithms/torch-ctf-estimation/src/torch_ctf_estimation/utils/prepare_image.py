@@ -41,9 +41,9 @@ def prepare_image_for_ctf(
     pixel_spacing_used : float
         Pixel spacing actually achieved by the rescale. The output size is
         rounded to whole pixels, so this can differ slightly from the requested
-        spacing (e.g. 4096 px at 1 Å becomes 1365 px at 3.00073 Å). If the h and
-        w spacings differ by more than 1e-4 (relative), a warning is issued and
-        their mean is returned.
+        spacing (e.g. 4096 px at 1 Å becomes 1365 px at 3.00073 Å). The mean of
+        the h and w spacings is returned, with a warning if they differ by more
+        than 1e-3 (relative).
     """
     if device is not None:
         image = image.to(device)
@@ -57,7 +57,7 @@ def prepare_image_for_ctf(
         target_spacing=requested_spacing,
     )
     spacing_h, spacing_w = float(spacing_h), float(spacing_w)
-    if abs(spacing_h - spacing_w) > 1e-4 * max(spacing_h, spacing_w):
+    if abs(spacing_h - spacing_w) > 1e-3 * max(spacing_h, spacing_w):
         warnings.warn(
             f"Rescaled pixel spacing differs between h ({spacing_h:.6f} Å) and w "
             f"({spacing_w:.6f} Å); using their mean for isotropic CTF fitting.",

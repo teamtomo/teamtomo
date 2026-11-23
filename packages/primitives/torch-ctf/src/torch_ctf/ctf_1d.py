@@ -194,12 +194,15 @@ def _setup_ctf_1d(
         fftfreq_grid = (
             torch.arange(n_samples, dtype=torch.float, device=device) / image_sidelength
         )
-        frequency_delta = 1 / image_sidelength
     else:
         fftfreq_grid = torch.linspace(0, 0.5, steps=n_samples, device=device)
-        frequency_delta = 0.5 / (n_samples - 1)
     # oversampling...
     if oversampling_factor > 1:
+        # spacing between samples (only needed here, so n_samples=1 still works)
+        if image_sidelength is not None:
+            frequency_delta = 1 / image_sidelength
+        else:
+            frequency_delta = 0.5 / (n_samples - 1)
         oversampled_frequency_delta = frequency_delta / oversampling_factor
         oversampled_interval_length = oversampled_frequency_delta * (
             oversampling_factor - 1

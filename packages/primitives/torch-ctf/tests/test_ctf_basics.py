@@ -797,6 +797,17 @@ def test_1d_ctf_image_sidelength_matches_2d_rfft_row(n):
     assert torch.allclose(ctf_1d, ctf_2d[0], atol=1e-6)
 
 
+def test_1d_ctf_single_sample():
+    """n_samples=1 samples only DC, with or without image_sidelength."""
+    result = calculate_ctf_1d(**_CTF_1D_KWARGS, n_samples=1, oversampling_factor=1)
+    dc_from_sidelength = calculate_ctf_1d(
+        **_CTF_1D_KWARGS, n_samples=1, oversampling_factor=1, image_sidelength=1
+    )
+    assert result.shape == (1,)
+    assert torch.isfinite(result).all()
+    torch.testing.assert_close(result, dc_from_sidelength)
+
+
 def test_1d_ctf_default_grid_is_linspace():
     """Without image_sidelength the grid is linspace(0, 0.5, n_samples)."""
     n_samples = 11

@@ -9,6 +9,7 @@ import torch
 from torch_ctf import calculate_ctf_1d
 from torch_cubic_spline_grids import CubicBSplineGrid1d
 from torch_fourier_filter.dft_utils import rotational_average_dft_2d
+from torch_grid_utils import image_shape_from_dft_shape
 from torch_grid_utils.fftfreq_grid import (
     fftfreq_shell_centers,
     fftfreq_to_spatial_frequency,
@@ -130,6 +131,10 @@ def _average_power_to_1d_rfft(
     """Rotational or equiphase 1D profile (same length as rfftfreq bins)."""
     h, w = as_image_shape(image_sidelength)
     if not use_equiphase:
+        # NOTE: stale (h, w) gives wrong shells, so re-check shape from power_spectrum
+        image_shape_from_dft_shape(
+            power_spectrum.shape[-2:], rfft=True, image_shape=(h, w)
+        )
         ps_cpu = power_spectrum.cpu()
         averaged, _ = rotational_average_dft_2d(
             ps_cpu,

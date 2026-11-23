@@ -27,7 +27,7 @@ def match_template_dft_2d(
     template_dft: torch.Tensor,
     rotation_matrices: torch.Tensor,
     filters: torch.Tensor,
-    image_shape: tuple[int, int] | None = None,
+    image_shape: tuple[int, int],
 ) -> torch.Tensor:
     """Batched projection and cross-correlation with a set of filters.
 
@@ -61,10 +61,10 @@ def match_template_dft_2d(
     filters : torch.Tensor
         `(..., d, d // 2 + 1)` filters applied to FFT slices which are fftshifted
         results of a rfft.
-    image_shape : tuple[int, int] | None
-        `(h_im, w_im)` real space shape of the image. Required, since the rfft of
-        widths `2k` and `2k + 1` have the same number of columns; a `ValueError` is
-        raised when it is missing or does not match `image_dft`.
+    image_shape : tuple[int, int]
+        `(h_im, w_im)` real space shape of the image, needed because the rfft of
+        widths `2k` and `2k + 1` have the same number of columns. A `ValueError` is
+        raised if it does not match `image_dft`.
 
     Returns
     -------
