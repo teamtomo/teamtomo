@@ -52,9 +52,22 @@ def image_shape_from_dft_shape(
         the width of an rfft is ambiguous.
     """
     dft_shape = tuple(int(n) for n in dft_shape)
+
+    # full DFT of a real or complex image: no ambiguity
+    if not rfft:
+        if image_shape is not None:
+            image_shape = tuple(int(n) for n in image_shape)
+            if dft_shape != image_shape:
+                raise ValueError(
+                    f"Provided 'image_shape' ({image_shape}) does not match "
+                    f"DFT shape ({dft_shape})."
+                )
+            return image_shape
+        return dft_shape
+
     if image_shape is not None:
         image_shape = tuple(int(n) for n in image_shape)
-        expected_shape = rfft_shape(image_shape) if rfft else image_shape
+        expected_shape = rfft_shape(image_shape)
         if dft_shape != expected_shape:
             raise ValueError(
                 f"Expected DFT shape ({expected_shape}) implied by "
@@ -62,10 +75,6 @@ def image_shape_from_dft_shape(
                 f"DFT shape ({dft_shape})."
             )
         return image_shape
-
-    # full DFT of a real or complex image: no ambiguity
-    if not rfft:
-        return dft_shape
 
     # square/cubic images, e.g. Fourier slices, projections and their volumes
     if assume_square:
