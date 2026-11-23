@@ -16,6 +16,7 @@ from torch_fit_in_map import (
     ExhaustiveSearchConfig,
     PotentialSimulatorConfig,
     apply_alignment_to_structure,
+    crop_or_pad_to_shape,
     fit_map_in_structure,
     fit_structure_in_map,
 )
@@ -145,6 +146,71 @@ def test_apply_alignment_to_structure_identity_centres_in_box():
     box_centre_A = (box - 1) / 2.0 * px
     centroid = out[["x", "y", "z"]].to_numpy().mean(0)
     np.testing.assert_allclose(centroid, [box_centre_A] * 3, atol=1e-3)
+
+
+def _density_centroid_zyx(volume: torch.Tensor) -> np.ndarray:
+    """Intensity-weighted centroid of a volume, in zyx voxels."""
+    axes = [torch.arange(n, dtype=torch.float64) for n in volume.shape]
+    grid = torch.stack(torch.meshgrid(*axes, indexing="ij"), dim=-1)
+    weights = volume.double().unsqueeze(-1)
+    return ((grid * weights).sum((0, 1, 2)) / weights.sum()).numpy()
+
+
+@pytest.mark.parametrize("sim_box_size", [40, 41, 47, 48, 52, 53])
+def test_apply_alignment_to_structure_follows_crop_and_pad(sim_box_size):
+    """Identity alignment puts the atoms on their simulated potential.
+
+    The simulation box is padded up to the map (40, 41, 47), matches it (48)
+    or is cropped down to it (52, 53), with even and odd size differences.
+    """
+    atoms = _make_atoms()
+    px = 2.0
+    box_shape = (48, 48, 48)
+    simulated = _GaussianSimulator().simulate(atoms, px, sim_box_size)
+    simulated = crop_or_pad_to_shape(simulated, box_shape)
+    result = AlignmentResult(
+        torch.eye(3), torch.zeros(3), score=1.0, sim_box_size=sim_box_size
+    )
+
+    out = apply_alignment_to_structure(
+        atoms, result, pixel_size=px, box_shape=box_shape
+    )
+
+    atom_centroid_zyx = out[["z", "y", "x"]].to_numpy().mean(0) / px
+    np.testing.assert_allclose(
+        atom_centroid_zyx, _density_centroid_zyx(simulated), atol=1e-3
+    )
+
+
+def test_fit_structure_in_map_records_sim_box_size_for_padded_simulation():
+    """Atoms fitted from a box smaller than the map land on the map's density."""
+    atoms = _make_atoms()
+    sim = _GaussianSimulator()
+    px = 2.0
+    reference = sim.simulate(atoms, px, 32)
+    box = 24  # padded by 4 voxels per side to match the reference
+
+    result = fit_structure_in_map(
+        mobile_atoms=atoms,
+        reference_map=reference,
+        pixel_size_angstroms=px,
+        box_size=box,
+        simulator=sim,
+        exhaustive_config=ExhaustiveSearchConfig(
+            angular_step_degrees=90.0, pixel_size_angstroms=px
+        ),
+        gradient_config=None,
+        verbose=False,
+    )
+    assert result.sim_box_size == box
+
+    out = apply_alignment_to_structure(
+        atoms, result, pixel_size=px, box_shape=tuple(reference.shape)
+    )
+    atom_centroid_zyx = out[["z", "y", "x"]].to_numpy().mean(0) / px
+    np.testing.assert_allclose(
+        atom_centroid_zyx, _density_centroid_zyx(reference), atol=1e-3
+    )
 
 
 def test_default_workspace_simulator_produces_zyx_volume_and_fits():
