@@ -206,3 +206,58 @@ def test_equiphase_radial_power_any_shape(image_shape):
     expected = torch.fft.rfftfreq(n) ** 2
     assert epa.shape == (n // 2 + 1,)
     torch.testing.assert_close(epa, expected, rtol=0.0, atol=1.0 / n**2)
+
+
+@pytest.mark.parametrize("sidelength", [128, 129])
+@pytest.mark.parametrize("astigmatism_angle_deg", [0.0, 30.0, 90.0])
+def test_equiphase_profile_is_mean_defocus_ctf(sidelength, astigmatism_angle_deg):
+    """An astigmatic CTF^2 averages to the 1D CTF^2 of the mean defocus.
+
+    Referencing chi on the +kx axis with astigmatism would give the defocus along
+    kx instead, mean + astigmatism * cos(2 angle): 1.6, 1.55 and 1.4 um here.
+    """
+    from torch_ctf import calculate_ctf_1d, calculate_ctf_2d
+
+    pixel = 2.0
+    optics = {
+        "voltage": 300.0,
+        "spherical_aberration": 2.7,
+        "amplitude_contrast": 0.07,
+        "phase_shift": 0.0,
+        "pixel_size": pixel,
+    }
+    ctf_2d = calculate_ctf_2d(
+        defocus=1.5,
+        astigmatism=0.1,
+        astigmatism_angle=astigmatism_angle_deg,
+        image_shape=(sidelength, sidelength),
+        rfft=True,
+        fftshift=False,
+        **optics,
+    )
+    ps = (ctf_2d**2).reshape(sidelength, sidelength // 2 + 1)
+    epa = equiphase_average_power_to_1d_rfft(
+        ps,
+        sidelength,
+        pixel,
+        defocus_um=1.5,
+        astigmatism_um=0.1,
+        astigmatism_angle_deg=astigmatism_angle_deg,
+        phase_shift_deg=0.0,
+        voltage_kev=300.0,
+        spherical_aberration_mm=2.7,
+        amplitude_contrast=0.07,
+        n_theta=64,
+    )
+
+    defoci = torch.arange(1.30, 1.70001, 0.005)
+    ctf_1d = calculate_ctf_1d(
+        defocus=defoci,
+        n_samples=sidelength // 2 + 1,
+        oversampling_factor=1,
+        image_sidelength=sidelength,
+        **optics,
+    ).reshape(len(defoci), -1)
+    mse = ((epa[None, 4:] - ctf_1d[:, 4:] ** 2) ** 2).mean(dim=-1)
+    best_defocus = float(defoci[mse.argmin()])
+    assert best_defocus == pytest.approx(1.5, abs=0.02)

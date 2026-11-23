@@ -229,7 +229,9 @@ def equiphase_average_power_to_1d_rfft(
     With ``n = min(H, W)``, sample ``i`` is referenced to the point
     ``(kx, ky) = (i / n, 0)`` cycles/pixel, so the profile sits at
     ``rfftfreq(n)``. Each sample averages the power over ``n_theta`` azimuths at
-    the radius where chi equals chi at that reference point.
+    the radius where chi equals the reference chi. The reference chi uses the
+    mean defocus (no astigmatism), so the profile is that of a CTF with the mean
+    defocus, which is what the 1D models fit, whatever the astigmatism angle.
 
     Parameters
     ----------
@@ -291,27 +293,28 @@ def equiphase_average_power_to_1d_rfft(
     sphi = thetas.sin()
     kx_g = s_cand[:, :, None] * cphi[None, None, :]
     ky_g = s_cand[:, :, None] * sphi[None, None, :]
-    # Evaluate the candidates and the reference points in one batch, so the LPP
-    # peak-phase normalisation is shared between them.
-    chi_all = _chi_at_kxy_batch(
-        torch.cat([kx_g.reshape(-1), q_refs]),
-        torch.cat([ky_g.reshape(-1), torch.zeros_like(q_refs)]),
-        defocus_um=defocus_um,
-        astigmatism_um=astigmatism_um,
-        astigmatism_angle_deg=astigmatism_angle_deg,
-        voltage_kev=voltage_kev,
-        spherical_aberration_mm=spherical_aberration_mm,
-        amplitude_contrast=amplitude_contrast,
-        phase_shift_deg=phase_shift_deg,
-        pixel_size_angstrom=torch.as_tensor(
+    chi_kwargs = {
+        "defocus_um": defocus_um,
+        "astigmatism_angle_deg": astigmatism_angle_deg,
+        "voltage_kev": voltage_kev,
+        "spherical_aberration_mm": spherical_aberration_mm,
+        "amplitude_contrast": amplitude_contrast,
+        "phase_shift_deg": phase_shift_deg,
+        "pixel_size_angstrom": torch.as_tensor(
             pixel_spacing_angstroms, device=device, dtype=qdtype
         ),
-        laser_params=laser_params,
-        device=device,
-        dtype=qdtype,
+        "laser_params": laser_params,
+        "device": device,
+        "dtype": qdtype,
+    }
+    chi_bgt = _chi_at_kxy_batch(
+        kx_g, ky_g, astigmatism_um=astigmatism_um, **chi_kwargs
+    )  # (n_bins, n_grid, n_theta)
+    # Reference chi at the mean defocus. With astigmatism, chi on the +kx axis
+    # would correspond to the defocus along kx, mean + astigmatism * cos(2 angle).
+    chi_refs = _chi_at_kxy_batch(
+        q_refs, torch.zeros_like(q_refs), astigmatism_um=0.0, **chi_kwargs
     )
-    chi_bgt = chi_all[: n_bins * n_grid * n_theta].reshape(n_bins, n_grid, n_theta)
-    chi_refs = chi_all[n_bins * n_grid * n_theta :]
     err = (chi_bgt - chi_refs.view(n_bins, 1, 1)).abs()
     s_sol = torch.gather(s_cand, 1, err.argmin(dim=1))
     kx = s_sol * cphi
