@@ -19,6 +19,7 @@ from ._device import prepare_launch
 from ._loader import device_session, kernels
 from ._validation import (
     KernelParams,
+    even_line_sidelength,
     interp_code,
     prep_directions_3d,
     prep_shifts_3d,
@@ -134,7 +135,7 @@ def run_insert_lines_3d(
     else:
         w_in = torch.zeros(bv, bp, w, dtype=torch.float32, device=tgt)  # unused
 
-    line_sidelength = 2 * (w - 1)
+    line_sidelength = even_line_sidelength(w)
     radius = (
         line_sidelength / 2.0
         if fftfreq_max is None
@@ -194,7 +195,7 @@ def run_line_3d_pose_grad(
     bv_shift_3d = shifts_3d_t.shape[0]
     if line_pixels.dim() == 2:
         line_pixels = line_pixels.unsqueeze(0)
-    line_sidelength = 2 * (int(line_pixels.shape[2]) - 1)
+    line_sidelength = even_line_sidelength(line_pixels.shape[2])
 
     vol_r = torch.view_as_real(
         volume.to(device=tgt, dtype=torch.complex64).contiguous()
@@ -400,7 +401,7 @@ class InsertLines3D(torch.autograd.Function):
         interpolation: str,
     ):
         lines4 = lines.unsqueeze(0) if lines.dim() == 2 else lines
-        line_sidelength = 2 * (int(lines4.shape[2]) - 1)
+        line_sidelength = even_line_sidelength(lines4.shape[2])
         data_vol, weight_vol = run_insert_lines_3d(
             lines,
             directions,

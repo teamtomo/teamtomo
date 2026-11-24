@@ -34,6 +34,12 @@ pip install torch-tilt-series[io]
 
 See the [`examples/`](examples/) folder for scripts showing how to load a tilt series, reconstruct subvolumes and tomograms, and save the result.
 
+## Changed in 0.7.0
+
+- `reconstruct_subvolume` returns `(s, s, s)` for odd `sidelength` (it returned
+  `s + 1`), and `reconstruct_tomogram` no longer places odd-sized patches one voxel
+  off.
+
 ## License
 
 This project is licensed under the BSD 3-Clause License - see the LICENSE file for details.

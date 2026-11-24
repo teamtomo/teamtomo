@@ -22,3 +22,15 @@ Make sure to run tests before any commits:
 python -m pytest
 ```
 
+## Changed in 0.7.0
+
+- `power_spectral_density` and `whitening_filter` take `image_shape`, which is
+  required for rfft input (the default) and raises `ValueError` when missing:
+  real widths `2k` and `2k + 1` give the same rfft width. Odd widths now work.
+- `whitening.real_space_shape_from_dft_shape` and `dft_utils.rfft_shape` are
+  removed. Use `torch_grid_utils.image_shape_from_dft_shape` and
+  `torch_grid_utils.rfft_shape`.
+- `phase_randomize` keeps the spectrum Hermitian, so it preserves magnitudes and
+  returns real images for any size. Random outputs differ from earlier versions.
+- `rotational_average_dft_2d` and `rotational_average_dft_3d` bin centers are at
+  `k / n`, which changes the frequencies for odd sizes only.

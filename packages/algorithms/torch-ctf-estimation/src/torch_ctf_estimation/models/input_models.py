@@ -72,6 +72,15 @@ class CTFFittingParams(_EarlyStoppingMixin):
     optimize_astigmatism: bool = True
     defocus_model: Literal["grid", "linear"] = "grid"
     use_1d_defocus_for_spatial: bool = False
+    spatial_1d_defocus_window_microns: float = Field(
+        default=1.0,
+        gt=0.0,
+        description=(
+            "With use_1d_defocus_for_spatial, each patch's 1D fit searches defocus "
+            "within this half-width (µm) of the whole-image defocus, clipped to "
+            "defocus_range_microns, before refining."
+        ),
+    )
     use_equiphase_for_1d_spatial: bool = True
     equiphase_n_theta: int = 64
     linear_fix_defocus_0_from_1x1: bool = False
@@ -118,7 +127,9 @@ class LaserParams(BaseModel):
     focal_length_angstrom : float
         Focal length in Angstrom.
     laser_xy_angle_deg : float
-        Laser angle in the XY plane in degrees.
+        Laser angle in the XY plane in degrees, measured from the +ky axis (row
+        direction) towards +kx: 0 puts the laser along ky, 90 along kx. Used by
+        both the LPP model and the laser-axis mask.
     laser_xz_angle_deg : float
         Laser angle in the XZ plane in degrees.
     laser_long_offset_angstrom : float
@@ -130,7 +141,7 @@ class LaserParams(BaseModel):
     peak_phase_deg : float
         Peak phase in degrees.
     dual_laser : bool
-        Whether a dual-laser setup is used. Default is False.
+        Whether a dual-laser setup is used. Default is True.
     """
 
     model_laser: bool = False

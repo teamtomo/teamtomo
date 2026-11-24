@@ -118,16 +118,28 @@ def make_laser_coords(
 ) -> torch.Tensor:
     """Make the laser coordinates for the CTF.
 
+    The coordinates are ``[k0, k1] @ R(θ)`` with ``R = [[cos, -sin], [sin, cos]]``,
+    then offset and scaled. ``Lx`` (longitudinal) is ``k0 cos θ + k1 sin θ`` and
+    ``Ly`` (transverse) is ``k1 cos θ - k0 sin θ``.
+
+    With the ``[ky, kx]`` grid from :func:`torch_grid_utils.fftfreq_grid`, which
+    is what :func:`calc_LPP_phase` and :func:`calc_LPP_ctf_2D` pass, the laser
+    axis (``Ly = 0``) points along ``(kx, ky) = (sin θ, cos θ)``. That is,
+    ``laser_xy_angle_deg`` is measured from the +ky axis (row direction)
+    towards +kx: 0 puts the laser along ky, 90 puts it along kx.
+
     Parameters
     ----------
     fft_freq_grid_angstrom : torch.Tensor
-        FFT frequency grid in Angstroms^-1, shape (..., H, W, 2) with last dim [x, y].
+        FFT frequency grid in Angstroms^-1, shape (..., H, W, 2). The last dim is
+        ``[ky, kx]`` when it comes from :func:`torch_grid_utils.fftfreq_grid`.
     electron_wavelength_angstrom : float
         Electron wavelength in Angstroms.
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation angle in degrees.
+        Laser rotation angle in degrees, measured from the axis of the first
+        grid component (+ky for a ``[ky, kx]`` grid) towards the second.
     laser_long_offset_angstrom : float
         Longitudinal offset in Angstroms.
     laser_trans_offset_angstrom : float
@@ -360,7 +372,8 @@ def calc_LPP_phase(
     Parameters
     ----------
     fft_freq_grid : torch.Tensor
-        FFT frequency grid in cycles/Å, shape (..., H, W, 2).
+        FFT frequency grid in cycles/Å, shape (..., H, W, 2), with last dim
+        ``[ky, kx]`` as from :func:`torch_grid_utils.fftfreq_grid`.
     NA : float
         Numerical aperture of the laser.
     laser_wavelength_angstrom : float
@@ -368,7 +381,8 @@ def calc_LPP_phase(
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation angle in the xy plane in degrees.
+        Laser rotation angle in the xy plane in degrees, measured from the +ky
+        axis (row direction) towards +kx. See :func:`make_laser_coords`.
     laser_xz_angle_deg : float
         Laser angle in the xz plane in degrees.
     laser_long_offset_angstrom : float
@@ -576,7 +590,8 @@ def calc_LPP_ctf_2D(
         Amount of astigmatism in micrometers.
         `(defocus_u - defocus_v) / 2`
     astigmatism_angle : float | torch.Tensor
-        Angle of astigmatism in degrees. 0 places `defocus_u` along the y-axis.
+        Angle of astigmatism in degrees. 0 places `defocus_u` along the x-axis,
+        and positive angles rotate it towards +y (increasing row index).
     voltage : float | torch.Tensor
         Acceleration voltage in kilovolts (kV).
     spherical_aberration : float | torch.Tensor
@@ -598,7 +613,8 @@ def calc_LPP_ctf_2D(
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation angle in the xy plane in degrees.
+        Laser rotation angle in the xy plane in degrees, measured from the +ky
+        axis (row direction) towards +kx. See :func:`make_laser_coords`.
     laser_xz_angle_deg : float
         Laser angle in the xz plane in degrees.
     laser_long_offset_angstrom : float
@@ -626,12 +642,22 @@ def calc_LPP_ctf_2D(
         This should be the real-space transformation matrix A. The frequency-space
         transformation (A^-1)^T is automatically computed and applied.
     return_complex_ctf: bool = False,
-        Whether to return the complex CTF e^(-i*chi)
+        Whether to return the complex CTF ``exp(-i (chi_s - chi_a))``, the wave
+        aberration function to apply to an exit wave ``exp(+i sigma V)``.
 
     Returns
     -------
     ctf : torch.Tensor
         The Laser Phase Plate modified Contrast Transfer Function.
+
+    Notes
+    -----
+    Same sign convention as :func:`calculate_ctf_2d`: positive electrostatic
+    potential multiplied by the CTF at underfocus gives a dark image.
+
+    Changed in 0.7.0: the real CTF used to have the opposite sign. Multiply by -1
+    to reproduce earlier results. The complex CTF is unchanged without odd
+    aberrations; with them it used to be ``exp(-i (chi_s + chi_a))``.
     """
     (
         defocus,

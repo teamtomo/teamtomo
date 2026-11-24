@@ -19,7 +19,10 @@ Shared parameters (both forms):
 
 - ``rotation_matrices``: ``(3, 3)`` / ``(bp, 3, 3)`` (single volume) or also
   ``(bv, bp, 3, 3)`` for per-volume poses (multi-channel). They act on xyz
-  vectors unless ``zyx_matrices=True``.
+  vectors unless ``zyx_matrices=True``. Each matrix rotates the slice's
+  frequency coordinates (image frame) into the volume frame, a passive
+  rotation: the slice extracted with R is that of the volume rotated by R^T.
+  The real-space :func:`.project_3d_to_2d` takes the active rotation R.
 - ``shifts_3d``: optional ``(..., bp, 3)`` shifts in the volume frame (before
   rotation), xyz unless ``zyx_shifts=True``; ``shifts_2d``: optional
   ``(..., bp, 2)`` shifts in the projection plane (after rotation), xy unless

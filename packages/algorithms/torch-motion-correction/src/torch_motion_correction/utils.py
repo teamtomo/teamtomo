@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch_fourier_filter.bandpass import bandpass_filter
 from torch_fourier_filter.envelopes import b_envelope
-from torch_grid_utils import circle
+from torch_grid_utils import circle, spatial_frequency_to_fftfreq
 
 if TYPE_CHECKING:
     from torch_motion_correction.types import FourierFilterConfig
@@ -69,22 +69,6 @@ def array_to_grid_sample(
     grid_sample_coordinates = (array_coordinates / (0.5 * array_shape_tensor - 0.5)) - 1
     grid_sample_coordinates = torch.flip(grid_sample_coordinates, dims=(-1,))
     return grid_sample_coordinates
-
-
-def fftfreq_to_spatial_frequency(
-    frequencies: torch.Tensor, spacing: float
-) -> torch.Tensor:
-    """Convert frequencies in cycles per pixel to cycles per unit distance."""
-    # cycles/px * px/distance = cycles/distance
-    return torch.as_tensor(frequencies, dtype=torch.float32) * (1 / spacing)
-
-
-def spatial_frequency_to_fftfreq(
-    frequencies: torch.Tensor, spacing: float
-) -> torch.Tensor:
-    """Convert frequencies in cycles per unit distance to cycles per pixel."""
-    # cycles/distance * distance/px = cycles/px
-    return torch.as_tensor(frequencies, dtype=torch.float32) * spacing
 
 
 def normalize_image(

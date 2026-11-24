@@ -1,21 +1,78 @@
-"""MTF functions for the Fourier filter."""
+"""MTF functions for the Fourier filter.
+
+Detector MTF curves for common cameras are bundled with the package (see
+``data/mtf/README.md`` for provenance). They can be referenced by name, e.g.
+``read_mtf("k3_standard_300kv_fl2")``; use :func:`list_mtf_references` to see
+the available names.
+"""
+
+import os
+from importlib.resources import files
+from pathlib import Path
 
 import starfile
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
 
+_MTF_DATA_DIR = Path(str(files("torch_fourier_filter").joinpath("data", "mtf")))
 
-def read_mtf(file_path: str) -> tuple[torch.Tensor, torch.Tensor]:
+# Registry of bundled MTF star files keyed by lowercase name, derived from the
+# file name without the ``mtf_`` prefix and ``.star`` suffix.
+MTF_REFERENCES: dict[str, Path] = {
+    path.stem.removeprefix("mtf_").lower(): path
+    for path in sorted(_MTF_DATA_DIR.glob("mtf_*.star"))
+}
+
+
+def list_mtf_references() -> list[str]:
+    """Return the names of the bundled detector MTF references."""
+    return list(MTF_REFERENCES)
+
+
+def get_mtf_reference_path(name: str) -> Path:
+    """Return the path of a bundled detector MTF star file.
+
+    Parameters
+    ----------
+    name : str
+        Name of the MTF reference (case-insensitive), e.g. ``"k2_300kV"``. See
+        :func:`list_mtf_references` for the available names.
+
+    Returns
+    -------
+    Path
+        Path to the bundled star file.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not a bundled MTF reference.
     """
-    Read the MTF from a star file.
+    key = name.lower()
+    if key not in MTF_REFERENCES:
+        raise KeyError(
+            f"Unknown MTF reference {name!r}. "
+            f"Available references: {list_mtf_references()}"
+        )
+    return MTF_REFERENCES[key]
+
+
+def read_mtf(file_path: str | os.PathLike[str]) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Read the MTF from a star file or a bundled MTF reference.
 
     Args:
-        file_path: The path to the star file.
+        file_path: The path to a star file with ``rlnResolutionInversePixel``
+            and ``rlnMtfValue`` columns, or the name of a bundled MTF reference
+            (case-insensitive, see :func:`list_mtf_references`). An existing
+            file path takes precedence over a reference name.
 
     Returns
     -------
         The frequencies (0 to 0.5 at Nyquist) and MTF amps (MTF(0)=1).
     """
+    if not os.path.exists(file_path) and str(file_path).lower() in MTF_REFERENCES:
+        file_path = get_mtf_reference_path(str(file_path))
     df = starfile.read(file_path)
     frequencies = torch.tensor(df["rlnResolutionInversePixel"].to_numpy()).float()
     mtf_amplitudes = torch.tensor(df["rlnMtfValue"].to_numpy()).float()

@@ -74,32 +74,124 @@ def test_healpix_base_grid_fine_theta_step():
     assert grid.shape == (12 * nside**2, 2)
 
 
+def _zyz_rotvec_deg(euler_deg: np.ndarray) -> np.ndarray:
+    """Rotation vectors (deg) of ZYZ Euler angles (deg), Rz(phi) Ry(theta) Rz(psi)."""
+    phi, theta, psi = np.radians(np.asarray(euler_deg, dtype=np.float64)).T
+
+    def rz(a: np.ndarray) -> np.ndarray:
+        c, s, o, z = np.cos(a), np.sin(a), np.ones_like(a), np.zeros_like(a)
+        return np.stack(
+            [
+                np.stack([c, -s, z], -1),
+                np.stack([s, c, z], -1),
+                np.stack([z, z, o], -1),
+            ],
+            -2,
+        )
+
+    def ry(a: np.ndarray) -> np.ndarray:
+        c, s, o, z = np.cos(a), np.sin(a), np.ones_like(a), np.zeros_like(a)
+        return np.stack(
+            [
+                np.stack([c, z, s], -1),
+                np.stack([z, o, z], -1),
+                np.stack([-s, z, c], -1),
+            ],
+            -2,
+        )
+
+    r = rz(phi) @ ry(theta) @ rz(psi)
+    cos_angle = (np.trace(r, axis1=-2, axis2=-1) - 1.0) / 2.0
+    angle = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+    v = np.stack(
+        [r[:, 2, 1] - r[:, 1, 2], r[:, 0, 2] - r[:, 2, 0], r[:, 1, 0] - r[:, 0, 1]], -1
+    )
+    return np.degrees(v / (2.0 * np.sinc(angle / np.pi))[:, None])
+
+
 def test_get_local_high_resolution_angles():
     local_angles = get_local_high_resolution_angles()
-    assert local_angles.shape == (1581, 3)
+    assert local_angles.shape == (63333, 3)
 
-    # range tests for angles
-    assert (local_angles[:, 0] >= -1.51).all()
-    assert (local_angles[:, 0] <= 1.51).all()
-    assert (local_angles[:, 1] >= -2.51).all()
+    # range tests for angles: a cap theta <= 2.5 with phi over the full circle, and
+    # psi measured from phi (so wrapped to [-180, 180], 180 by rounding at the wrap)
+    assert (local_angles[:, 0] >= 0.0).all()
+    assert (local_angles[:, 0] < 360.0).all()
+    assert (local_angles[:, 1] >= 0.0).all()
     assert (local_angles[:, 1] <= 2.51).all()
-    assert np.allclose(local_angles[:, 2].min().item(), -1.50)
-    assert np.allclose(local_angles[:, 2].max().item(), 1.50)
+    assert (local_angles[:, 2] >= -180.0).all()
+    assert (local_angles[:, 2] <= 180.0).all()
 
 
-def test_get_local_high_resolution_angles_includes_zero():
+_HEALPIX_SKIP = pytest.mark.skipif(
+    platform.system() == "Windows", reason="healpy is not supported on Windows"
+)
+LOCAL_BASE_GRIDS = [
+    "uniform",
+    pytest.param("healpix", marks=_HEALPIX_SKIP),
+    "cartesian",
+]
+
+
+@pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
+def test_get_local_high_resolution_angles_covers_all_axes(base_grid_method):
+    """Offsets fill a neighbourhood of the identity: tilts in every direction, plus
+    in-plane. Limiting phi near the pole would leave out rotations about x."""
+    local_angles = get_local_high_resolution_angles(
+        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method=base_grid_method
+    )
+    rotvec = _zyz_rotvec_deg(local_angles.numpy())
+
+    # HEALPix pixel centres do not reach the cap edge exactly
+    tilt_max = 2.0 if base_grid_method == "healpix" else 2.45
+    assert np.abs(rotvec[:, 0]).max() > tilt_max  # tilt about x
+    assert np.abs(rotvec[:, 1]).max() > tilt_max  # tilt about y
+    assert np.abs(rotvec[:, 0]).max() < 2.55
+    assert np.abs(rotvec[:, 1]).max() < 2.55
+    assert np.abs(rotvec[:, 2]).max() == pytest.approx(1.5, abs=0.05)  # in-plane
+    assert np.linalg.norm(rotvec, axis=1).max() < np.hypot(2.5, 1.5) + 0.05
+
+
+@pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
+def test_get_local_high_resolution_angles_stays_in_cap(base_grid_method):
+    """Tilts stay within coarse_theta_step when it isn't a multiple of the step."""
+    angles = get_local_high_resolution_angles(
+        coarse_theta_step=2.5,
+        coarse_psi_step=1.5,
+        fine_theta_step=1.0,
+        fine_psi_step=0.5,
+        base_grid_method=base_grid_method,
+    )
+    tilt = np.hypot(*_zyz_rotvec_deg(angles.numpy())[:, :2].T)
+    assert tilt.max() <= 2.5 + 1e-4
+
+
+@pytest.mark.parametrize("base_grid_method", LOCAL_BASE_GRIDS)
+def test_get_local_high_resolution_angles_includes_zero(base_grid_method):
     """Test that (0, 0, 0) Euler angles are included in the output."""
-    local_angles = get_local_high_resolution_angles()
-
-    # Check if any row matches (0, 0, 0) within tolerance
-    zero_angle = np.array([0.0, 0.0, 0.0])
-    # Convert to numpy for comparison
-    local_angles_np = local_angles.numpy()
-
-    # Check if any row is close to (0, 0, 0) by computing differences
-    differences = np.abs(local_angles_np - zero_angle)
-    matches = np.all(differences < 1e-5, axis=1)
+    local_angles = get_local_high_resolution_angles(
+        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method=base_grid_method
+    )
+    matches = np.all(np.abs(local_angles.numpy()) < 1e-5, axis=1)
     assert np.any(matches), "Euler angles (0, 0, 0) should be included in the output"
+
+
+def test_get_local_high_resolution_angles_cartesian_lattice():
+    """Cartesian: a square lattice of tilts inside the cap, times in-plane offsets."""
+    local_angles = get_local_high_resolution_angles(
+        fine_theta_step=0.5, fine_psi_step=0.5, base_grid_method="cartesian"
+    )
+    # 81 lattice points with |t| <= 2.5 at 0.5 deg spacing, times 7 psi values
+    assert local_angles.shape == (81 * 7, 3)
+
+    # The offsets with no in-plane part are pure tilts on the lattice
+    phi, psi = local_angles[:, 0].numpy(), local_angles[:, 2].numpy()
+    in_plane = np.remainder(psi + phi + 180.0, 360.0) - 180.0
+    tilts = _zyz_rotvec_deg(local_angles.numpy()[np.abs(in_plane) < 1e-6])
+    assert tilts.shape == (81, 3)
+    assert np.allclose(tilts[:, 2], 0.0, atol=1e-6)
+    assert np.allclose(tilts[:, :2] / 0.5, np.round(tilts[:, :2] / 0.5), atol=1e-6)
+    assert np.linalg.norm(tilts, axis=1).max() == pytest.approx(2.5)
 
 
 def test_get_roll_angles():

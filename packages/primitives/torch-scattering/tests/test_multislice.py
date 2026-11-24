@@ -98,6 +98,30 @@ def test_multislice_grouped_pairs_with_empty_neighbor_match_full_resolution():
     assert torch.allclose(wave_16, wave_8, atol=1e-5)
 
 
+def test_multislice_focuses_positive_blob_at_top_of_thick_specimen():
+    """A positive blob 1000 A above the exit plane must image bright there.
+
+    A positive potential is a converging lens (T = exp(+i sigma V dz)), so
+    after travelling forwards through 1000 A of vacuum below it the wave is
+    brighter at the blob's centre than in the background. Propagating
+    backwards between slices would darken it instead.
+    """
+    size = 64
+    coords = torch.arange(size, dtype=torch.float32) - size // 2
+    r2 = coords[:, None] ** 2 + coords[None, :] ** 2
+    # ~0.5 rad peak phase shift at 300 kV (sigma ~ 6.5e-4 rad/(V*A), dz = 1 A)
+    blob = 770.0 * torch.exp(-r2 / (2 * 6.0**2))
+    potential = torch.zeros(1000, size, size)
+    potential[0] = blob
+
+    exit_wave = multislice(potential, pixel_size=1.0, voltage=300.0, n_slices=2)
+    intensity = exit_wave.abs() ** 2
+
+    centre = intensity[size // 2, size // 2]
+    background = intensity[0, 0]
+    assert centre > background + 0.05
+
+
 @pytest.mark.parametrize("n_slices", [0, -1, 11])
 def test_multislice_rejects_invalid_n_slices(n_slices):
     """n_slices must be in (0, Z]; 0, negative, and > Z are invalid."""

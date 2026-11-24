@@ -11,6 +11,7 @@ from ttsim3d.models import Simulator, SimulatorConfig
 
 from torch_fourier_slice.slice_extraction import (
     extract_central_slices_rfft_3d,
+    extract_central_slices_rfft_3d_multichannel,
     transform_slice_2d,
 )
 
@@ -105,6 +106,39 @@ def test_extract_central_slices_rfft_3d(device: str):
     assert torch.allclose(slice_half, slice_conj_half, atol=1e-6), (
         "Extracted slices do not obey Friedel symmetry along x=0 (expected for rfft)."
     )
+
+
+# Even and odd sizes. In float32, `fftfreq(n) * n` lands just outside the array for
+# the edge samples of some odd sizes (7, 51, 105, ...): the most negative frequency
+# just below index 0 and the highest rfft frequency just above index n // 2.
+IDENTITY_SIDELENGTHS = [7, 20, 21, 51, 96, 97, 105, 112]
+
+
+@pytest.mark.parametrize("multichannel", [False, True])
+@pytest.mark.parametrize("sidelength", IDENTITY_SIDELENGTHS)
+def test_extract_central_slices_rfft_3d_identity_is_central_plane(
+    sidelength: int, multichannel: bool
+):
+    """At the identity, the extracted slice is the z = n // 2 plane of the DFT."""
+    n = sidelength
+    volume = torch.randn((n, n, n), generator=torch.Generator().manual_seed(n))
+    volume_rfft = torch.fft.ifftshift(volume, dim=(-3, -2, -1))
+    volume_rfft = torch.fft.rfftn(volume_rfft, dim=(-3, -2, -1))
+    volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))
+    expected = volume_rfft[n // 2]
+
+    if multichannel:
+        slices = extract_central_slices_rfft_3d_multichannel(
+            volume_rfft[None], torch.eye(3)
+        )[0]
+    else:
+        slices = extract_central_slices_rfft_3d(volume_rfft, torch.eye(3))
+
+    # every sample, including the edge rows and columns, is read from the array
+    assert torch.all(slices[0] != 0) and torch.all(slices[-1] != 0)
+    assert torch.all(slices[:, 0] != 0) and torch.all(slices[:, -1] != 0)
+    atol = 1e-5 * expected.abs().max().item()
+    torch.testing.assert_close(slices, expected, rtol=1e-4, atol=atol)
 
 
 @pytest.mark.parametrize("device", DEVICES)
