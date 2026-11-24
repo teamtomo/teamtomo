@@ -616,23 +616,9 @@ def _is_hermitian_plane(x: Int, n: Int) -> Bool:
 def _input_pixel_scale(y: Int, x: Int, n: Int) -> Float32:
     """How much rfft pixel `(y, x)` of an n x n Hermitian image counts in a backprojection.
 
-    Every stored pixel stands for a conjugate pair, except on the columns that store
-    their own mirror (`_is_hermitian_plane`), where both members of a pair are
-    stored. Each pair has to count once:
-
-    - `x = 0`: the mirror `(-y, 0)` lands exactly on the volume's Friedel mirror,
-      so the redundant half (`y > n // 2`) is skipped (0) and the other half counts
-      for the pair (1).
-    - `x = n/2`, even `n`: `(y, n/2)` and `(-y, n/2)` are the same pair, but once
-      rotated they land at the `+n/2` and `-n/2` aliases of the frequency, which are
-      different points of the volume. Both are inserted at half weight (0.5), the
-      adjoint of the forward projection, whose `irfft2` averages the two.
-    - A pixel that is its own mirror (`y = 0` or `y = n/2` on these columns) is a
-      single sample of the full spectrum, but the volume's Friedel write inserts it
-      as a pair: it counts 0.5, so the two writes add up to one sample.
-
-    This makes the backprojection the stored half of a backprojection of the full
-    (non-rfft) spectrum, data and weights alike.
+    0 for the redundant half (`y > n // 2`) of the `x = 0` column, 0.5 on the
+    `x = n/2` column (even `n`) and for self-mirror pixels on both columns, 1
+    otherwise. See "Hermitian bookkeeping" in `experimental/README.md`.
     """
     var self_mirror = y == 0 or (n % 2 == 0 and y == n // 2)
     if x == 0 and y > n // 2:
@@ -648,8 +634,8 @@ def _input_pixel_scale(y: Int, x: Int, n: Int) -> Float32:
 def _input_line_scale(x: Int, n: Int) -> Float32:
     """How much rfft sample `x` of a length-`n` Hermitian line counts in an insertion.
 
-    The 1D analogue of `_input_pixel_scale`: the DC and (even `n`) Nyquist samples
-    are their own mirror, so they count 0.5 and every other sample 1.
+    0.5 for the self-mirror DC and (even `n`) Nyquist samples, 1 otherwise. See
+    "Hermitian bookkeeping" in `experimental/README.md`.
     """
     return 0.5 if _is_hermitian_plane(x, n) else 1.0
 

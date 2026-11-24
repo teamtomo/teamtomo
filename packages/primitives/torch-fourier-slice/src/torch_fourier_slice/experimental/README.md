@@ -444,13 +444,24 @@ weights agree everywhere:
 - on the kx = 0 and, for even `n`, kx = n/2 planes each write also adds the
   conjugate at the mirror `(-z, -y)`. A voxel that is its own mirror gets
   `v + conj(v)`, which keeps the planes Hermitian;
-- each conjugate pair of the input counts once. Of the input's kx = 0 column only
-  the `ky >= 0` half is inserted. On its kx = n/2 column both copies of a pair are
-  inserted at half weight, since once rotated they land at the `+n/2` and `-n/2`
-  aliases of the frequency, different points of the volume. Input samples that are
-  their own mirror (DC and the Nyquist samples of these columns, and of a line)
-  count half, as the mirror write inserts them twice.
+- each conjugate pair of the input counts once. A stored input sample stands for a
+  pair, itself and its implied mirror, except on the input's own kx = 0 and
+  kx = n/2 columns, which store both members of each pair. So every input sample
+  gets a weight, applied to its value and to its weight (`_input_pixel_scale`,
+  `_input_line_scale`):
+  - kx = 0 column: the mirror `(-ky, 0)` lands exactly on the volume's Friedel
+    mirror of `(ky, 0)`, so the `ky < 0` half is skipped (0) and the `ky > 0` half
+    counts for the pair (1);
+  - kx = n/2 column, even `n`: `(ky, n/2)` and `(-ky, n/2)` are one pair, but once
+    rotated they land at the `+n/2` and `-n/2` aliases of the frequency, which are
+    different points of the volume. Both are inserted at half weight (0.5). This
+    is the adjoint of the forward projection, whose `irfft2` averages the two;
+  - samples that are their own mirror (`ky = 0` and, for even `n`, `ky = n/2` on
+    these columns, and the DC and Nyquist samples of a line) are a single sample of
+    the full spectrum, but the volume's mirror write inserts them as a pair, so
+    they count 0.5 and the two writes add up to one sample.
 
-With these rules each insertion is the exact adjoint of its extraction as a map
-between real arrays (`tests/test_hermitian_insertion.py`), and an untilted slice is
-inserted with weight 1 at every voxel.
+With these rules an insertion is the stored half of an insertion of the full
+(non-rfft) spectrum, data and weights alike. Each insertion is the exact adjoint of
+its extraction as a map between real arrays (`tests/test_hermitian_insertion.py`),
+and an untilted slice is inserted with weight 1 at every voxel.

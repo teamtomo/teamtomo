@@ -90,12 +90,7 @@ def _symmetrise_hermitian_columns(grad_image: torch.Tensor) -> torch.Tensor:
 def _input_pixel_scale(n: int, device: torch.device) -> torch.Tensor:
     """`(n, n // 2 + 1)` weight of each input rfft pixel in a backprojection.
 
-    Mirrors `_input_pixel_scale` in `_common.mojo`: each Hermitian pair of the
-    input image counts once. The redundant half of the kx = 0 column is skipped
-    (0), both copies of a pair on the kx = n/2 column (even `n`) are inserted at
-    half weight (0.5), since they land at the +n/2 and -n/2 aliases of the
-    frequency, and self-mirror pixels on these columns count 0.5, since the
-    volume's Friedel write inserts them twice.
+    Mirrors `_input_pixel_scale` in `_common.mojo`.
     """
     scale = torch.ones((n, n // 2 + 1), device=device)
     scale[n // 2 + 1 :, 0] = 0
@@ -109,8 +104,7 @@ def _input_pixel_scale(n: int, device: torch.device) -> torch.Tensor:
 def _input_line_scale(n: int, device: torch.device) -> torch.Tensor:
     """`(n // 2 + 1,)` weight of each input line sample in an insertion.
 
-    Mirrors `_input_line_scale` in `_common.mojo`: the DC and (even `n`) Nyquist
-    samples are their own mirror and count 0.5.
+    Mirrors `_input_line_scale` in `_common.mojo`.
     """
     scale = torch.ones(n // 2 + 1, device=device)
     for x in _hermitian_planes(n):

@@ -37,22 +37,10 @@ def _input_pixel_scale(
 ) -> torch.Tensor:
     """How much each rfft pixel of a Hermitian image counts when backprojected.
 
-    Every stored pixel stands for a conjugate pair, except on the kx = 0 column and,
-    for even `w`, the kx = 1/2 (Nyquist) column, which store both members of each
-    pair. Each pair has to count once:
-
-    - kx = 0: the mirror at -ky lands exactly on the volume's Friedel mirror, so the
-      redundant half (ky < 0) is skipped (0) and the other half counts for the pair.
-    - kx = 1/2: (ky, 1/2) and (-ky, 1/2) are the same pair, but once rotated they
-      land at the +1/2 and -1/2 aliases of the frequency, which are different points
-      of the volume. Both are inserted at half weight (0.5), the adjoint of the
-      forward projection, whose `irfft2` averages the two.
-    - A pixel that is its own mirror (ky = 0, or ky = -1/2 for even `h`, on these
-      columns) is a single sample of the full spectrum, but the volume's Friedel
-      write inserts it as a pair: it counts 0.5, so the two writes add up to one.
-
-    This makes the insertion the stored half of an insertion of the full (non-rfft)
-    spectrum, data and weights alike.
+    0 for the redundant half (ky < 0) of the kx = 0 column, 0.5 on the kx = 1/2
+    column (even `w`) and for self-mirror pixels (ky = 0, or ky = -1/2 for even `h`)
+    on both columns, 1 otherwise. See "Hermitian bookkeeping" in
+    `torch_fourier_slice/experimental/README.md`, which covers both backends.
 
     Parameters
     ----------
