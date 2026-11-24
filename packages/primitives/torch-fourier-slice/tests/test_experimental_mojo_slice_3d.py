@@ -894,6 +894,19 @@ def test_gpu_pose_weight_gradients_match_cpu():
         (dvol.abs() ** 2).sum().backward()
         return r.grad.cpu(), s.grad.cpu(), w.grad.cpu()
 
+    weight_cotangent = torch.randn(d, d, dh)
+
+    def weight_volume_grad(device):
+        r = rot0.clone().to(device).requires_grad_(True)
+        _, wvol = insert_central_slices_rfft_3d(
+            proj.to(device),
+            zyx_matrices=True,
+            rotation_matrices=r,
+            weights=wts0.to(device),
+        )
+        (wvol * weight_cotangent.to(device)).sum().backward()
+        return r.grad.cpu()
+
     cr, cs = fwd_grads("cpu")
     gr, gs = fwd_grads(dev)
     assert torch.allclose(gr, cr, atol=1e-3 * cr.abs().max())
@@ -904,6 +917,9 @@ def test_gpu_pose_weight_gradients_match_cpu():
     assert torch.allclose(gr, cr, atol=1e-3 * cr.abs().max())
     assert torch.allclose(gs, cs, atol=1e-3 * cs.abs().max() + 1e-6)
     assert torch.allclose(gw, cw, atol=1e-4)
+
+    cr, gr = weight_volume_grad("cpu"), weight_volume_grad(dev)
+    assert torch.allclose(gr, cr, atol=1e-3 * cr.abs().max())
 
 
 def test_output_shape_and_batching():

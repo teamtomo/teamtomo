@@ -388,6 +388,11 @@ class InsertLines2D(torch.autograd.Function):
     Differentiable w.r.t. the input ``lines`` (adjoint 2D line extraction
     of the kx=0-symmetrised image gradient), ``weights`` (weight-splat adjoint),
     ``directions`` and ``shifts_2d`` (2D pose-grad kernel).
+
+    The weight image depends on the directions too (the weights are splatted at
+    the sample positions), so the direction gradient also gets the pose kernel
+    run on the kx=0-symmetrised weight-image gradient, with the weights as real
+    line values and no shift (the weight splat has no phase ramp).
     """
 
     @staticmethod
@@ -466,19 +471,30 @@ class InsertLines2D(torch.autograd.Function):
 
         grad_dir = None
         grad_shift = None
+        pose_kwargs = {
+            "oversampling": ctx.oversampling,
+            "fftfreq_max": ctx.fftfreq_max,
+            "interpolation": ctx.interpolation,
+            "insert": True,
+        }
+        gd = None
         if needs[2] or needs[3]:
             gd, gs = run_line_2d_pose_grad(
-                g,
-                ctx.directions,
-                ctx.lines,
-                oversampling=ctx.oversampling,
-                fftfreq_max=ctx.fftfreq_max,
-                interpolation=ctx.interpolation,
-                insert=True,
-                shifts_2d=ctx.shifts_2d,
+                g, ctx.directions, ctx.lines, shifts_2d=ctx.shifts_2d, **pose_kwargs
             )
-            if needs[2]:
-                grad_dir = reduce_to(gd, ctx.directions)
             if needs[3] and ctx.shifts_2d is not None and gs is not None:
                 grad_shift = reduce_to(gs, ctx.shifts_2d)
+        if needs[2] and ctx.weights is not None and grad_weight is not None:
+            # the weight image's direction dependence: a real field (zero
+            # imaginary part) and real line values make the kernel's
+            # Re[a conj(b)] pairing the plain product weight * spatial gradient
+            gd_weight, _ = run_line_2d_pose_grad(
+                _symmetrise_kx0_column(grad_weight),
+                ctx.directions,
+                ctx.weights,
+                **pose_kwargs,
+            )
+            gd = gd_weight if gd is None else gd + gd_weight
+        if needs[2] and gd is not None:
+            grad_dir = reduce_to(gd, ctx.directions)
         return (grad_lines, grad_weights, grad_dir, grad_shift, None, None, None)

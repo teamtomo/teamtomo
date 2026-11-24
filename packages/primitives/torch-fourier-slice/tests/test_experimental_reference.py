@@ -246,22 +246,19 @@ def test_insert_slices_gradients_match_mojo(interpolation):
     expected = _gradients(mojo_function, inputs, kwargs, output_index=0)
     for name in ("image_rfft", "rotation_matrices", "shifts_2d", "shifts_3d"):
         _assert_close(actual[name], expected[name], rtol=1e-4)
-    # the weight volume on the weights (and the rotations: see the xfail below)
+    # the weight volume on the weights (and the rotations: see below)
     actual = _gradients(function, inputs, kwargs, output_index=1)
     expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
     _assert_close(actual["weights"], expected["weights"], rtol=1e-4)
 
 
 @requires_mojo
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="InsertSlices3D.backward drops the weight volume's dependence on the "
-    "rotations, so its rotation gradient (and backproject_2d_to_3d's) is wrong",
-)
-def test_insert_slices_weight_volume_rotation_gradient_matches_mojo():
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_insert_slices_weight_volume_rotation_gradient_matches_mojo(interpolation):
+    """The weights are splatted at the rotated positions, so the weight volume
+    has a rotation gradient too."""
     inputs = _insertion_inputs()
-    kwargs = {"interpolation": "cubic"}
+    kwargs = {"interpolation": interpolation}
     actual = _gradients(
         reference.insert_central_slices_rfft_3d, inputs, kwargs, output_index=1
     )
@@ -344,6 +341,24 @@ def test_project_and_backproject_match_mojo(interpolation):
         backproject.backproject_2d_to_3d(images, rotations, **kwargs),
         rtol=1e-5,
     )
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_backproject_gradients_match_mojo(interpolation):
+    """``backproject_2d_to_3d`` divides by the weight volume, so its rotation
+    gradient also goes through the weight volume's pose dependence."""
+    generator = torch.Generator().manual_seed(5)
+    inputs = {
+        "images": torch.randn(N_POSES, SIDELENGTH, SIDELENGTH, generator=generator),
+        "rotation_matrices": _rotations(N_POSES, seed=4),
+        "shifts_2d": _shifts(N_POSES, 2),
+    }
+    kwargs = {"interpolation": interpolation}
+    actual = _gradients(reference.backproject_2d_to_3d, inputs, kwargs)
+    expected = _gradients(backproject.backproject_2d_to_3d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device")

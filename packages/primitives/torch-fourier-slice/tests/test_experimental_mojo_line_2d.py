@@ -292,6 +292,29 @@ def test_2d_line_insert_direction_and_weight_gradients():
     assert _linear_grad_ratio_ok(weight_loss, wts)
 
 
+def test_2d_line_insert_weight_image_direction_gradient():
+    """The weight image's direction gradient (cubic finite difference).
+
+    The weights are splatted at the sample positions, so a loss on the weight
+    image alone still depends on the directions.
+    """
+    torch.manual_seed(0)
+    H, P = 40, 3
+    Hh = H // 2 + 1
+    lines = _herm_lines(P, H, 7)
+    wts = torch.rand(P, Hh)
+    weight_cotangent = torch.randn(H, Hh)
+
+    def weight_loss(u):
+        _, wimg = insert_central_lines_rfft_2d(
+            lines, u, weights=wts, interpolation="cubic", yx_directions=True
+        )
+        return (wimg * weight_cotangent).sum()
+
+    u = _rand_dirs(P, 1).requires_grad_(True)
+    assert _fd_ratio(weight_loss, u, eps=1e-3) < 2e-2
+
+
 # ---------------------------------------------------------------------------
 # Rank adaptation and GPU parity
 # ---------------------------------------------------------------------------
@@ -391,11 +414,23 @@ def test_gpu_2d_line_grads_match_cpu():
         (dv.abs() ** 2).sum().backward()
         return u.grad.cpu(), w.grad.cpu()
 
+    weight_cotangent = torch.randn(H, Hh)
+
+    def weight_image_dir(device):
+        u = u0.clone().to(device).requires_grad_(True)
+        _, wimg = insert_central_lines_rfft_2d(
+            lines.to(device), directions=u, weights=wts0.to(device), yx_directions=True
+        )
+        (wimg * weight_cotangent.to(device)).sum().backward()
+        return u.grad.cpu()
+
     cu, gu = fwd_dir("cpu"), fwd_dir(dev)
     assert torch.allclose(gu, cu, atol=1e-3 * cu.abs().max())
     (cbu, cbw), (gbu, gbw) = bp_grads("cpu"), bp_grads(dev)
     assert torch.allclose(gbu, cbu, atol=1e-3 * cbu.abs().max())
     assert torch.allclose(gbw, cbw, atol=1e-4)
+    cu, gu = weight_image_dir("cpu"), weight_image_dir(dev)
+    assert torch.allclose(gu, cu, atol=1e-3 * cu.abs().max())
 
 
 # ---------------------------------------------------------------------------

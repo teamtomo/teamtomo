@@ -483,6 +483,11 @@ class InsertSlices3D(torch.autograd.Function):
     skip_redundant) scatter: symmetrise the volume gradient on the kx=0 plane,
     extract slices from it, then zero the gradient of the skipped redundant x=0 line.
     The same symmetrised volume gradient feeds the rotation/shift backward kernel.
+
+    The weight volume depends on the rotations too (the weights are splatted at
+    the rotated sample positions), so the rotation gradient also gets the same
+    kernel run on the kx=0-symmetrised weight-volume gradient, with the weights as
+    real pixel values and no shifts (the weight splat has no phase ramp).
     """
 
     @staticmethod
@@ -570,25 +575,41 @@ class InsertSlices3D(torch.autograd.Function):
         grad_rot = None
         grad_shift = None
         grad_shift_3d = None
+        pose_kwargs = {
+            "oversampling": ctx.oversampling,
+            "fftfreq_max": ctx.fftfreq_max,
+            "interpolation": ctx.interpolation,
+            "insert": True,
+            "ewald_curvature": ctx.ewald_curvature,
+        }
+        gr = None
         if needs[2] or needs[3] or needs[4]:
             gr, gs, gs3 = run_slice_3d_pose_grad(
                 g,
                 ctx.rotations,
                 ctx.shifts_2d,
                 ctx.projections,
-                oversampling=ctx.oversampling,
-                fftfreq_max=ctx.fftfreq_max,
-                interpolation=ctx.interpolation,
-                insert=True,
-                ewald_curvature=ctx.ewald_curvature,
                 shifts_3d=ctx.shifts_3d,
+                **pose_kwargs,
             )
-            if needs[2]:
-                grad_rot = reduce_to(gr, ctx.rotations)
             if needs[3] and ctx.shifts_2d is not None and gs is not None:
                 grad_shift = reduce_to(gs, ctx.shifts_2d)
             if needs[4] and ctx.shifts_3d is not None and gs3 is not None:
                 grad_shift_3d = reduce_to(gs3, ctx.shifts_3d)
+        if needs[2] and ctx.weights is not None and grad_weight is not None:
+            # the weight volume's rotation dependence: a real field (zero
+            # imaginary part) and real pixels make the kernel's Re[a conj(b)]
+            # pairing the plain product weight * spatial gradient
+            gr_weight, _, _ = run_slice_3d_pose_grad(
+                symmetrise_kx0_plane(grad_weight),
+                ctx.rotations,
+                None,
+                ctx.weights,
+                **pose_kwargs,
+            )
+            gr = gr_weight if gr is None else gr + gr_weight
+        if needs[2] and gr is not None:
+            grad_rot = reduce_to(gr, ctx.rotations)
 
         return (
             grad_proj,

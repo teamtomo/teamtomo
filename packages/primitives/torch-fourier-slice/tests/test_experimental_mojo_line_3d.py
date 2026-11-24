@@ -314,6 +314,33 @@ def test_line_insert_pose_and_weight_gradients(interp):
     assert _linear_grad_ratio_ok(weight_loss, wts)
 
 
+def test_line_insert_weight_volume_direction_gradient():
+    """The weight volume's direction gradient (cubic finite difference).
+
+    The weights are splatted at the sample positions, so a loss on the weight
+    volume alone still depends on the directions.
+    """
+    torch.manual_seed(0)
+    d, P = 20, 3
+    dh = d // 2 + 1
+    lines = _herm_lines(P, d, 7)
+    wts = torch.rand(P, dh)
+    weight_cotangent = torch.randn(d, d, dh)
+
+    def weight_loss(u):
+        _, wvol = insert_central_lines_rfft_3d(
+            lines,
+            directions=u,
+            weights=wts,
+            interpolation="cubic",
+            zyx_directions=True,
+        )
+        return (wvol * weight_cotangent).sum()
+
+    u = _rand_dirs(P, 1).requires_grad_(True)
+    assert _fd_ratio(weight_loss, u, eps=1e-3) < 2e-2
+
+
 # ---------------------------------------------------------------------------
 # proj / backproj round trip (density-compensated reconstruction)
 # ---------------------------------------------------------------------------
@@ -488,6 +515,7 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
     lines = _herm_lines(P, d, 7)
     wts0 = torch.rand(P, dh)
     target = torch.randn(P, dh, dtype=torch.complex64)
+    weight_cotangent = torch.randn(d, d, dh)
 
     def fwd_grads(device):
         u = u0.clone().to(device).requires_grad_(True)
@@ -517,6 +545,17 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
         (dvol.abs() ** 2).sum().backward()
         return u.grad.cpu(), s.grad.cpu(), w.grad.cpu()
 
+    def weight_volume_grad(device):
+        u = u0.clone().to(device).requires_grad_(True)
+        _, wvol = insert_central_lines_rfft_3d(
+            lines.to(device),
+            directions=u,
+            weights=wts0.to(device),
+            zyx_directions=True,
+        )
+        (wvol * weight_cotangent.to(device)).sum().backward()
+        return u.grad.cpu()
+
     cu, cs = fwd_grads("cpu")
     gu, gs = fwd_grads(dev)
     assert torch.allclose(gu, cu, atol=1e-3 * cu.abs().max())
@@ -527,6 +566,9 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
     assert torch.allclose(gu, cu, atol=1e-3 * cu.abs().max())
     assert torch.allclose(gs, cs, atol=1e-3 * cs.abs().max() + 1e-6)
     assert torch.allclose(gw, cw, atol=1e-4)
+
+    cu, gu = weight_volume_grad("cpu"), weight_volume_grad(dev)
+    assert torch.allclose(gu, cu, atol=1e-3 * cu.abs().max())
 
 
 def test_directions_and_shifts_default_to_xyz_order():

@@ -387,6 +387,11 @@ class InsertLines3D(torch.autograd.Function):
     the input ``lines`` (adjoint line extraction of the kx=0-symmetrised
     volume gradient), ``weights`` (weight-splat adjoint), ``directions`` and
     ``shifts_3d`` (line pose-gradient kernel).
+
+    The weight volume depends on the directions too (the weights are splatted at
+    the sample positions), so the direction gradient also gets the pose kernel
+    run on the kx=0-symmetrised weight-volume gradient, with the weights as real
+    line values and no shift (the weight splat has no phase ramp).
     """
 
     @staticmethod
@@ -464,19 +469,30 @@ class InsertLines3D(torch.autograd.Function):
 
         grad_dir = None
         grad_shift_3d = None
+        pose_kwargs = {
+            "oversampling": ctx.oversampling,
+            "fftfreq_max": ctx.fftfreq_max,
+            "interpolation": ctx.interpolation,
+            "insert": True,
+        }
+        gd = None
         if needs[2] or needs[3]:
             gd, gs3 = run_line_3d_pose_grad(
-                g,
-                ctx.directions,
-                ctx.lines,
-                oversampling=ctx.oversampling,
-                fftfreq_max=ctx.fftfreq_max,
-                interpolation=ctx.interpolation,
-                insert=True,
-                shifts_3d=ctx.shifts_3d,
+                g, ctx.directions, ctx.lines, shifts_3d=ctx.shifts_3d, **pose_kwargs
             )
-            if needs[2]:
-                grad_dir = reduce_to(gd, ctx.directions)
             if needs[3] and ctx.shifts_3d is not None and gs3 is not None:
                 grad_shift_3d = reduce_to(gs3, ctx.shifts_3d)
+        if needs[2] and ctx.weights is not None and grad_weight is not None:
+            # the weight volume's direction dependence: a real field (zero
+            # imaginary part) and real line values make the kernel's
+            # Re[a conj(b)] pairing the plain product weight * spatial gradient
+            gd_weight, _ = run_line_3d_pose_grad(
+                symmetrise_kx0_plane(grad_weight),
+                ctx.directions,
+                ctx.weights,
+                **pose_kwargs,
+            )
+            gd = gd_weight if gd is None else gd + gd_weight
+        if needs[2] and gd is not None:
+            grad_dir = reduce_to(gd, ctx.directions)
         return (grad_lines, grad_weights, grad_dir, grad_shift_3d, None, None, None)

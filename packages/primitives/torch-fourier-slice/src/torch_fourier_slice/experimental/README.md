@@ -391,8 +391,11 @@ gradients are dedicated backward kernels (`_slice_3d_grad.mojo`, `_line_3d_grad.
 `_line_2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
 the interpolated field (`_gather_grad.mojo`) through the rotated sample
 coordinate; the shift grad differentiates the phase ramp; the weight grad is the
-exact adjoint of the weight splat. All are validated by finite differences (CPU
-and GPU, both interpolations), apart from one known gap (§12).
+exact adjoint of the weight splat. The weight volume an insertion returns also
+depends on the pose (the weights are splatted at the rotated sample positions), so
+the pose grad adds the same kernel run on the weight-volume gradient, with the
+weights as real pixel values and no shift phase. All are validated by finite
+differences (CPU and GPU, both interpolations).
 
 ## 12. The torch reference
 
@@ -412,14 +415,6 @@ It has two jobs:
   function has the Mojo function's signature and gives the same values and
   gradients. It also checks the reference's pose and shift gradients against
   finite differences, which runs on CI too, where Mojo isn't installed.
-
-One known gap in the Mojo backend: the weight volume an insertion returns depends
-on the pose (the weights are splatted at the rotated positions), but the
-insertions' backward passes ignore that, so the rotation or direction gradient
-through the weight volume is zero. This holds for the slice and both line
-insertions. `backproject_2d_to_3d` divides by that weight volume, so its rotation
-gradient is off too. The reference gets the slice case right, and a strict
-`xfail` test marks the gap until the kernels are fixed.
 
 ---
 
