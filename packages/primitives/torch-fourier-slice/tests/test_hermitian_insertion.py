@@ -10,7 +10,7 @@ Done right, an insertion is the exact adjoint of the matching extraction as a ma
 between real arrays, with no radius cutoff and without excluding any boundary
 frequency. That is what these tests check, plus that the weights follow the data
 and that the autograd backward passes are exact transposes. They run on torch, the
-experimental Mojo kernels and the experimental torch reference (slices only).
+experimental Mojo kernels and the experimental torch reference.
 """
 
 from types import SimpleNamespace
@@ -129,10 +129,13 @@ def _experimental_slices(
     return _Insertion(insert, extract, (sidelength,) * 2, (volume_sidelength,) * 3)
 
 
-# the Mojo slice functions, by the names `reference` gives them
+# the Mojo rfft-layer functions, by the names `reference` gives them
 _MOJO = SimpleNamespace(
-    extract_central_slices_rfft_3d=extraction.extract_central_slices_rfft_3d,
-    insert_central_slices_rfft_3d=insertion.insert_central_slices_rfft_3d,
+    **{
+        name: getattr(insertion if name.startswith("insert") else extraction, name)
+        for name in reference.__all__
+        if name.startswith(("extract_central", "insert_central"))
+    }
 )
 
 
@@ -144,7 +147,8 @@ def _reference_slices(*args, **kwargs) -> _Insertion:
     return _experimental_slices(reference, *args, **kwargs)
 
 
-def _mojo_lines(
+def _experimental_lines(
+    module,
     sidelength: int,
     directions: torch.Tensor,
     interpolation: str = "linear",
@@ -152,18 +156,17 @@ def _mojo_lines(
     oversampling: float = 1.0,
     **shifts,
 ) -> _Insertion:
-    """`shifts` are `shifts_3d` (3D lines) / `shifts_2d` (2D lines).
+    """`module` provides the line functions; `cutoff` is in input pixels.
 
-    `cutoff` is in input pixels; directions and shifts are in zyx / yx order.
+    `shifts` are `shifts_3d` (3D lines) / `shifts_2d` (2D lines). Directions and
+    shifts are in zyx / yx order.
     """
     ndim = directions.shape[-1]
+    insert_fn = getattr(module, f"insert_central_lines_rfft_{ndim}d")
+    extract_fn = getattr(module, f"extract_central_lines_rfft_{ndim}d")
     if ndim == 3:
-        insert_fn = insertion.insert_central_lines_rfft_3d
-        extract_fn = extraction.extract_central_lines_rfft_3d
         order = {"zyx_directions": True, "zyx_shifts": True}
     else:
-        insert_fn = insertion.insert_central_lines_rfft_2d
-        extract_fn = extraction.extract_central_lines_rfft_2d
         order = {"yx_directions": True, "yx_shifts": True}
     options = {
         "oversampling": oversampling,
@@ -185,6 +188,14 @@ def _mojo_lines(
     return _Insertion(insert, extract, (sidelength,), (output_sidelength,) * ndim)
 
 
+def _mojo_lines(*args, **kwargs) -> _Insertion:
+    return _experimental_lines(_MOJO, *args, **kwargs)
+
+
+def _reference_lines(*args, **kwargs) -> _Insertion:
+    return _experimental_lines(reference, *args, **kwargs)
+
+
 CASES = [
     pytest.param(lambda: _torch_slices(16, _rotations()), id="torch-slices-even"),
     pytest.param(lambda: _torch_slices(15, _rotations()), id="torch-slices-odd"),
@@ -199,6 +210,14 @@ for _interpolation in ("linear", "cubic"):
             lambda i=_interpolation: _mojo_slices(16, _rotations(), i),
             id=f"mojo-slices-{_interpolation}",
             marks=requires_mojo,
+        ),
+        pytest.param(
+            lambda i=_interpolation: _reference_lines(16, _directions(3), i),
+            id=f"reference-lines-3d-{_interpolation}",
+        ),
+        pytest.param(
+            lambda i=_interpolation: _reference_lines(16, _directions(2), i),
+            id=f"reference-lines-2d-{_interpolation}",
         ),
         pytest.param(
             lambda i=_interpolation: _mojo_lines(16, _directions(3), i),
@@ -249,6 +268,18 @@ OPTION_CASES = [
         lambda: _mojo_slices(16, _rotations(), oversampling=2.0),
         id="mojo-slices-oversampling-2",
         marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(3), shifts_3d=_shifts(3)),
+        id="reference-lines-3d-shifts",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(2), shifts_2d=_shifts(2)),
+        id="reference-lines-2d-shifts",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(3), oversampling=2.0),
+        id="reference-lines-3d-oversampling-2",
     ),
     pytest.param(
         lambda: _mojo_lines(16, _directions(3), shifts_3d=_shifts(3)),
@@ -442,16 +473,24 @@ def test_insertion_pose_gradient_includes_self_mirror_samples(
     assert _finite_difference_error(slice_loss, rotations, eps=3e-4) < 5e-2
 
 
-@requires_mojo
+@pytest.mark.parametrize(
+    "make_lines",
+    [
+        pytest.param(_mojo_lines, id="mojo", marks=requires_mojo),
+        pytest.param(_reference_lines, id="reference"),
+    ],
+)
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_line_insertion_pose_gradient_includes_self_mirror_samples(interpolation):
-    """The line analogue of the test above (lines have no torch reference yet)."""
+def test_line_insertion_pose_gradient_includes_self_mirror_samples(
+    make_lines, interpolation
+):
+    """The line analogue of the test above."""
     n = 16
     target = _rfft(_random_real((n, n, n), seed=3), 3)
     lines = _rfft(_random_real((N_POSES, n), seed=0), 1)
 
     def line_loss(directions):
-        data, _ = _mojo_lines(n, directions, interpolation, cutoff=n / 2).insert(lines)
+        data, _ = make_lines(n, directions, interpolation, cutoff=n / 2).insert(lines)
         return ((data - target).abs() ** 2).sum()
 
     directions = _directions(3).requires_grad_(True)

@@ -188,8 +188,8 @@ def test_torch_multichannel_slices_match_periodic_reference():
     )  # (b, c, h, w)
     slices = torch.fft.ifftshift(slices, dim=-2)
     for channel in range(2):
-        reference = _reference_sample(dft[channel].numpy(), k)
-        _assert_matches(slices[:, channel], reference, dft)
+        expected = _reference_sample(dft[channel].numpy(), k)
+        _assert_matches(slices[:, channel], expected, dft)
 
 
 @pytest.mark.parametrize("sidelength", [16, 15])
@@ -227,13 +227,21 @@ def test_experimental_slices_match_periodic_reference(backend, interpolation):
         zyx_matrices=True,
         interpolation=interpolation,
     )
-    reference = _reference_sample(dft.numpy(), k, interpolation)
-    _assert_matches(slices, reference, dft)
+    expected = _reference_sample(dft.numpy(), k, interpolation)
+    _assert_matches(slices, expected, dft)
 
 
-@requires_mojo
+@pytest.mark.parametrize(
+    "extract",
+    [
+        pytest.param(
+            extraction.extract_central_lines_rfft_2d, id="mojo", marks=requires_mojo
+        ),
+        pytest.param(reference.extract_central_lines_rfft_2d, id="reference"),
+    ],
+)
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_mojo_lines_match_periodic_reference(interpolation):
+def test_experimental_lines_match_periodic_reference(extract, interpolation):
     sidelength = 16
     dft = _random_rfft((sidelength,) * 2)
     rotations = _rotations(ndim=2)
@@ -242,11 +250,10 @@ def test_mojo_lines_match_periodic_reference(interpolation):
 
     # a line along direction u samples s * u, the second column of the rotation
     directions = rotations[..., :, 1].contiguous()
-    lines = extraction.extract_central_lines_rfft_2d(
+    lines = extract(
         dft.contiguous(), directions, yx_directions=True, interpolation=interpolation
     )
-    reference = _reference_sample(dft.numpy(), k, interpolation)
-    _assert_matches(lines, reference, dft)
+    _assert_matches(lines, _reference_sample(dft.numpy(), k, interpolation), dft)
 
 
 @pytest.mark.parametrize("backend", EXPERIMENTAL_SLICES)

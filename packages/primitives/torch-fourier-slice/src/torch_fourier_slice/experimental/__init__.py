@@ -37,24 +37,11 @@ All are differentiable w.r.t. their volume/slice/line data, their pose
 their weights.
 
 :mod:`.reference` implements the same API in plain torch. Where the Mojo kernels
-can't be built or loaded, the functions it covers (so far the central slices and
-the real-space layer) fall back to it.
+can't be built or loaded, every function here falls back to it.
 """
 
 # importing the loader triggers the eager compile + load of all Mojo modules
 from ._backend._loader import kernels, mojo_kernels_available
-from .extraction import (
-    extract_central_lines_rfft_2d,
-    extract_central_lines_rfft_2d_multichannel,
-    extract_central_lines_rfft_3d,
-    extract_central_lines_rfft_3d_multichannel,
-)
-from .insertion import (
-    insert_central_lines_rfft_2d,
-    insert_central_lines_rfft_2d_multichannel,
-    insert_central_lines_rfft_3d,
-    insert_central_lines_rfft_3d_multichannel,
-)
 
 try:
     kernels()
@@ -62,8 +49,16 @@ except ImportError:  # no Mojo kernels on this system: use the torch reference
     from .reference import (
         backproject_2d_to_3d,
         backproject_2d_to_3d_multichannel,
+        extract_central_lines_rfft_2d,
+        extract_central_lines_rfft_2d_multichannel,
+        extract_central_lines_rfft_3d,
+        extract_central_lines_rfft_3d_multichannel,
         extract_central_slices_rfft_3d,
         extract_central_slices_rfft_3d_multichannel,
+        insert_central_lines_rfft_2d,
+        insert_central_lines_rfft_2d_multichannel,
+        insert_central_lines_rfft_3d,
+        insert_central_lines_rfft_3d_multichannel,
         insert_central_slices_rfft_3d,
         insert_central_slices_rfft_3d_multichannel,
         project_3d_to_2d,
@@ -75,10 +70,18 @@ else:
         backproject_2d_to_3d_multichannel,
     )
     from .extraction import (
+        extract_central_lines_rfft_2d,
+        extract_central_lines_rfft_2d_multichannel,
+        extract_central_lines_rfft_3d,
+        extract_central_lines_rfft_3d_multichannel,
         extract_central_slices_rfft_3d,
         extract_central_slices_rfft_3d_multichannel,
     )
     from .insertion import (
+        insert_central_lines_rfft_2d,
+        insert_central_lines_rfft_2d_multichannel,
+        insert_central_lines_rfft_3d,
+        insert_central_lines_rfft_3d_multichannel,
         insert_central_slices_rfft_3d,
         insert_central_slices_rfft_3d_multichannel,
     )

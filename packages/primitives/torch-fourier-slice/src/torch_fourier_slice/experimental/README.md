@@ -399,18 +399,20 @@ differences (CPU and GPU, both interpolations).
 
 ## 12. The torch reference
 
-`reference/` implements the same functions in plain torch, with the same
-signatures, layouts and results (to float32 rounding). It follows the kernels step
-by step: the same slice coordinates, Friedel folding, periodic reads past the
-stored grid, Nyquist cube and Hermitian bookkeeping (see the layout note). Every
+`reference/` implements the whole experimental API in plain torch (central
+slices, central lines and the real-space layer), with the same signatures,
+layouts and results (to float32 rounding). It follows the kernels step by step:
+the same slice and line coordinates, Friedel folding, periodic reads past the
+stored grid, Nyquist box and Hermitian bookkeeping (see the layout note). Slices
+and lines share one interpolation module (`reference/_rfft.py`) for 2D images and
+3D volumes, as the kernels share `_gather.mojo` and `_scatter.mojo`. Every
 gradient comes from autograd rather than the dedicated backward kernels.
 
 It has two jobs:
 
 - **Fallback.** If the Mojo kernels can't be built or loaded,
   `torch_fourier_slice.experimental` exports the reference functions in their
-  place, so code keeps working, only slower. So far it covers the central slices
-  and the real-space layer; the central lines still need Mojo.
+  place, so code keeps working, only slower.
 - **Reference.** `tests/test_experimental_reference.py` checks that each reference
   function has the Mojo function's signature and gives the same values and
   gradients. It also checks the reference's pose and shift gradients against
