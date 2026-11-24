@@ -15,7 +15,7 @@ from torch_so3 import get_symmetry_ranges, get_uniform_euler_angles
 from tqdm import tqdm
 
 from ._config import ExhaustiveSearchConfig
-from ._preprocess import _normalise_volume
+from ._preprocess import _normalize_volume
 from ._result import AlignmentResult
 
 
@@ -162,8 +162,8 @@ def _exhaustive_topk(
         pbar_shared: tqdm | None = None,
     ) -> list[tuple[float, int, torch.Tensor, torch.Tensor]]:
         dev = torch.device(device_str)
-        ref_norm_dev = _normalise_volume(reference.float(), mask).to(dev)
-        mob_norm_dev = _normalise_volume(mobile.float(), mask).to(dev)
+        ref_norm_dev = _normalize_volume(reference.float(), mask).to(dev)
+        mob_norm_dev = _normalize_volume(mobile.float(), mask).to(dev)
         mask_dev = mask.to(dev) if mask is not None else None
 
         if mask_dev is not None:
@@ -288,10 +288,10 @@ def exhaustive_search(
     """Exhaustive SO(3) search with per-rotation FFT translation optimisation.
 
     For each candidate orientation the mobile volume is rotated and the
-    optimal translation is found as the ``argmax`` of the 3-D normalised
+    optimal translation is found as the ``argmax`` of the 3-D normalized
     cross-correlation map, computed via a single FFT pair.  Both volumes must
     already share the same voxel size; call
-    :func:`~torch_fit_in_map._preprocess.normalise_voxel_sizes` first if
+    :func:`~torch_fit_in_map._preprocess.normalize_voxel_sizes` first if
     needed.
 
     Parameters

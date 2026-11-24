@@ -1,4 +1,4 @@
-"""Volume preprocessing: voxel-size normalisation and masking."""
+"""Volume preprocessing: voxel-size normalization and masking."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from torch_fourier_rescale import fourier_rescale_3d
 from torch_grid_utils import fftfreq_grid
 
 
-def normalise_voxel_sizes(
+def normalize_voxel_sizes(
     reference: torch.Tensor,
     mobile: torch.Tensor,
     reference_pixel_size: float,
@@ -125,7 +125,7 @@ def make_spherical_mask(
         fftshift=True,
         norm=True,
         device=device,
-    )  # (d, h, w), values in [0, 0.5] (normalised spatial frequency = radius / box)
+    )  # (d, h, w), values in [0, 0.5] (normalized spatial frequency = radius / box)
     r = freq_grid * 2.0  # rescale so box-inscribed sphere has radius 1
 
     inner = radius_fraction - edge_width_fraction / 2
@@ -139,8 +139,8 @@ def make_spherical_mask(
     return mask
 
 
-def _normalise_volume(volume: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
-    """Zero-mean, unit-variance normalisation within *mask* (or globally)."""
+def _normalize_volume(volume: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
+    """Zero-mean, unit-variance normalization within *mask* (or globally)."""
     if mask is not None:
         n = mask.sum().clamp(min=1)
         mean = (volume * mask).sum() / n

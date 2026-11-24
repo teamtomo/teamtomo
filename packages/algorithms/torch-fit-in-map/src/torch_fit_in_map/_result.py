@@ -26,7 +26,7 @@ class AlignmentResult:
         reference (pull convention: pass ``T(-translation_pixels)`` to
         ``affine_transform_image_3d``).
     score : float
-        Peak normalised cross-correlation score (higher is better, max 1.0 for
+        Peak normalized cross-correlation score (higher is better, max 1.0 for
         identical volumes).
     simulated_potential : torch.Tensor or None
         ``(d, h, w)`` simulated potential volume generated during

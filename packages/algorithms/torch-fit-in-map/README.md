@@ -9,7 +9,7 @@
 
 `torch-fit-in-map` is a PyTorch package for rigid-body volume alignment in
 cryo-EM. It finds the rotation and translation that best superimposes a *mobile*
-volume onto a *reference* volume using normalised cross-correlation (NCC).
+volume onto a *reference* volume using normalized cross-correlation (NCC).
 
 The public API operates purely on **`torch.Tensor`** potential maps and
 **`pandas.DataFrame`** atom tables — it does no file I/O. Reading/writing MRC and
@@ -65,7 +65,7 @@ aligned = apply_alignment(mobile, result)
 ```
 
 If the two maps have different voxel sizes, resample first with
-`normalise_voxel_sizes(reference, mobile, ref_px, mob_px)`.
+`normalize_voxel_sizes(reference, mobile, ref_px, mob_px)`.
 
 ### Atoms <-> map alignment
 

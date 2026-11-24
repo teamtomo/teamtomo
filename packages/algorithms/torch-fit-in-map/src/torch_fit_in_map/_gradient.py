@@ -9,7 +9,7 @@ from torch_image_interpolation import sample_image_3d
 from tqdm import tqdm
 
 from ._config import GradientRefinementConfig
-from ._preprocess import _normalise_volume
+from ._preprocess import _normalize_volume
 from ._result import AlignmentResult
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ def _transform_volume(
 def _ncc_loss(
     a: torch.Tensor, b: torch.Tensor, mask: torch.Tensor | None
 ) -> torch.Tensor:
-    """Negative normalised cross-correlation (minimise to maximise NCC)."""
+    """Negative normalized cross-correlation (minimise to maximise NCC)."""
     if mask is not None:
         a = a * mask
         b = b * mask
@@ -193,8 +193,8 @@ def gradient_refine(
     device = reference.device
     d, h, w = reference.shape[-3:]
 
-    ref_norm = _normalise_volume(reference.float(), mask)
-    mob_norm = _normalise_volume(mobile.float(), mask)
+    ref_norm = _normalize_volume(reference.float(), mask)
+    mob_norm = _normalize_volume(mobile.float(), mask)
 
     centre = torch.tensor(
         [(d - 1) / 2.0, (h - 1) / 2.0, (w - 1) / 2.0],

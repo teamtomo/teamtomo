@@ -8,7 +8,7 @@ from torch_so3 import get_uniform_euler_angles
 
 from ._config import ProjectionAlignmentConfig
 from ._exhaustive import _euler_zyz_to_4x4_zyx
-from ._preprocess import _normalise_volume
+from ._preprocess import _normalize_volume
 from ._result import AlignmentResult
 
 # Three orthogonal views of the reference as ZYZ Euler angles (degrees): looking
@@ -65,7 +65,7 @@ def projection_align(
     For each candidate rotation ``R`` the mobile is rotated back by ``R`` and
     projected along the same three views with
     :func:`torch_fourier_slice.project_3d_to_2d`, then compared with the
-    matching reference projection via 2-D normalised cross-correlation (NCC).
+    matching reference projection via 2-D normalized cross-correlation (NCC).
     The candidate with the highest NCC, averaged over the views, gives the
     rotation.  The CC-map peaks of the three views each give two components
     of the 3-D shift, which are combined by least squares into the
@@ -102,8 +102,8 @@ def projection_align(
 
     device = reference.device
     d = reference.shape[-1]
-    ref_float = _normalise_volume(reference.float(), mask)
-    mob_float = _normalise_volume(mobile.float(), mask)
+    ref_float = _normalize_volume(reference.float(), mask)
+    mob_float = _normalize_volume(mobile.float(), mask)
 
     if mask is not None:
         ref_float = ref_float * mask
