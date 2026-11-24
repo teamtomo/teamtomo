@@ -53,6 +53,55 @@ def circle(
     return add_soft_edge_2d(mask, smoothing_radius=smoothing_radius)
 
 
+def soft_circle(
+    radius: float,
+    image_shape: tuple[int, int] | int,
+    center: tuple[float, float] | None = None,
+    smoothing_radius: float = 0,
+    device: torch.device | None = None,
+) -> torch.Tensor:
+    """Construct a 2D circular mask with a cosine soft edge.
+
+    The mask is 1 inside `radius` and falls to 0 at `radius + smoothing_radius` as a
+    quarter cosine, `cos(pi / 2 * (distance - radius) / smoothing_radius)`, of each
+    pixel's distance from the circle.
+
+    Parameters
+    ----------
+    radius: float
+        Radius of the circle in pixels.
+    image_shape: tuple[int, int] | int
+        Shape `(h, w)` of 2D image(s) for the circle mask.
+    center: tuple[float, float] | None
+        `(h, w)` coordinates of the center of the circle. If `None`, the center of the
+        image will be used.
+    smoothing_radius: float
+        Width of the soft edge in pixels. If 0, the mask is binary.
+    device: torch.device | None
+        Device on which to create the mask. If `None`, the device of the output will be
+        the same as the default torch device.
+
+    Returns
+    -------
+    circle_mask: torch.Tensor
+        `(h, w)` array with values in [0, 1].
+    """
+    if isinstance(image_shape, int):
+        image_shape = (image_shape, image_shape)
+    if center is None:
+        center = dft_center(image_shape, rfft=False, fftshift=True)
+    distances = coordinate_grid(
+        image_shape=image_shape,
+        center=center,
+        norm=True,
+        device=device,
+    )
+    if smoothing_radius <= 0:
+        return (distances < radius).float()
+    edge = torch.clamp((distances - radius) / smoothing_radius, min=0)
+    return torch.where(edge <= 1, torch.cos((torch.pi / 2) * edge), 0.0)
+
+
 def rectangle(
     dimensions: tuple[float, float],
     image_shape: tuple[int, int] | int,
