@@ -34,6 +34,12 @@ requires_mojo = pytest.mark.skipif(
     reason="mojo package not installed / kernels failed to compile",
 )
 
+# the experimental functions run on the Mojo kernels or the torch reference
+EXPERIMENTAL_BACKENDS = [
+    pytest.param(experimental, marks=requires_mojo, id="mojo"),
+    pytest.param(experimental.reference, id="reference"),
+]
+
 
 def _gaussian_blobs(ndim: int, n_blobs: int, seed: int = 0) -> np.ndarray:
     """Randomly placed Gaussian blobs, an image or volume with no symmetry."""
@@ -137,33 +143,39 @@ def test_extract_central_slices_rfft_3d_takes_the_passive_rotation(volume, rotat
         assert _cc(image, _rotate(volume, rotation.T).sum(axis=0)) > 0.98
 
 
-@requires_mojo
-def test_experimental_project_3d_to_2d_rotates_volume_actively(volume, rotations):
-    projections = experimental.project_3d_to_2d(_tensor(volume), _tensor(rotations))
+@pytest.mark.parametrize("backend", EXPERIMENTAL_BACKENDS)
+def test_experimental_project_3d_to_2d_rotates_volume_actively(
+    backend, volume, rotations
+):
+    projections = backend.project_3d_to_2d(_tensor(volume), _tensor(rotations))
     for projection, rotation in zip(projections, rotations, strict=True):
         assert _cc(projection, _rotate(volume, rotation).sum(axis=0)) > 0.99
 
 
-@requires_mojo
-def test_experimental_project_3d_to_2d_matches_torch_backend(volume, rotations):
-    mojo = experimental.project_3d_to_2d(_tensor(volume), _tensor(rotations))
+@pytest.mark.parametrize("backend", EXPERIMENTAL_BACKENDS)
+def test_experimental_project_3d_to_2d_matches_torch_backend(
+    backend, volume, rotations
+):
+    projections = backend.project_3d_to_2d(_tensor(volume), _tensor(rotations))
     torch_backend = project_3d_to_2d(_tensor(volume), _tensor(rotations))
-    for a, b in zip(mojo, torch_backend, strict=True):
+    for a, b in zip(projections, torch_backend, strict=True):
         assert _cc(a, b) > 0.9999
 
 
-@requires_mojo
-def test_experimental_backproject_2d_to_3d_takes_the_rotation_of_the_volume(volume):
+@pytest.mark.parametrize("backend", EXPERIMENTAL_BACKENDS)
+def test_experimental_backproject_2d_to_3d_takes_the_rotation_of_the_volume(
+    backend, volume
+):
     rotations = Rotation.random(50, random_state=2).as_matrix()
     images = _tensor(np.stack([_rotate(volume, r).sum(axis=0) for r in rotations]))
-    reconstruction = experimental.backproject_2d_to_3d(images, _tensor(rotations))
+    reconstruction = backend.backproject_2d_to_3d(images, _tensor(rotations))
     assert _cc(reconstruction, volume) > 0.98
 
 
-@requires_mojo
-def test_experimental_extract_takes_the_passive_rotation(volume, rotations):
+@pytest.mark.parametrize("backend", EXPERIMENTAL_BACKENDS)
+def test_experimental_extract_takes_the_passive_rotation(backend, volume, rotations):
     dft = torch.fft.rfftn(torch.fft.fftshift(_tensor(volume)), dim=(-3, -2, -1))
-    slices = experimental.extract_central_slices_rfft_3d(
+    slices = backend.extract_central_slices_rfft_3d(
         dft.contiguous(), _tensor(rotations)
     )
     images = torch.fft.irfftn(slices, dim=(-2, -1), s=(SIDELENGTH, SIDELENGTH))

@@ -130,6 +130,7 @@ Python side (`experimental/`):
 | `_backend/_validation.py` | shape checks, `prep_*`, `interp_code`, the **`KernelParams`** carrier |
 | `_backend/_device.py` | device addresses (CUDA VA / Metal `gpuAddress`), Metal heap residency, launch prep |
 | `_backend/_loader.py` | compiles + loads the Mojo module on import; `mojo_kernels_available()` |
+| `reference/` | the same API in plain torch: the fallback without Mojo, and the reference the kernels are tested against (§12) |
 
 Mojo kernels (`experimental/_backend/_mojo/`) — one extension module split into grouped
 files, all compiled together on first import:
@@ -391,7 +392,34 @@ gradients are dedicated backward kernels (`_slice_3d_grad.mojo`, `_line_3d_grad.
 the interpolated field (`_gather_grad.mojo`) through the rotated sample
 coordinate; the shift grad differentiates the phase ramp; the weight grad is the
 exact adjoint of the weight splat. All are validated by finite differences (CPU
-and GPU, both interpolations).
+and GPU, both interpolations), apart from one known gap (§12).
+
+## 12. The torch reference
+
+`reference/` implements the same functions in plain torch, with the same
+signatures, layouts and results (to float32 rounding). It follows the kernels step
+by step: the same slice coordinates, Friedel folding, zero-padding past the stored
+grid and Hermitian double-insert. Every gradient comes from autograd rather than
+the dedicated backward kernels.
+
+It has two jobs:
+
+- **Fallback.** If the Mojo kernels can't be built or loaded,
+  `torch_fourier_slice.experimental` exports the reference functions in their
+  place, so code keeps working, only slower. So far it covers the central slices
+  and the real-space layer; the central lines still need Mojo.
+- **Reference.** `tests/test_experimental_reference.py` checks that each reference
+  function has the Mojo function's signature and gives the same values and
+  gradients. It also checks the reference's pose and shift gradients against
+  finite differences, which runs on CI too, where Mojo isn't installed.
+
+One known gap in the Mojo backend: the weight volume an insertion returns depends
+on the pose (the weights are splatted at the rotated positions), but the
+insertions' backward passes ignore that, so the rotation or direction gradient
+through the weight volume is zero. This holds for the slice and both line
+insertions. `backproject_2d_to_3d` divides by that weight volume, so its rotation
+gradient is off too. The reference gets the slice case right, and a strict
+`xfail` test marks the gap until the kernels are fixed.
 
 ---
 
