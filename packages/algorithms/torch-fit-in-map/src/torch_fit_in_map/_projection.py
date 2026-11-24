@@ -13,8 +13,8 @@ from ._result import AlignmentResult
 
 # Three orthogonal views of the reference as ZYZ Euler angles (degrees): looking
 # along z, x and y, each tilted by the same generic rotation.  The tilt worked
-# around torch-fourier-slice mis-sampling views along a box axis, which has since
-# been fixed (teamtomo/teamtomo#172); it does no harm, so it stays.
+# around torch-fourier-slice sampling views along a box axis incorrectly, which
+# has since been fixed (teamtomo/teamtomo#172); it does no harm, so it stays.
 _AXIS_VIEW_EULER_ANGLES = torch.tensor(
     [[0.0, 0.0, 0.0], [0.0, 90.0, 0.0], [0.0, 90.0, 90.0]], dtype=torch.float64
 )
