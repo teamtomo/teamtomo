@@ -12,10 +12,9 @@ from ._preprocess import _normalise_volume
 from ._result import AlignmentResult
 
 # Three orthogonal views of the reference as ZYZ Euler angles (degrees): looking
-# along z, x and y, each tilted by the same generic rotation.  Views along a box
-# axis are avoided because rotation matrices with zero entries put whole lines
-# of the slice on the kx = 0 plane of the rfft, which torch-fourier-slice
-# samples incorrectly.
+# along z, x and y, each tilted by the same generic rotation.  The tilt worked
+# around torch-fourier-slice mis-sampling views along a box axis, which has since
+# been fixed (teamtomo/teamtomo#172); it does no harm, so it stays.
 _AXIS_VIEW_EULER_ANGLES = torch.tensor(
     [[0.0, 0.0, 0.0], [0.0, 90.0, 0.0], [0.0, 90.0, 90.0]], dtype=torch.float64
 )
