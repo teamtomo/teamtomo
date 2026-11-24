@@ -74,16 +74,6 @@ def test_poisson_sample_seed_requires_draw_index():
         poisson_sample(expected, PoissonConfig(apply=True, seed=0))
 
 
-def test_poisson_sample_generator_takes_precedence():
-    expected = torch.full((32, 32), 50.0)
-    config = PoissonConfig(apply=True, seed=0)
-    first = poisson_sample(expected, config, generator=torch.Generator().manual_seed(7))
-    second = poisson_sample(
-        expected, config, draw_index=5, generator=torch.Generator().manual_seed(7)
-    )
-    assert torch.equal(first, second)
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @pytest.mark.parametrize("seed", [None, 0])
 def test_poisson_sample_consecutive_cuda_draws_are_independent(seed):

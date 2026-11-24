@@ -33,7 +33,7 @@ def apply_dqe(
     Returns
     -------
     torch.Tensor
-        MTF-blurred image with the same shape as ``image``.
+        MTF-filtered image with the same shape as ``image``.
     """
     validate_real_image(image)
     if not config.apply:
@@ -58,13 +58,13 @@ def apply_dqe(
 
     mean_before = image.mean(dim=(-2, -1), keepdim=True)
     image_dft = torch.fft.rfft2(image, dim=(-2, -1))
-    blurred_dft = image_dft * mtf
-    blurred = torch.fft.irfft2(
-        blurred_dft,
+    filtered_dft = image_dft * mtf
+    filtered_image = torch.fft.irfft2(
+        filtered_dft,
         s=image_shape,
         dim=(-2, -1),
         norm="backward",
     )
-    mean_after = blurred.mean(dim=(-2, -1), keepdim=True).clamp(min=_EPS)
-    scaled: torch.Tensor = blurred * (mean_before / mean_after)
+    mean_after = filtered_image.mean(dim=(-2, -1), keepdim=True).clamp(min=_EPS)
+    scaled: torch.Tensor = filtered_image * (mean_before / mean_after)
     return scaled

@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch_fourier_filter.dose_weight import dose_weight_2d
 
@@ -24,3 +25,15 @@ def test_apply_dose_weight_matches_primitive():
     config = DoseWeightConfig(apply=True, dose_start=dose, dose_end=dose)
     result = apply_dose_weight(image, config, pixel_size=pixel_size, voltage_kv=300.0)
     assert torch.allclose(result, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_dose_weight_config_requires_dose_end_when_applied():
+    with pytest.raises(ValueError, match="dose_end"):
+        DoseWeightConfig(apply=True, dose_start=0.0)
+
+
+def test_dose_weight_config_without_dose_end_when_not_applied():
+    config = DoseWeightConfig()
+    image = torch.rand(8, 8)
+    assert config.dose_end is None
+    assert apply_dose_weight(image, config, pixel_size=1.0, voltage_kv=300.0) is image

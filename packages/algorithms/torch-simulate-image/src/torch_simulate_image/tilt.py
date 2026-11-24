@@ -19,28 +19,10 @@ def tilt_volume(
 ) -> torch.Tensor:
     """Tilt a specimen volume about the microscope tilt axis.
 
-    Implements the standard cryo-ET forward model, ``Rz(detector_rotation) @
-    Ry(tilt)``, as a single resample about the volume centre:
-
-    1. the stage tilts the specimen by ``tilt_deg`` about **y**, and
-    2. ``detector_rotation_deg`` carries the result into the detector frame,
-       i.e. the in-plane angle between the microscope tilt axis and the
-       detector rows.
-
-    The tilt axis is **y** because that is a fixed property of the instrument,
-    not of the specimen, and because every downstream consumer assumes it:
-    ``torch_tilt_series.TiltSeries`` builds ``Rz(tilt_axis_angle) @
-    Ry(tilt_angle) @ Rx(x_tilt)``, and a reconstruction therefore returns the
-    specimen in a frame whose tilt axis lies along y.
-
-    That last point is the reason not to tilt about some other in-plane axis
-    here. Tilting about an axis ``phi`` degrees from +x also produces a valid
-    tilt series, but the reconstruction rotates the specimen by ``90 - phi``
-    degrees on the way out to put the tilt axis back on y, so the tomogram no
-    longer shares a frame with the input volume. Keeping the tilt on y and the
-    detector rotation as a separate argument keeps simulation and
-    reconstruction in the same frame, which is what makes a simulated
-    tomogram comparable to its own ground truth.
+    Applies ``Rz(detector_rotation) @ Ry(tilt)`` as a single resample about the
+    volume centre. The tilt axis is y, as in ``torch_tilt_series.TiltSeries``,
+    so a reconstruction of the simulated tilt series shares a frame with the
+    input volume.
 
     Parameters
     ----------

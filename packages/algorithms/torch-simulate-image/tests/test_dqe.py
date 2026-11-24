@@ -1,5 +1,6 @@
 import pytest
 import torch
+from torch_fourier_filter.mtf import get_mtf_reference_path
 
 from torch_simulate_image import DqeConfig, apply_dqe
 
@@ -39,12 +40,12 @@ def test_dqe_defaults_to_disabled():
 
 
 def test_dqe_config_raises_when_neither_source_given():
-    with pytest.raises(ValueError, match="starfile_path"):
+    with pytest.raises(ValueError, match="exactly one"):
         DqeConfig(apply=True)
 
 
 def test_dqe_config_raises_when_both_sources_given():
-    with pytest.raises(ValueError, match="starfile_path"):
+    with pytest.raises(ValueError, match="exactly one"):
         DqeConfig(
             apply=True,
             mtf_frequencies=torch.tensor([0.0, 0.5]),
@@ -65,3 +66,30 @@ def test_dqe_config_raises_when_partial_tensor_set_alongside_starfile():
             mtf_frequencies=torch.tensor([0.0, 0.5]),
             starfile_path="mtf.star",
         )
+
+
+def test_dqe_config_raises_when_reference_and_starfile_given():
+    with pytest.raises(ValueError, match="exactly one"):
+        DqeConfig(
+            apply=True,
+            mtf_reference="k2_300kv",
+            starfile_path="mtf.star",
+        )
+
+
+def test_dqe_config_rejects_unknown_mtf_reference():
+    with pytest.raises(ValueError, match="Unknown mtf_reference"):
+        DqeConfig(apply=True, mtf_reference="not_a_detector")
+
+
+def test_apply_dqe_mtf_reference_matches_its_starfile():
+    """A bundled MTF by name gives the same image as its STAR file by path."""
+    name = "K3_standard_300kV_FL2"  # names are case-insensitive
+    image = torch.rand(64, 48) + 1.0
+    by_name = apply_dqe(image, DqeConfig(apply=True, mtf_reference=name))
+    by_path = apply_dqe(
+        image,
+        DqeConfig(apply=True, starfile_path=str(get_mtf_reference_path(name))),
+    )
+    torch.testing.assert_close(by_name, by_path)
+    assert not torch.allclose(by_name, image)

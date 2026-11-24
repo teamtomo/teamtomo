@@ -26,11 +26,8 @@ tilted = tilt_volume(
 )
 ```
 
-The tilt axis is **y** because that is a property of the instrument, not the specimen, and
-because it is what downstream consumers assume — `torch_tilt_series.TiltSeries` builds
-`Rz(tilt_axis_angle) @ Ry(tilt_angle) @ Rx(x_tilt)`. Tilting about any other in-plane axis also
-produces a valid tilt series, but the reconstruction rotates the specimen onto y on the way out,
-so the tomogram no longer shares a frame with the input volume.
+The tilt axis is **y**, as in `torch_tilt_series.TiltSeries`, so a reconstruction of the
+simulated tilt series shares a frame with the input volume.
 
 ## Examples
 
@@ -70,11 +67,3 @@ End-to-end notebooks (PDB → ESP → multislice → micrograph):
 uv sync --group examples
 # then open a notebook in Jupyter / VS Code
 ```
-
-## Scope
-
-- **In scope:** exit wave → micrograph (optics + detector physics), and the
-  specimen-tilt geometry that feeds it (`tilt_volume`)
-- **Out of scope:** 3D potentials, wave propagation, structure I/O, CLI
-
-See `notes/torch-simulate-image-plan.md` in the monorepo for the full design.

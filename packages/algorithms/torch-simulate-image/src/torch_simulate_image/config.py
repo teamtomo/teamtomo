@@ -6,6 +6,7 @@ from typing import Self
 
 from pydantic import Field, model_validator
 from teamtomo_basemodel import BaseModelTeamTomo, ExcludedTensor
+from torch_fourier_filter.mtf import list_mtf_references
 
 
 class LppConfig(BaseModelTeamTomo):
@@ -126,25 +127,36 @@ class FluenceConfig(BaseModelTeamTomo):
 class PoissonConfig(BaseModelTeamTomo):
     """Poisson shot-noise sampling options.
 
-    Every draw uses its own freshly seeded generator, so repeated calls with
-    the same config (e.g. one config reused across the frames of a tilt
-    series) yield independent noise on any device.
-
-    Without a ``seed``, each draw's seed comes from torch's global RNG, so
-    ``torch.manual_seed`` makes a whole run reproducible. With a ``seed``,
-    each call must also pass a ``draw_index`` (e.g. the frame or tilt
-    number): the same seed and index always give the same noise, and
-    different indices give independent noise.
+    Every draw is seeded separately, so draws are independent on any device.
+    Without a ``seed``, draws follow ``torch.manual_seed``. With a ``seed``,
+    pass a ``draw_index`` with each draw (see
+    :func:`~torch_simulate_image.poisson_sample`).
     """
 
     apply: bool = True
-    seed: int | None = None
+    seed: int | None = Field(
+        default=None,
+        description="Base seed, combined with each draw's draw_index",
+    )
 
 
 class DqeConfig(BaseModelTeamTomo):
-    """Detector quantum efficiency (MTF) options."""
+    """Detector quantum efficiency (MTF) options.
+
+    When ``apply`` is ``True``, give the MTF in exactly one way:
+    ``mtf_reference``, ``starfile_path``, or ``mtf_frequencies`` with
+    ``mtf_amplitudes``.
+    """
 
     apply: bool = False
+    mtf_reference: str | None = Field(
+        default=None,
+        description=(
+            "Name of a detector MTF bundled with torch-fourier-filter, e.g. "
+            "'k3_standard_300kv_fl2' (case-insensitive). "
+            "torch_fourier_filter.mtf.list_mtf_references() lists them."
+        ),
+    )
     mtf_frequencies: ExcludedTensor = Field(
         default=None,
         description="MTF spatial frequencies in ascending order, cycles/pixel",
@@ -155,6 +167,15 @@ class DqeConfig(BaseModelTeamTomo):
 
     @model_validator(mode="after")
     def _validate_mtf_source(self) -> Self:
+        if self.mtf_reference is not None:
+            # a typo should fail here, not at the first simulated image
+            known = list_mtf_references()
+            if self.mtf_reference.lower() not in known:
+                msg = (
+                    f"Unknown mtf_reference {self.mtf_reference!r}. "
+                    f"Bundled detector MTFs: {known}"
+                )
+                raise ValueError(msg)
         if not self.apply:
             return self
         has_freq = self.mtf_frequencies is not None
@@ -165,25 +186,44 @@ class DqeConfig(BaseModelTeamTomo):
                 "must both be set or both be None."
             )
             raise ValueError(msg)
-        has_tensors = has_freq and has_amp
-        has_star = self.starfile_path is not None
-        if has_tensors == has_star:
+        n_sources = sum(
+            [
+                self.mtf_reference is not None,
+                self.starfile_path is not None,
+                has_freq and has_amp,
+            ]
+        )
+        if n_sources != 1:
             msg = (
-                "When dqe.apply is True, provide either "
-                "(mtf_frequencies, mtf_amplitudes) or starfile_path, not both "
-                "or neither."
+                "When dqe.apply is True, provide exactly one of mtf_reference, "
+                "starfile_path, or (mtf_frequencies, mtf_amplitudes)."
             )
             raise ValueError(msg)
         return self
 
 
 class DoseWeightConfig(BaseModelTeamTomo):
-    """Grant & Grigorieff dose weighting in Fourier space."""
+    """Grant & Grigorieff dose weighting in Fourier space.
+
+    The image is weighted at the mid-point dose, ``(dose_start + dose_end) / 2``.
+    """
 
     apply: bool = False
-    dose_start: float = 0.0
-    dose_end: float = 30.0
+    dose_start: float = Field(
+        default=0.0, description="Cumulative dose in e⁻/Å² before this image"
+    )
+    dose_end: float | None = Field(
+        default=None,
+        description="Cumulative dose in e⁻/Å² after this image; required to apply",
+    )
     crit_exposure_bfactor: float = -1
+
+    @model_validator(mode="after")
+    def _validate_dose_end(self) -> Self:
+        if self.apply and self.dose_end is None:
+            msg = "When dose_weight.apply is True, dose_end must be set."
+            raise ValueError(msg)
+        return self
 
 
 class EnvelopeConfig(BaseModelTeamTomo):

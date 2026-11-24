@@ -41,6 +41,9 @@ def apply_dose_weight(
     validate_real_image(image)
     if not config.apply:
         return image
+    if config.dose_end is None:  # the config was changed after validation
+        msg = "When dose_weight.apply is True, dose_end must be set."
+        raise ValueError(msg)
 
     image_shape = image_shape_from_tensor(image)
     dose = 0.5 * (config.dose_start + config.dose_end)
