@@ -205,7 +205,9 @@ class DqeConfig(BaseModelTeamTomo):
 class DoseWeightConfig(BaseModelTeamTomo):
     """Grant & Grigorieff dose weighting in Fourier space.
 
-    The image is weighted at the mid-point dose, ``(dose_start + dose_end) / 2``.
+    Each frequency is scaled by the mean exposure filter over the cumulative
+    dose from ``dose_start`` to ``dose_end`` (see
+    :func:`~torch_simulate_image.apply_dose_weight`).
     """
 
     apply: bool = False
