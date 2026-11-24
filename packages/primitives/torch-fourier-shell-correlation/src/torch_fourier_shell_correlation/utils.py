@@ -50,27 +50,6 @@ def _prepare_fft_data(
     return a_fft_flat, b_fft_flat, frequencies
 
 
-def _compute_frequency_bins_weighted(
-    image_shape: Sequence[int], device: torch.device
-) -> torch.Tensor:
-    """Compute frequency bin centers for weighted shell/ring correlation.
-
-    Args:
-        image_shape: Shape of the spatial dimensions
-        device: Device to create tensors on
-
-    Returns
-    -------
-        Frequency bin centers with shape (n_bins,)
-    """
-    # Use minimum dimension to define number of shells
-    # This ensures all frequency components can contribute via interpolation
-    min_dim = min(image_shape)
-    bin_centers = torch.fft.rfftfreq(min_dim, device=device)
-
-    return bin_centers
-
-
 def _frequency_to_bin_coordinates(
     frequencies: torch.Tensor, bin_centers: torch.Tensor
 ) -> torch.Tensor:

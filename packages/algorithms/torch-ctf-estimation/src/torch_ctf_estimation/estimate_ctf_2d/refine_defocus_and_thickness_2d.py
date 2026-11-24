@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_thickness_ctf_ps_t,
@@ -20,6 +21,8 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _clamp_defocus_grid_after_step,
     _clamp_optional_bounds,
     _get_astig_clamped,
+    _mean_linear_gradient,
+    _principal_defocus,
     _shared_astigmatism_and_env,
 )
 from torch_ctf_estimation.estimate_ctf_2d.estimate_defocus_2d_linear import (
@@ -53,6 +56,7 @@ def refine_defocus_and_thickness_2d(
     laser_params: LaserParams | None = None,
     axis_mask: torch.Tensor | None = None,
     early_stopper: Callable[[float], bool] | None = None,
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[Defocus2DResults, Thickness2DResults]:
     """Jointly refine 2D defocus and thickness with the thickness-modulated CTF.
 
@@ -91,6 +95,11 @@ def refine_defocus_and_thickness_2d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. Needed to tell odd from even
+        widths, since both give the same rfft width. If None, square patches
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -103,8 +112,13 @@ def refine_defocus_and_thickness_2d(
     if thickness_grid_resolution is None:
         thickness_grid_resolution = (1, 1, 1)
 
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     T = patch_power_spectra.shape[0]
     phase_shift_deg = (
@@ -294,14 +308,14 @@ def refine_defocus_and_thickness_2d(
         assert grad_mag_param is not None
         assert angle_u_param is not None
         assert angle_v_param is not None
-        au = float(angle_u_param.detach().cpu().item())
-        av = float(angle_v_param.detach().cpu().item())
-        angle_deg = (math.atan2(av, au) * 180.0 / math.pi + 180.0) % 180.0
+        angle_deg, grad_mag = _mean_linear_gradient(
+            grad_mag_param.detach(), angle_u_param.detach(), angle_v_param.detach()
+        )
         mean_defocus = float(defocus_0_param.detach().cpu().item())
         updated_defocus: LinearDefocusModel | CubicCatmullRomGrid3d = (
             LinearDefocusModel(
                 defocus_0=mean_defocus,
-                defocus_gradient_magnitude=float(grad_mag_param.detach().cpu().item()),
+                defocus_gradient_magnitude=grad_mag,
                 defocus_gradient_angle=angle_deg,
             )
         )
@@ -312,12 +326,13 @@ def refine_defocus_and_thickness_2d(
         mean_defocus = float(defocus_grid.data.detach().cpu().mean().item())
         model_type = "grid"
 
+    defocus_u, defocus_v = _principal_defocus(mean_defocus, astig)
     result2d_out = result2d.model_copy(
         update={
             "defocus_model_type": model_type,
             "defocus_model": updated_defocus,
-            "defocus_u": mean_defocus + astig / 2.0,
-            "defocus_v": mean_defocus - astig / 2.0,
+            "defocus_u": defocus_u,
+            "defocus_v": defocus_v,
             "cross_correlation_final": cc_final,
             "envelope_B": float(envelope_B.detach().cpu().item()),
         }

@@ -45,6 +45,20 @@ class KernelParams(NamedTuple):
     has_shifts_3d: int
 
 
+def even_line_sidelength(line_rfft_width: int) -> int:
+    """Real-space length of a central line from its rfft width.
+
+    The line projectors here only make even-length lines: volumes and images
+    must have even sides (see :func:`validate_reconstruction` and
+    :func:`validate_image_2d`) and an odd ``output_length`` raises. A line of
+    length ``n`` has ``n // 2 + 1`` rfft samples, which is the same for ``n``
+    and ``n + 1``, so an odd-length line can't be told apart from its rfft.
+    Lines passed to the insertion and gradient ops must come from even-length
+    lines, such as the output of the extractors.
+    """
+    return 2 * (int(line_rfft_width) - 1)
+
+
 def validate_reconstruction(
     reconstruction: torch.Tensor,
 ) -> tuple[torch.Tensor, int, int, int]:

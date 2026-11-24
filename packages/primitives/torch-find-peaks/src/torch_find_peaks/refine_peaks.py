@@ -112,7 +112,7 @@ def refine_peaks_2d(
         A tensor-like object of shape (n, 2) containing the initial peak
         coordinates (y, x).
     boxsize : int
-        Size of the region to crop around each peak (must be even).
+        Size of the region to crop around each peak.
     max_iterations : int, optional
         Maximum number of optimization iterations. Default is 1000.
     learning_rate : float, optional
@@ -203,7 +203,7 @@ def _refine_peaks_3d_torch(
         A tensor of shape (n, 7) containing the initial peak parameters.
         Each row contains [amplitude, z, y, x, sigma_x, sigma_y, sigma_z].
     boxsize : int
-        Size of the region to crop around each peak (must be even).
+        Size of the region to crop around each peak.
     max_iterations : int
         Maximum number of optimization iterations.
     learning_rate : float
@@ -217,10 +217,6 @@ def _refine_peaks_3d_torch(
         A tensor of shape (n, 7) containing the refined parameters for each peak.
         Each row contains [amplitude, z, y, x, sigma_x, sigma_y, sigma_z].
     """
-    # Ensure boxsize is even
-    if boxsize % 2 != 0:
-        raise ValueError("boxsize must be even")
-
     # Crop regions around peaks
     boxes = subpixel_crop_3d(volume, peak_data[:, 1:4], boxsize).detach()
 
@@ -311,7 +307,7 @@ def refine_peaks_3d(
         A tensor-like object of shape (n, 3) containing the initial peak
         coordinates (z, y, x).
     boxsize : int
-        Size of the region to crop around each peak (must be even).
+        Size of the region to crop around each peak.
     max_iterations : int, optional
         Maximum number of optimization iterations. Default is 1000.
     learning_rate : float, optional

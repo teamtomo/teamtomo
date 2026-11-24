@@ -2,7 +2,6 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from .atom_stack import AtomStack
 from .grid import GridConfig, default_sublattice_radius
 from .potential import (
     PENG_SCATTERING_TO_POTENTIAL,
@@ -39,7 +38,6 @@ __all__ = [
     "DEFAULT_ICE_POTENTIAL_V",
     "PENG_SCATTERING_TO_POTENTIAL",
     "VDW_RADII_A",
-    "AtomStack",
     "BondedScatteringFactorTable",
     "GridConfig",
     "__version__",

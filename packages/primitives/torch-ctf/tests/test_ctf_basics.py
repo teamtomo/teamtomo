@@ -728,3 +728,143 @@ def test_calculate_ctf_2d_return_complex_ctf_beam_tilt_matches_manual_phase():
     )
     expected = torch.exp(-1j * (total_phase_shift - antisymmetric_phase_shift))
     assert torch.allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("astigmatism_angle", "direction_yx"),
+    [(0.0, (0, 1)), (45.0, (1, 1)), (90.0, (1, 0))],
+)
+def test_calculate_ctf_2d_astigmatism_angle_places_defocus_u(
+    astigmatism_angle, direction_yx
+):
+    """0 degrees puts defocus_u along x; positive angles rotate it towards +y."""
+    kwargs = {
+        "voltage": 300.0,
+        "spherical_aberration": 2.7,
+        "amplitude_contrast": 0.07,
+        "phase_shift": 0.0,
+        "pixel_size": 1.0,
+        "image_shape": (64, 64),
+        "rfft": False,
+        "fftshift": False,
+    }
+    astigmatic = calculate_ctf_2d(
+        defocus=1.5, astigmatism=0.5, astigmatism_angle=astigmatism_angle, **kwargs
+    )
+    defocus_u = calculate_ctf_2d(
+        defocus=2.0, astigmatism=0.0, astigmatism_angle=0.0, **kwargs
+    )
+    defocus_v = calculate_ctf_2d(
+        defocus=1.0, astigmatism=0.0, astigmatism_angle=0.0, **kwargs
+    )
+    # (y, x) indices along the given direction and perpendicular to it, skipping DC
+    steps = torch.arange(1, 32)
+    dy, dx = direction_yx
+    along = (steps * dy, steps * dx)
+    across = ((steps * dx) % 64, (-steps * dy) % 64)
+    torch.testing.assert_close(astigmatic[along], defocus_u[along], atol=1e-3, rtol=0)
+    torch.testing.assert_close(astigmatic[across], defocus_v[across], atol=1e-3, rtol=0)
+
+
+_CTF_1D_KWARGS = {
+    "defocus": 1.5,
+    "voltage": 300,
+    "spherical_aberration": 2.7,
+    "amplitude_contrast": 0.07,
+    "phase_shift": 0,
+    "pixel_size": 1.5,
+}
+
+
+@pytest.mark.parametrize("n", [20, 21])
+def test_1d_ctf_image_sidelength_matches_2d_rfft_row(n):
+    """With image_sidelength, the 1D CTF is the ky=0 row of the 2D rfft CTF."""
+    ctf_1d = calculate_ctf_1d(
+        **_CTF_1D_KWARGS,
+        n_samples=n // 2 + 1,
+        oversampling_factor=1,
+        image_sidelength=n,
+    )
+    ctf_2d = calculate_ctf_2d(
+        **_CTF_1D_KWARGS,
+        astigmatism=0,
+        astigmatism_angle=0,
+        image_shape=(n, n),
+        rfft=True,
+        fftshift=False,
+    )
+    assert ctf_1d.shape == (n // 2 + 1,)
+    assert torch.allclose(ctf_1d, ctf_2d[0], atol=1e-6)
+
+
+def test_1d_ctf_single_sample():
+    """n_samples=1 samples only DC, with or without image_sidelength."""
+    result = calculate_ctf_1d(**_CTF_1D_KWARGS, n_samples=1, oversampling_factor=1)
+    dc_from_sidelength = calculate_ctf_1d(
+        **_CTF_1D_KWARGS, n_samples=1, oversampling_factor=1, image_sidelength=1
+    )
+    assert result.shape == (1,)
+    assert torch.isfinite(result).all()
+    torch.testing.assert_close(result, dc_from_sidelength)
+
+
+def test_1d_ctf_default_grid_is_linspace():
+    """Without image_sidelength the grid is linspace(0, 0.5, n_samples)."""
+    n_samples = 11
+    result = calculate_ctf_1d(
+        **_CTF_1D_KWARGS, n_samples=n_samples, oversampling_factor=1
+    )
+    freq = torch.linspace(0, 0.5, steps=n_samples) / torch.tensor(1.5)
+    expected = torch.sin(
+        calculate_total_phase_shift(
+            defocus_um=torch.tensor(1.5),
+            voltage_kv=torch.tensor(300.0),
+            spherical_aberration_mm=torch.tensor(2.7),
+            phase_shift_degrees=torch.tensor(0.0),
+            amplitude_contrast_fraction=torch.tensor(0.07),
+            fftfreq_grid_angstrom_squared=freq**2,
+        )
+    )
+    assert torch.equal(result, expected)
+    explicit_none = calculate_ctf_1d(
+        **_CTF_1D_KWARGS,
+        n_samples=n_samples,
+        oversampling_factor=1,
+        image_sidelength=None,
+    )
+    assert torch.equal(result, explicit_none)
+
+
+def test_1d_ctf_image_sidelength_oversampling_odd():
+    """Oversampling with an odd sidelength averages around k / N.
+
+    With oversampling 3 the sub-samples of bin k sit at (3k - 1, 3k, 3k + 1) / 3N,
+    which are exact samples of the rfft grid of a 3N image.
+    """
+    n = 21
+    os = 3
+    result = calculate_ctf_1d(
+        **_CTF_1D_KWARGS,
+        n_samples=n // 2 + 1,
+        oversampling_factor=os,
+        image_sidelength=n,
+    )
+    fine = calculate_ctf_1d(
+        **_CTF_1D_KWARGS,
+        n_samples=(os * n) // 2 + 1,
+        oversampling_factor=1,
+        image_sidelength=os * n,
+    )
+    # the CTF is even in frequency, so the -1/3N sample of bin 0 equals fine[1]
+    padded = torch.cat([fine[1:2], fine])
+    k = torch.arange(n // 2 + 1)
+    expected = (padded[os * k] + padded[os * k + 1] + padded[os * k + 2]) / 3
+    assert torch.allclose(result, expected, atol=1e-6)
+
+
+def test_1d_ctf_image_sidelength_validates_n_samples():
+    """n_samples must be image_sidelength // 2 + 1."""
+    with pytest.raises(ValueError, match="image_sidelength"):
+        calculate_ctf_1d(
+            **_CTF_1D_KWARGS, n_samples=10, oversampling_factor=1, image_sidelength=21
+        )

@@ -22,21 +22,33 @@ def simulation_box_center_zyx(
     return torch.tensor([center, center, center], device=device, dtype=dtype)
 
 
+def _crop_or_pad_start(current: int, target: int) -> int:
+    """Source index of output voxel 0 after :func:`crop_or_pad_to_shape`, per axis.
+
+    A crop keeps ``target`` voxels starting at ``(current - target) // 2``.  A pad
+    puts ``(target - current) // 2`` zeros in front, so output voxel 0 lies that
+    many voxels before source voxel 0 and the start is negative.
+    """
+    if current >= target:
+        return (current - target) // 2
+    return -((target - current) // 2)
+
+
 def crop_start_zyx(sim_box_size: int, box_shape: tuple[int, int, int]) -> torch.Tensor:
-    """Crop offsets when a cubic simulation volume is cropped to ``box_shape``."""
-    d, h, w = box_shape
+    """Offsets from a cubic simulation volume to it cropped or padded to ``box_shape``.
+
+    A simulation voxel ``p`` lands at ``p - crop_start`` after
+    :func:`crop_or_pad_to_shape`.  The offset is negative along axes where the
+    simulation box is smaller than ``box_shape`` and gets zero-padded.
+    """
     return torch.tensor(
-        [
-            max(0, (sim_box_size - d) // 2),
-            max(0, (sim_box_size - h) // 2),
-            max(0, (sim_box_size - w) // 2),
-        ],
+        [_crop_or_pad_start(sim_box_size, n) for n in box_shape],
         dtype=torch.float32,
     )
 
 
 def crop_start_xyz(sim_box_size: int, box_shape: tuple[int, int, int]) -> torch.Tensor:
-    """Crop offsets in XYZ order (for Cartesian coordinate columns)."""
+    """:func:`crop_start_zyx` in XYZ order (for Cartesian coordinate columns)."""
     return crop_start_zyx(sim_box_size, box_shape).flip(0)
 
 

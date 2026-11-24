@@ -47,7 +47,7 @@ classifiers = [
 dependencies = [
     "torch",
     "einops",
-    "torch_grid_utils",
+    "torch-grid-utils>=0.7.0",
     "starfile",
     "scipy",
     "torch-ctf",

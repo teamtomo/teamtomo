@@ -5,15 +5,14 @@ from functools import lru_cache
 
 import einops
 import torch
-
-from .dft_utils import fftshift_1d, fftshift_2d, fftshift_3d
-from .fftfreq_grids import fftfreq_grid_1d, fftfreq_grid_2d, fftfreq_grid_3d
+from torch_grid_utils import fftfreq_grid, fftshift_1d, fftshift_2d, fftshift_3d
 
 CACHE_SIZE = int(os.environ.get("TORCH_FOURIER_SHIFT_CACHE_SIZE", 3))
 
-fftfreq_grid_1d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid_1d)
-fftfreq_grid_2d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid_2d)
-fftfreq_grid_3d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid_3d)
+# one cache per dimensionality
+fftfreq_grid_1d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid)
+fftfreq_grid_2d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid)
+fftfreq_grid_3d_with_cache = lru_cache(maxsize=CACHE_SIZE)(fftfreq_grid)
 
 
 def phase_shift_grid_1d(
@@ -45,17 +44,14 @@ def phase_shift_grid_1d(
         `(..., w)` complex valued array of phase shifts for the fft or rfft
         of signals with `image_shape`.
     """
-    fftfreq_grid = (
-        fftfreq_grid_1d_with_cache(
-            image_shape=image_shape, rfft=rfft, device=shifts.device
-        )
-        if cache_intermediates
-        else fftfreq_grid_1d(image_shape=image_shape, rfft=rfft, device=shifts.device)
-    )  # (w, )
+    get_grid = fftfreq_grid_1d_with_cache if cache_intermediates else fftfreq_grid
+    grid = get_grid(image_shape=image_shape, rfft=rfft, device=shifts.device)[
+        ..., 0
+    ]  # (w, )
     shifts = einops.rearrange(shifts, "... -> ... 1")
 
     # radians/cycle * cycles/sample * samples = radians
-    angles = -2 * torch.pi * fftfreq_grid * shifts  # (..., w)
+    angles = -2 * torch.pi * grid * shifts  # (..., w)
     phase_shifts = torch.complex(real=torch.cos(angles), imag=torch.sin(angles))
 
     if fftshift is True:
@@ -92,18 +88,15 @@ def phase_shift_grid_2d(
         `(..., h, w)` complex valued array of phase shifts for the fft or rfft
         of images with `image_shape`.
     """
-    fftfreq_grid = (
-        fftfreq_grid_2d_with_cache(
-            image_shape=image_shape, rfft=rfft, device=shifts.device
-        )
-        if cache_intermediates
-        else fftfreq_grid_2d(image_shape=image_shape, rfft=rfft, device=shifts.device)
+    get_grid = fftfreq_grid_2d_with_cache if cache_intermediates else fftfreq_grid
+    grid = get_grid(
+        image_shape=image_shape, rfft=rfft, device=shifts.device
     )  # (h, w, 2)
     shifts = einops.rearrange(shifts, "... shift -> ... 1 1 shift")
 
     # radians/cycle * cycles/sample * samples = radians
     angles = einops.reduce(
-        -2 * torch.pi * fftfreq_grid * shifts, "... h w 2 -> ... h w", reduction="sum"
+        -2 * torch.pi * grid * shifts, "... h w 2 -> ... h w", reduction="sum"
     )
     phase_shifts = torch.complex(real=torch.cos(angles), imag=torch.sin(angles))
     if fftshift is True:
@@ -140,18 +133,15 @@ def phase_shift_grid_3d(
         `(..., d, h, w)` complex valued array of phase shifts for the fft or rfft
         of images with `image_shape`.
     """
-    fftfreq_grid = (
-        fftfreq_grid_3d_with_cache(
-            image_shape=image_shape, rfft=rfft, device=shifts.device
-        )
-        if cache_intermediates
-        else fftfreq_grid_3d(image_shape=image_shape, rfft=rfft, device=shifts.device)
+    get_grid = fftfreq_grid_3d_with_cache if cache_intermediates else fftfreq_grid
+    grid = get_grid(
+        image_shape=image_shape, rfft=rfft, device=shifts.device
     )  # (d, h, w, 3)
     shifts = einops.rearrange(shifts, "... shift -> ... 1 1 1 shift")
 
     # radians/cycle * cycles/sample * samples = radians
     angles = einops.reduce(
-        -2 * torch.pi * fftfreq_grid * shifts,
+        -2 * torch.pi * grid * shifts,
         "... d h w 3 -> ... d h w",
         reduction="sum",
     )

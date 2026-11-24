@@ -91,6 +91,23 @@ grid_2d = GridConfig.from_grid_shape_and_voxel_size(
 projected = potential_from_structure_2d(structure, grid_2d)
 ```
 
+For grids following cryo-EM FFT centering conventions (teamtomo follows RELION convention here), use `GridConfig.from_fft_centered`. The physical `center` coordinate is placed exactly on voxel index `grid_shape[i] // 2` on every axis:
+
+```python
+fft_grid_3d = GridConfig.from_fft_centered(
+    grid_shape=(128, 128, 128),
+    voxel_size=(1.0, 1.0, 1.0),
+    center=(0.0, 0.0, 0.0),
+)
+```
+
+For odd grid dimensions, this matches `from_grid_shape_and_voxel_size` with a
+geometric `center_zyx` or `center_yx`. For even dimensions, the two constructors
+use different conventions: `from_fft_centered` puts the center on voxel
+`N // 2`, while `from_grid_shape_and_voxel_size` puts it midway between voxels
+`N // 2 - 1` and `N // 2`. `from_fft_centered` preserves the requested grid
+shape without padding it to equal length.
+
 `scattering_factors="peng_elemental"` is the default and ignores bonding
 metadata. `"peng_bonded"` must be selected explicitly and requires
 `bonded_environments` and per-atom `molecule_types`. Unsupported `other`

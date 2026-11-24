@@ -427,6 +427,8 @@ def fit_structure_in_map(
         pixel_size_angstroms=common_px,
         verbose=verbose,
     )
+    # apply_alignment_to_structure needs it to undo the crop or pad above
+    result.sim_box_size = box_size
 
     if save_simulated:
         result.simulated_potential = simulated.cpu()

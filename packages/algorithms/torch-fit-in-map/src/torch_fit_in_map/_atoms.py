@@ -62,7 +62,9 @@ def apply_alignment_to_structure(
     box_shape : tuple[int, int, int]
         ``(d, h, w)`` shape of the reference map.
     sim_box_size : int or None
-        Cubic box size used during simulation.  Defaults to ``max(box_shape)``.
+        Cubic box size used during simulation.  Defaults to
+        ``result.sim_box_size``, which :func:`~torch_fit_in_map.fit_structure_in_map`
+        sets, and otherwise to ``max(box_shape)``.
     ref_origin_xyz : tuple[float, float, float]
         XYZ origin of the reference map in Angstroms (from MRC header).
 
@@ -79,6 +81,8 @@ def apply_alignment_to_structure(
         )
 
     d, h, w = box_shape
+    if sim_box_size is None:
+        sim_box_size = result.sim_box_size
     if sim_box_size is None:
         sim_box_size = max(d, h, w)
 

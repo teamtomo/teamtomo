@@ -12,6 +12,21 @@ from ._preprocess import _normalise_volume
 from ._result import AlignmentResult
 
 
+def _cross_correlate_2d(
+    reference: torch.Tensor,
+    mobile: torch.Tensor,
+) -> torch.Tensor:
+    """Circular cross-correlation of 2-D images, same shape as the inputs.
+
+    `s=` keeps odd sizes odd; without it irfft2 returns an even last dimension.
+    """
+    ref_rfft = torch.fft.rfft2(reference, dim=(-2, -1))
+    mob_rfft = torch.fft.rfft2(mobile, dim=(-2, -1))
+    return torch.fft.irfft2(
+        ref_rfft * torch.conj(mob_rfft), s=reference.shape[-2:], dim=(-2, -1)
+    )
+
+
 def _find_2d_peak_shift(
     cc_map: torch.Tensor,
 ) -> tuple[torch.Tensor, float]:
@@ -96,9 +111,7 @@ def projection_align(
     )  # (N, d, d)
 
     # 2-D NCC map for each orientation
-    ref_rfft = torch.fft.rfft2(ref_projs, dim=(-2, -1))  # (N, d, d//2+1)
-    mob_rfft = torch.fft.rfft2(mob_projs, dim=(-2, -1))
-    cc_2d = torch.fft.irfft2(ref_rfft * torch.conj(mob_rfft), dim=(-2, -1))  # (N, d, d)
+    cc_2d = _cross_correlate_2d(ref_projs, mob_projs)  # (N, d, d)
 
     # Best orientation: argmax of per-orientation peak score
     peak_per_orient = cc_2d.view(n, -1).max(dim=-1).values  # (N,)
