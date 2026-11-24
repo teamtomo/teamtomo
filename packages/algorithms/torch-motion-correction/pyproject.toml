@@ -53,7 +53,7 @@ dependencies = [
     "h5py",
     "torch-image-interpolation",
     "torch-fourier-shift",
-    "torch-grid-utils",
+    "torch-grid-utils>=0.7.0",
     "torch-cubic-spline-grids",
     "torch-fourier-filter",
 ]

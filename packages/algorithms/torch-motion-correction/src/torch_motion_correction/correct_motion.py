@@ -110,7 +110,6 @@ def _correct_frame(
         frame=frame,
         pixel_spacing=pixel_spacing,
         frame_deformation_grid=frame_deformation_grid,
-        pixel_grid=pixel_grid,
     )  # (h, w, yx)
 
     # TODO: make sure semantics around deformation field interpolants
@@ -131,7 +130,6 @@ def get_pixel_shifts(
     frame: torch.Tensor,
     pixel_spacing: float,
     frame_deformation_grid: torch.Tensor,
-    pixel_grid: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Get pixel shifts from a deformation grid.
 
@@ -146,8 +144,6 @@ def get_pixel_shifts(
         Pixel spacing in Angstroms
     frame_deformation_grid: torch.Tensor
         (yx, h, w) deformation grid
-    pixel_grid: torch.Tensor | None
-        Not used; kept for backward compatibility.
 
     Returns
     -------

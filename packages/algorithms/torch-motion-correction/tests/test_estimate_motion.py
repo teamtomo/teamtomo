@@ -6,6 +6,7 @@ import torch
 from torch_motion_correction.deformation_field import DeformationField
 from torch_motion_correction.estimate_motion_optimizer import (
     _compute_loss,
+    _phase_shift_rfft_2d,
     estimate_local_motion,
 )
 from torch_motion_correction.estimate_motion_xc import (
@@ -969,3 +970,18 @@ class TestOptimizerOutputs:
             losses = torch.tensor([c.loss for c in trajectory.checkpoints])
             assert torch.isfinite(losses).all()
         torch.testing.assert_close(results[0], results[1], atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("shape", [(64, 64), (63, 50)])
+def test_phase_shift_matches_fourier_shift(shape):
+    from torch_fourier_shift import fourier_shift_dft_2d
+
+    torch.manual_seed(0)
+    images = torch.randn(3, 4, *shape)
+    dft = torch.fft.rfftn(images, dim=(-2, -1))
+    shifts = 5 * torch.randn(3, 4, 2)
+    expected = fourier_shift_dft_2d(
+        dft=dft, image_shape=shape, shifts=shifts, rfft=True, fftshifted=False
+    )
+    actual = _phase_shift_rfft_2d(dft, shifts, shape)
+    torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)
