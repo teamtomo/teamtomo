@@ -37,6 +37,10 @@ from _common import (
     _rotated_coord,
     _slice_3d_shift_phase,
     _load_c2,
+    _in_nyquist_cube,
+    _input_pixel_scale,
+    _is_hermitian_plane,
+    _rfft_voxel,
 )
 from _gather_grad import _interp_3d_with_grad
 
@@ -260,14 +264,16 @@ def _insert_slice_3d_pose_grad_pixel[
 ) -> SIMD[DType.float32, 16]:
     """Rotation/shift grad contribution for the insertion (volume = grad_data_rec).
 
-    Pure -- see `_slice_3d_pose_grad_terms`. Zero outside the radius cutoff or on the
-    redundant x=0 half the scatter skipped (so it carries no grad).
+    Pure -- see `_slice_3d_pose_grad_terms`. Zero outside the radius cutoff; each
+    pixel's term carries the scale the scatter gave it (`_input_pixel_scale`).
     """
     var coord_y = _fourier_coord(y, p.proj_sidelength)
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return SIMD[DType.float32, 16](0)
-    if x == 0 and y >= p.proj_sidelength // 2:
+    # the scatter scaled each input pixel (`_input_pixel_scale`), and so does its grad
+    var scale = _input_pixel_scale(y, x, p.proj_sidelength)
+    if scale == 0.0:
         return SIMD[DType.float32, 16](0)
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
@@ -298,7 +304,7 @@ def _insert_slice_3d_pose_grad_pixel[
     )
     # insertion applies the conjugate phase to the projection value; both the
     # rotation and shift terms pair that against the gathered grad_rec field.
-    var pvc = _cmul(pv, C2(pf[0], -pf[1]))
+    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * scale
     return _slice_3d_pose_grad_terms(
         coord_y,
         coord_x,
@@ -338,33 +344,16 @@ def _gather_weight_grad_3d(
     Transpose of `_accumulate_weight_3d`: same index/Friedel logic, summing reads.
     """
     var sidelength_half = _rfft_half(sidelength)
-    var z = z_in
-    var y = y_in
-    var x = x_in
-    if x < 0:
-        x = -x
-        y = -y
-        z = -z
-    if x >= sidelength_half:
-        return 0.0
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo or z > hi or z < lo:
-        return 0.0
-    var y_eff = sidelength + y if y < 0 else y
-    var z_eff = sidelength + z if z < 0 else z
-    if y_eff >= sidelength or z_eff >= sidelength:
-        return 0.0
-    var off = (
-        (i_bv * sidelength + z_eff) * sidelength + y_eff
-    ) * sidelength_half + x
+    var v = _rfft_voxel(z_in, y_in, x_in, sidelength)
+    var z_eff = v.z
+    var y_eff = v.y
+    var x = v.x
+    var off = ((i_bv * sidelength + z_eff) * sidelength + y_eff) * sidelength_half + x
     var acc = gwvol[off]
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if z_eff2 >= sidelength or y_eff2 >= sidelength:
-            return acc
-        if y_eff2 == y_eff and z_eff2 == z_eff:
             return acc
         var off2 = (
             (i_bv * sidelength + z_eff2) * sidelength + y_eff2
@@ -401,7 +390,8 @@ def _insert_slice_3d_weight_grad_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return
-    if x == 0 and y >= p.proj_sidelength // 2:
+    var scale = _input_pixel_scale(y, x, p.proj_sidelength)
+    if scale == 0.0:
         return
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
@@ -412,6 +402,9 @@ def _insert_slice_3d_weight_grad_pixel[
     var kz = k[0]
     var ky = k[1]
     var kx = k[2]
+    # outside the Nyquist cube the splat dropped the weight, so its grad is 0
+    if not _in_nyquist_cube(kz, ky, kx, p.sidelength):
+        return
     var kz_floor = floor(kz)
     var ky_floor = floor(ky)
     var kx_floor = floor(kx)
@@ -455,4 +448,4 @@ def _insert_slice_3d_weight_grad_pixel[
     var off = (
         (i_bv * p.bp + i_bp) * p.proj_sidelength + y
     ) * p.proj_sidelength_half() + x
-    grad_weight[off] = acc
+    grad_weight[off] = scale * acc

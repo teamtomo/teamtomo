@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import torch
 
-from ._common import reconstruction_volume_shape, reduce_to, symmetrise_kx0_plane
+from ._common import (
+    input_line_scale,
+    reconstruction_volume_shape,
+    reduce_to,
+    symmetrise_hermitian_planes,
+)
 from ._device import prepare_launch
 from ._loader import device_session, kernels
 from ._validation import (
@@ -104,7 +109,8 @@ def run_insert_lines_3d(
 
     ``directions`` are zyx unit vectors; ``volume_shape`` is ``(d, sidelength,
     sidelength_half)`` (no batch). ``friedel_double`` also inserts the Hermitian
-    kx=0 counterpart (for reconstruction). Returns ``(volume, weight_volume)``.
+    counterpart on the kx = 0 and n/2 planes and scales each input sample by
+    ``_input_line_scale`` (for reconstruction). Returns ``(volume, weight_volume)``.
     """
     device = lines.device
     use_gpu = device.type != "cpu"
@@ -383,15 +389,15 @@ class ExtractLines3D(torch.autograd.Function):
 class InsertLines3D(torch.autograd.Function):
     """Differentiable 1D->3D central-line insertion (reconstruction).
 
-    Hermitian double-inserts on the volume's kx=0 plane. Differentiable w.r.t.
-    the input ``lines`` (adjoint line extraction of the kx=0-symmetrised
-    volume gradient), ``weights`` (weight-splat adjoint), ``directions`` and
-    ``shifts_3d`` (line pose-gradient kernel).
+    Hermitian double-inserts on the volume's kx = 0 and n/2 planes. Differentiable
+    w.r.t. the input ``lines`` (adjoint line extraction of the symmetrised volume
+    gradient, scaled by each sample's weight), ``weights`` (weight-splat adjoint),
+    ``directions`` and ``shifts_3d`` (line pose-gradient kernel).
 
     The weight volume depends on the directions too (the weights are splatted at
     the sample positions), so the direction gradient also gets the pose kernel
-    run on the kx=0-symmetrised weight-volume gradient, with the weights as real
-    line values and no shift (the weight splat has no phase ramp).
+    run on the symmetrised weight-volume gradient, with the weights as real line
+    values and no shift (the weight splat has no phase ramp).
     """
 
     @staticmethod
@@ -437,7 +443,7 @@ class InsertLines3D(torch.autograd.Function):
 
         g = None
         if needs[0] or needs[2] or needs[3]:
-            g = symmetrise_kx0_plane(grad_data)
+            g = symmetrise_hermitian_planes(grad_data)
 
         grad_lines = None
         if needs[0]:
@@ -450,6 +456,10 @@ class InsertLines3D(torch.autograd.Function):
                 ctx.interpolation,
                 ctx.shifts_3d,
             ).clone()
+            # adjoint of the insertion's per-sample scale
+            grad_lines = grad_lines * input_line_scale(
+                ctx.line_sidelength, grad_lines.device
+            )
             if ctx.input_dim == 2:
                 grad_lines = grad_lines[0]
 
@@ -487,7 +497,7 @@ class InsertLines3D(torch.autograd.Function):
             # imaginary part) and real line values make the kernel's
             # Re[a conj(b)] pairing the plain product weight * spatial gradient
             gd_weight, _ = run_line_3d_pose_grad(
-                symmetrise_kx0_plane(grad_weight),
+                symmetrise_hermitian_planes(grad_weight),
                 ctx.directions,
                 ctx.weights,
                 **pose_kwargs,

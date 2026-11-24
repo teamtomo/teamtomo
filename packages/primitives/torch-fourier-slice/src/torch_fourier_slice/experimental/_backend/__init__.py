@@ -27,9 +27,10 @@ one's *data* gradient is the other's kernel:
 - d/d(volume) of an extraction = the scatter (pure adjoint) of grad_output
 - d/d(slices)  of an insertion = the gather of grad_output
 
-The insertions used for reconstruction also Hermitian double-insert on the kx=0
-plane, whose adjoint is a symmetrisation of the volume/image gradient before the
-gather (see ``_common.symmetrise_kx0_plane`` / ``_line_2d._symmetrise_kx0_column``).
+The insertions used for reconstruction also Hermitian double-insert on the kx = 0
+and kx = n/2 planes, whose adjoint is a symmetrisation of the volume/image gradient
+before the gather (see ``_common.symmetrise_hermitian_planes`` /
+``_common.symmetrise_hermitian_columns``).
 
 Gradients w.r.t. the pose (``rotations`` or ``directions``), the 2D / 3D shifts
 and the insertion ``weights`` come from dedicated backward kernels: the pose grad

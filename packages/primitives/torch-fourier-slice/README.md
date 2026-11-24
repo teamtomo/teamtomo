@@ -146,6 +146,14 @@ reconstruction = backproject_2d_to_3d_multichannel(
   matters for odd sizes: `fftshift(rfftn(ifftshift(vol)), dim=(-3, -2))`.
 - Slices at the edges of the box are no longer dropped by float32 rounding, and
   insertion keeps the even-size Nyquist sample.
+- Insertion is now the exact adjoint of extraction as a map between real arrays,
+  in both backends. For even sizes the kx = n/2 plane of the volume gets the same
+  Friedel mirror writes as kx = 0, and the two copies of each pair on an input's
+  kx = n/2 column count half each. Input samples that are their own mirror (DC and
+  the Nyquist corners) count half, so an untilted slice gets weight 1 everywhere,
+  where DC and the Nyquist corners used to get 2. Reconstructions divided by the
+  weights only change at the outermost frequencies. The experimental backend also
+  keeps the even-size Nyquist sample on the input's x = 0 line, which it dropped.
 - `project_2d_to_1d(..., fftfreq_max=...)` no longer raises.
 
 ## License

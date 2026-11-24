@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import torch
 
-from ._common import reduce_to
+from ._common import input_line_scale, reduce_to, symmetrise_hermitian_columns
 from ._device import prepare_launch
 from ._loader import device_session, kernels
 from ._validation import (
@@ -288,23 +288,6 @@ def run_line_2d_weight_grad(
     return grad_weight
 
 
-def _symmetrise_kx0_column(grad_image: torch.Tensor) -> torch.Tensor:
-    """Adjoint of the Hermitian double-insert on an image's kx=0 column.
-
-    The 2D analogue of :func:`_symmetrise_kx0_plane`: add the ky -> (h - ky)
-    conjugate mirror, leaving the self-mirror rows (0 and h/2) single.
-    """
-    out = grad_image.contiguous().clone()
-    column = grad_image[..., 0]
-    mirror = torch.conj(column.flip(-1).roll(1, -1))
-    h = column.shape[-1]
-    self_mask = torch.zeros(h, dtype=torch.bool, device=column.device)
-    self_mask[0] = True
-    self_mask[h // 2] = True
-    out[..., 0] = column + torch.where(self_mask, column.new_zeros(()), mirror)
-    return out
-
-
 class ExtractLines2D(torch.autograd.Function):
     """Differentiable 2D->1D central-line extraction.
 
@@ -383,16 +366,16 @@ class ExtractLines2D(torch.autograd.Function):
 
 
 class InsertLines2D(torch.autograd.Function):
-    """Differentiable 1D->2D central-line insertion (Hermitian, kx=0 double-insert).
+    """Differentiable 1D->2D central-line insertion (Hermitian double-insert).
 
-    Differentiable w.r.t. the input ``lines`` (adjoint 2D line extraction
-    of the kx=0-symmetrised image gradient), ``weights`` (weight-splat adjoint),
-    ``directions`` and ``shifts_2d`` (2D pose-grad kernel).
+    Differentiable w.r.t. the input ``lines`` (adjoint 2D line extraction of the
+    symmetrised image gradient, scaled by each sample's weight), ``weights``
+    (weight-splat adjoint), ``directions`` and ``shifts_2d`` (2D pose-grad kernel).
 
     The weight image depends on the directions too (the weights are splatted at
     the sample positions), so the direction gradient also gets the pose kernel
-    run on the kx=0-symmetrised weight-image gradient, with the weights as real
-    line values and no shift (the weight splat has no phase ramp).
+    run on the symmetrised weight-image gradient, with the weights as real line
+    values and no shift (the weight splat has no phase ramp).
     """
 
     @staticmethod
@@ -439,7 +422,7 @@ class InsertLines2D(torch.autograd.Function):
 
         g = None
         if needs[0] or needs[2] or needs[3]:
-            g = _symmetrise_kx0_column(grad_img)
+            g = symmetrise_hermitian_columns(grad_img)
 
         grad_lines = None
         if needs[0]:
@@ -452,6 +435,10 @@ class InsertLines2D(torch.autograd.Function):
                 ctx.interpolation,
                 ctx.shifts_2d,
             ).clone()
+            # adjoint of the insertion's per-sample scale
+            grad_lines = grad_lines * input_line_scale(
+                ctx.line_sidelength, grad_lines.device
+            )
             if ctx.input_dim == 2:
                 grad_lines = grad_lines[0]
 
@@ -489,7 +476,7 @@ class InsertLines2D(torch.autograd.Function):
             # imaginary part) and real line values make the kernel's
             # Re[a conj(b)] pairing the plain product weight * spatial gradient
             gd_weight, _ = run_line_2d_pose_grad(
-                _symmetrise_kx0_column(grad_weight),
+                symmetrise_hermitian_columns(grad_weight),
                 ctx.directions,
                 ctx.weights,
                 **pose_kwargs,

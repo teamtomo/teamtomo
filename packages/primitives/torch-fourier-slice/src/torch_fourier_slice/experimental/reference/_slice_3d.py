@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from .._backend._common import reconstruction_volume_shape
+from ..._dft_utils import NYQUIST_TOLERANCE
+from .._backend._common import (
+    hermitian_planes,
+    input_pixel_scale,
+    reconstruction_volume_shape,
+)
 from .._backend._validation import (
     interp_code,
     prep_rotations,
@@ -65,28 +70,47 @@ def _stencil(
                 )
 
 
+def _wrap_frequency(i: torch.Tensor, sidelength: int) -> torch.Tensor:
+    """Periodic image of DFT frequency ``i`` in the stored range ``[hi - n + 1, hi]``.
+
+    The DFT of a sampled volume repeats every ``n``, so a frequency past the stored
+    grid has the value of the stored one ``n`` away (``_wrap_frequency``).
+    """
+    lo = sidelength // 2 - sidelength + 1
+    return torch.remainder(i - lo, sidelength) + lo
+
+
 def _rfft_voxel(
     z: torch.Tensor, y: torch.Tensor, x: torch.Tensor, sidelength: int
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Where the DFT value at integer frequency ``(z, y, x)`` is stored.
 
-    Negative ``x`` folds onto the stored half by Hermitian symmetry; frequencies
-    outside the stored grid are invalid (read as 0 / dropped), as in
-    ``_sample_rfft_3d`` and ``_accumulate_3d``. Returns the array indices
-    ``(z, y, x)`` (0 where invalid), whether the stored value is the conjugate,
-    and the validity mask.
+    As ``_rfft_voxel`` in ``_common.mojo``: a negative ``x`` folds onto the stored
+    half by Hermitian symmetry, then each frequency wraps periodically into the
+    stored range, folding again if ``x`` wrapped negative. Every frequency maps to
+    a stored voxel. Returns the array indices ``(z, y, x)`` and whether the stored
+    value is the conjugate of the requested one.
     """
     conj = x < 0
-    z = torch.where(conj, -z, z)
-    y = torch.where(conj, -y, y)
-    x = torch.where(conj, -x, x)
-    hi = sidelength // 2
-    lo = -sidelength // 2 + 1
-    valid = (x < hi + 1) & (y >= lo) & (y <= hi) & (z >= lo) & (z <= hi)
-    z = torch.where(valid, torch.where(z < 0, z + sidelength, z), 0)
-    y = torch.where(valid, torch.where(y < 0, y + sidelength, y), 0)
-    x = torch.where(valid, x, 0)
-    return z, y, x, conj, valid
+    z, y, x = (torch.where(conj, -i, i) for i in (z, y, x))
+    x = _wrap_frequency(x, sidelength)
+    refold = x < 0
+    z, y, x = (torch.where(refold, -i, i) for i in (z, y, x))
+    conj = conj ^ refold
+    z = _wrap_frequency(z, sidelength)
+    y = _wrap_frequency(y, sidelength)
+    z = torch.where(z < 0, z + sidelength, z)
+    y = torch.where(y < 0, y + sidelength, y)
+    return z, y, x, conj
+
+
+def _in_nyquist_cube(k: torch.Tensor, sidelength: int) -> torch.Tensor:
+    """Whether each sample ``k (..., 3)`` lies inside ``|k_i| <= n / 2``.
+
+    Points outside it read as 0 (gather) or are dropped (scatter), as
+    ``_in_nyquist_cube`` in ``_common.mojo``.
+    """
+    return (k.abs() <= sidelength / 2 + NYQUIST_TOLERANCE).all(dim=-1)
 
 
 def _flat_index(
@@ -97,9 +121,13 @@ def _flat_index(
 
 
 def _fourier_coord(n: int, device: torch.device) -> torch.Tensor:
-    """Rfft frequency of each row index (DC at 0): positive, then negative."""
+    """Rfft frequency of each row index (DC at 0): positive, then negative.
+
+    As ``torch.fft.fftfreq`` (and ``_fourier_coord`` in ``_common.mojo``): for even
+    ``n`` the Nyquist row ``n // 2`` is ``-n/2``.
+    """
     i = torch.arange(n, device=device)
-    return torch.where(i <= n // 2, i, i - n).to(torch.float32)
+    return torch.where(i <= (n - 1) // 2, i, i - n).to(torch.float32)
 
 
 def _slice_coordinates(
@@ -164,17 +192,21 @@ def _shift_phase(
 
 
 def _gather(volume: torch.Tensor, k: torch.Tensor, interpolation: str) -> torch.Tensor:
-    """Interpolate the rfft volumes ``(bv, d, h, w)`` at ``k (bv, ...)``."""
+    """Interpolate the rfft volumes ``(bv, d, h, w)`` at ``k (bv, ...)``.
+
+    The stencil reads the DFT periodically (``_rfft_voxel``); samples outside the
+    Nyquist cube read as 0.
+    """
     bv, sidelength = volume.shape[0], volume.shape[-2]
     flat = volume.reshape(bv, -1)
     batch = torch.arange(bv, device=volume.device).view(-1, *([1] * (k.dim() - 2)))
     out = torch.zeros(k.shape[:-1], dtype=volume.dtype, device=volume.device)
     for z, y, x, weight in _stencil(k, interpolation):
-        z, y, x, conj, valid = _rfft_voxel(z, y, x, sidelength)
+        z, y, x, conj = _rfft_voxel(z, y, x, sidelength)
         value = flat[batch, _flat_index(z, y, x, sidelength)]
         value = torch.where(conj, value.conj(), value)
-        out = out + value * (weight * valid)
-    return out
+        out = out + value * weight
+    return out * _in_nyquist_cube(k, sidelength)
 
 
 def _scatter(
@@ -186,12 +218,17 @@ def _scatter(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Splat ``values (bv, ...)`` (and real ``weights``) into rfft volumes at ``k``.
 
-    The adjoint of ``_gather``, plus the reconstruction's Hermitian double-insert:
-    a sample landing on the kx = 0 plane also adds its conjugate at the mirrored
-    ``(-z, -y)`` voxel, unless that voxel is its own mirror (``_accumulate_3d``
-    with ``friedel_double``).
+    The adjoint of ``_gather`` (samples outside the Nyquist cube are dropped),
+    plus the reconstruction's Hermitian double-insert: a write to the kx = 0 or
+    kx = n/2 plane also adds its conjugate at the mirrored ``(-z, -y)`` voxel,
+    which for a self-mirror voxel is the voxel itself (``_accumulate_3d`` with
+    ``friedel_double``).
     """
     bv = values.shape[0]
+    in_cube = _in_nyquist_cube(k, sidelength)
+    values = values * in_cube
+    if weights is not None:
+        weights = weights * in_cube
     n_voxels = sidelength * sidelength * (sidelength // 2 + 1)
     shape = (bv, sidelength, sidelength, sidelength // 2 + 1)
     offset = (torch.arange(bv, device=values.device) * n_voxels).view(
@@ -211,16 +248,16 @@ def _scatter(
                 0, (offset + index).reshape(-1), weight.reshape(-1)
             )
 
+    planes = torch.tensor(hermitian_planes(sidelength), device=values.device)
     for z, y, x, tap_weight in _stencil(k, interpolation):
-        z, y, x, conj, valid = _rfft_voxel(z, y, x, sidelength)
-        tap_weight = tap_weight * valid
+        z, y, x, conj = _rfft_voxel(z, y, x, sidelength)
         value = torch.where(conj, values.conj(), values) * tap_weight
         weight = weights * tap_weight if weights is not None else None
         add(_flat_index(z, y, x, sidelength), value, weight)
 
         mirror_z = (sidelength - z) % sidelength
         mirror_y = (sidelength - y) % sidelength
-        mirrored = (x == 0) & ((mirror_z != z) | (mirror_y != y))
+        mirrored = torch.isin(x, planes)
         add(
             _flat_index(mirror_z, mirror_y, x, sidelength),
             value.conj() * mirrored,
@@ -304,9 +341,10 @@ def insert_slices_3d(
 
     Same arguments as ``InsertSlices3D.apply``: ``projections`` is ``(bp, h, w)``
     or ``(bv, bp, h, w)``. Returns the ``(bv, d, h, w)`` data volume and, if
-    ``weights`` were given, the matching weight volume (else ``None``). Pixels on
-    the redundant half of the kx = 0 column are skipped: the double-insert of
-    their mirror already covers them.
+    ``weights`` were given, the matching weight volume (else ``None``). Each
+    input pixel's value and weight are scaled so that every Hermitian pair of
+    the input counts once (``input_pixel_scale``, ``_input_pixel_scale`` in
+    ``_common.mojo``).
     """
     if projections.dim() == 3:
         projections = projections.unsqueeze(0)
@@ -333,8 +371,7 @@ def insert_slices_3d(
     coord_y, coord_x, s, inside = _slice_coordinates(
         h, radius, float(oversampling), float(ewald_curvature), device
     )
-    redundant = (coord_x == 0) & (torch.arange(h, device=device)[:, None] >= h // 2)
-    keep = inside & ~redundant
+    keep = inside * input_pixel_scale(h, device)
     k = _rotate(rotations, s, bv)
 
     values = projections.to(torch.complex64) * keep

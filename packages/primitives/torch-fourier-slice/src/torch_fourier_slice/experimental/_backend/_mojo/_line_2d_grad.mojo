@@ -30,6 +30,10 @@ from _common import (
     _line_2d_k,
     _rfft_half,
     _load_c2_line,
+    _in_nyquist_square,
+    _is_hermitian_plane,
+    _rfft_pixel,
+    _input_line_scale,
 )
 from _gather_grad import _interp_2d_with_grad
 from _slice_3d_grad import _redot
@@ -195,7 +199,10 @@ def _insert_line_2d_pose_grad_pixel[
     )
     var pv = _load_c2_line(lines_b, i_bp, x)
     var pf = _line_2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
-    var pvc = _cmul(pv, C2(pf[0], -pf[1]))
+    # the insertion scaled each input sample (`_input_line_scale`)
+    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * _input_line_scale(
+        x, p.proj_sidelength
+    )
     return _line_2d_pose_grad_terms(sx, k[0], k[1], pvc, gy, gx, pvc, val, p)
 
 
@@ -213,26 +220,13 @@ def _gather_weight_grad_2d(
     Transpose of `_accumulate_weight_2d`: same index/Friedel logic, summing reads.
     """
     var sidelength_half = _rfft_half(sidelength)
-    var y = y_in
-    var x = x_in
-    if x < 0:
-        x = -x
-        y = -y
-    if x >= sidelength_half:
-        return 0.0
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo:
-        return 0.0
-    var y_eff = sidelength + y if y < 0 else y
-    if y_eff >= sidelength:
-        return 0.0
+    var v = _rfft_pixel(y_in, x_in, sidelength)
+    var y_eff = v.y
+    var x = v.x
     var acc = gwimg[(i_bv * sidelength + y_eff) * sidelength_half + x]
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if y_eff2 >= sidelength:
-            return acc
-        if y_eff2 == y_eff:
             return acc
         acc = acc + gwimg[(i_bv * sidelength + y_eff2) * sidelength_half + x]
     return acc
@@ -260,6 +254,9 @@ def _insert_line_2d_weight_grad_pixel[
     var k = _line_2d_k(direction, (db * p.bp + i_bp) * 2, sx)
     var ky = k[0]
     var kx = k[1]
+    # outside the Nyquist square the splat dropped the weight, so its grad is 0
+    if not _in_nyquist_square(ky, kx, p.sidelength):
+        return
     var ky_floor = floor(ky)
     var kx_floor = floor(kx)
     var y0 = Int(ky_floor)
@@ -289,4 +286,6 @@ def _insert_line_2d_weight_grad_pixel[
             * _gather_weight_grad_2d(gwimg, i_bv, sl, y0 + 1, x0 + 1, fd)
         )
     var line_half = p.proj_sidelength_half()
-    grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = acc
+    grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = (
+        _input_line_scale(x, p.proj_sidelength) * acc
+    )

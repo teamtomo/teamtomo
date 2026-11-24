@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import torch
 
-from ._common import reconstruction_volume_shape, reduce_to, symmetrise_kx0_plane
+from ._common import (
+    input_pixel_scale,
+    reconstruction_volume_shape,
+    reduce_to,
+    symmetrise_hermitian_planes,
+)
 from ._device import prepare_launch
 from ._loader import device_session, kernels
 from ._validation import (
@@ -112,9 +117,10 @@ def run_insert_slices_3d(
 
     ``volume_shape`` is ``(d, sidelength, sidelength_half)`` (no batch).
     ``shifts_2d`` applies the *conjugate* phase ramp (adjoint of the forward shift).
-    ``friedel_double`` also inserts the Hermitian x=0 counterpart and
-    ``skip_redundant`` skips the redundant half of the x=0 line (both for
-    reconstruction). Returns ``(volume, weight_volume)`` -- complex
+    ``friedel_double`` also inserts the Hermitian counterpart on the x = 0 and
+    x = n/2 planes and ``skip_redundant`` counts each Hermitian pair of the input
+    once (both for reconstruction, see ``_input_pixel_scale`` in ``_common.mojo``).
+    Returns ``(volume, weight_volume)`` -- complex
     ``(bv, *volume_shape)`` and real weights if ``weights`` was given else
     ``None`` -- on the input device.
     """
@@ -421,7 +427,7 @@ class ExtractSlices3D(torch.autograd.Function):
         grad_rec = None
         if needs[0]:
             # adjoint of the extraction: scatter grad back into the volume
-            # (pure transpose, no x=0 skip / Hermitian double-insert).
+            # (pure transpose, no input scaling / Hermitian double-insert).
             grad_rec, _ = run_insert_slices_3d(
                 grad_proj,
                 ctx.rotations,
@@ -480,13 +486,14 @@ class InsertSlices3D(torch.autograd.Function):
     Differentiable w.r.t. projections, weights, rotations and shifts.
 
     The data-gradient is the exact transpose of the (friedel_double +
-    skip_redundant) scatter: symmetrise the volume gradient on the kx=0 plane,
-    extract slices from it, then zero the gradient of the skipped redundant x=0 line.
+    skip_redundant) scatter: symmetrise the volume gradient on the kx = 0 and
+    kx = n/2 planes, extract slices from it, then scale it by each input pixel's
+    weight (``input_pixel_scale``).
     The same symmetrised volume gradient feeds the rotation/shift backward kernel.
 
     The weight volume depends on the rotations too (the weights are splatted at
     the rotated sample positions), so the rotation gradient also gets the same
-    kernel run on the kx=0-symmetrised weight-volume gradient, with the weights as
+    kernel run on the symmetrised weight-volume gradient, with the weights as
     real pixel values and no shifts (the weight splat has no phase ramp).
     """
 
@@ -537,7 +544,7 @@ class InsertSlices3D(torch.autograd.Function):
 
         g = None
         if needs[0] or needs[2] or needs[3] or needs[4]:
-            g = symmetrise_kx0_plane(grad_data)
+            g = symmetrise_hermitian_planes(grad_data)
 
         grad_proj = None
         if needs[0]:
@@ -552,8 +559,8 @@ class InsertSlices3D(torch.autograd.Function):
                 ctx.ewald_curvature,
                 ctx.shifts_3d,
             ).clone()
-            # adjoint of skip_redundant: skipped input pixels contributed nothing
-            grad_proj[..., side // 2 :, 0] = 0
+            # adjoint of skip_redundant: each input pixel was scaled by its weight
+            grad_proj = grad_proj * input_pixel_scale(side, grad_proj.device)
             if ctx.input_dim == 3:
                 grad_proj = grad_proj[0]
 
@@ -601,7 +608,7 @@ class InsertSlices3D(torch.autograd.Function):
             # imaginary part) and real pixels make the kernel's Re[a conj(b)]
             # pairing the plain product weight * spatial gradient
             gr_weight, _, _ = run_slice_3d_pose_grad(
-                symmetrise_kx0_plane(grad_weight),
+                symmetrise_hermitian_planes(grad_weight),
                 ctx.rotations,
                 None,
                 ctx.weights,

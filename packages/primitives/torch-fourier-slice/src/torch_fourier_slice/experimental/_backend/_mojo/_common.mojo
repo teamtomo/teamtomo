@@ -593,8 +593,179 @@ def _grad_add(ptr: Float32Ptr, offset: Int, v: Float32, warp_uniform: Bool):
 
 @always_inline
 def _fourier_coord(i: Int, n: Int) -> Float32:
-    """rfft frequency for array index `i` (DC at 0): positive then negative."""
-    return Float32(i) if i <= n // 2 else Float32(i - n)
+    """rfft frequency for array index `i` (DC at 0): positive then negative.
+
+    Matches `torch.fft.fftfreq`, so for even `n` the Nyquist row `i = n // 2` is
+    `-n/2`, as in the torch backend. In the image's own DFT `+n/2` is the same row,
+    but once the slice is rotated the two lie a full period apart along a rotated
+    axis and sample different points of the volume, so the backends must agree.
+    """
+    return Float32(i) if i <= (n - 1) // 2 else Float32(i - n)
+
+
+# Sample points further than this past the Nyquist cube read as 0 / are dropped. A
+# small tolerance (in voxels) so rounding in the rotation doesn't drop points that
+# lie exactly on the Nyquist plane, e.g. under a float32 90 degree rotation.
+comptime NYQUIST_TOLERANCE: Float32 = 1e-3
+
+
+@always_inline
+def _in_nyquist_cube(kz: Float32, ky: Float32, kx: Float32, n: Int) -> Bool:
+    """Whether a sample coordinate lies inside the Nyquist cube `|k_i| <= n / 2`.
+
+    Points outside it are past the sampled band and read as 0 (gather) or are
+    dropped (scatter). Inside it, the stencil reads the DFT periodically (see
+    `_rfft_voxel`), so neighbours past the stored grid hold their true values.
+    """
+    var edge = Float32(n) * 0.5 + NYQUIST_TOLERANCE
+    return abs(kz) <= edge and abs(ky) <= edge and abs(kx) <= edge
+
+
+@always_inline
+def _in_nyquist_square(ky: Float32, kx: Float32, n: Int) -> Bool:
+    """2D `_in_nyquist_cube`: whether `(ky, kx)` is inside `|k_i| <= n / 2`."""
+    return _in_nyquist_cube(0.0, ky, kx, n)
+
+
+@always_inline
+def _wrap_frequency(i: Int, n: Int) -> Int:
+    """Periodic image of DFT frequency `i` in the stored range `[n//2 - n + 1, n//2]`.
+
+    The DFT of a sampled volume repeats every `n`, so a frequency past the stored
+    grid has the value of the stored one `n` away. For even `n` this maps `-n/2`
+    onto the Nyquist plane `+n/2`, which the grid only stores once.
+
+    Only valid within two periods of the stored range. Stencil neighbours of points
+    inside the Nyquist cube are at most 3 voxels past it, so that's enough for any
+    cube edge `n >= 2`. Branch-free selects rather than `%` or loops, which cost a
+    lot in the 64-voxel cubic stencil.
+    """
+    var hi = n // 2
+    var lo = hi - n + 1
+    var r = i - n if i > hi else i
+    r = r - n if r > hi else r
+    r = r + n if r < lo else r
+    return r + n if r < lo else r
+
+
+@fieldwise_init
+struct RfftVoxel(Copyable, Movable):
+    """Where the DFT value at an integer frequency is stored in an rfft volume.
+
+    `(z, y)` are array indices (DC at 0), `x` is the rfft index, and `conj` says
+    the stored value is the conjugate of the requested one (Hermitian symmetry).
+    """
+
+    var z: Int
+    var y: Int
+    var x: Int
+    var conj: Bool
+
+
+@no_inline
+def _rfft_voxel_wrapped(
+    z_in: Int, y_in: Int, x_in: Int, conj_in: Bool, n: Int
+) -> RfftVoxel:
+    """Slow path of `_rfft_voxel` for a voxel past the stored grid (`x_in >= 0`).
+
+    Kept out of line so the inlined fast path stays small: the 64-voxel cubic
+    stencil inlines `_rfft_voxel` 64 times and almost never takes this path.
+    """
+    var z = z_in
+    var y = y_in
+    var x = _wrap_frequency(x_in, n)
+    var conj = conj_in
+    if x < 0:
+        x = -x
+        y = -y
+        z = -z
+        conj = not conj
+    z = _wrap_frequency(z, n)
+    y = _wrap_frequency(y, n)
+    return RfftVoxel(n + z if z < 0 else z, n + y if y < 0 else y, x, conj)
+
+
+@always_inline
+def _rfft_voxel(z_in: Int, y_in: Int, x_in: Int, n: Int) -> RfftVoxel:
+    """Stored rfft voxel for DFT frequency `(z, y, x)` of a cube with edge `n`.
+
+    A negative `x` is folded onto the stored half by Hermitian symmetry,
+    `V(z, y, x) = conj(V(-z, -y, -x))`, then each frequency is wrapped periodically
+    into the stored range, folding again if `x` wrapped negative. Every integer
+    frequency maps to a stored voxel, so the stencil never reads or writes outside
+    the grid. Folding before wrapping stores `x = -n/2` as the conjugate at
+    `(-z, -y, +n/2)`, as the torch backend (which flips whole points) does.
+    """
+    var conj = x_in < 0
+    var x = -x_in if conj else x_in
+    var y = -y_in if conj else y_in
+    var z = -z_in if conj else z_in
+    var hi = n // 2
+    var lo = hi - n + 1
+    if x > hi or y < lo or y > hi or z < lo or z > hi:
+        return _rfft_voxel_wrapped(z, y, x, conj, n)
+    return RfftVoxel(n + z if z < 0 else z, n + y if y < 0 else y, x, conj)
+
+
+@fieldwise_init
+struct RfftPixel(Copyable, Movable):
+    """Where the DFT value at an integer frequency is stored in an rfft image.
+
+    `y` is the array index (DC at 0), `x` is the rfft index, and `conj` says the
+    stored value is the conjugate of the requested one (Hermitian symmetry).
+    """
+
+    var y: Int
+    var x: Int
+    var conj: Bool
+
+
+@always_inline
+def _rfft_pixel(y_in: Int, x_in: Int, n: Int) -> RfftPixel:
+    """2D `_rfft_voxel`: stored rfft pixel for DFT frequency `(y, x)` of an n×n image.
+
+    Shares `_rfft_voxel`'s fold/wrap logic, so 2D gathers and scatters stay exact
+    adjoints of each other and consistent with 3D.
+    """
+    var v = _rfft_voxel(0, y_in, x_in, n)
+    return RfftPixel(v.y, v.x, v.conj)
+
+
+@always_inline
+def _is_hermitian_plane(x: Int, n: Int) -> Bool:
+    """Whether rfft column `x` stores its own mirror: `x = 0` and, for even `n`, `n/2`.
+
+    See "Hermitian bookkeeping" in `experimental/README.md`.
+    """
+    return x == 0 or (n % 2 == 0 and x == n // 2)
+
+
+@always_inline
+def _input_pixel_scale(y: Int, x: Int, n: Int) -> Float32:
+    """How much rfft pixel `(y, x)` of an n x n Hermitian image counts in a backprojection.
+
+    0 for the redundant half (`y > n // 2`) of the `x = 0` column, 0.5 on the
+    `x = n/2` column (even `n`) and for self-mirror pixels on both columns, 1
+    otherwise. See "Hermitian bookkeeping" in `experimental/README.md`.
+    """
+    var self_mirror = y == 0 or (n % 2 == 0 and y == n // 2)
+    if x == 0 and y > n // 2:
+        return 0.0
+    if self_mirror and _is_hermitian_plane(x, n):
+        return 0.5
+    if n % 2 == 0 and x == n // 2:
+        return 0.5
+    return 1.0
+
+
+@always_inline
+def _input_line_scale(x: Int, n: Int) -> Float32:
+    """How much rfft sample `x` of a length-`n` Hermitian line counts in an insertion.
+
+    0.5 for the self-mirror DC and (even `n`) Nyquist samples, 1 otherwise. See
+    "Hermitian bookkeeping" in `experimental/README.md`.
+    """
+    return 0.5 if _is_hermitian_plane(x, n) else 1.0
 
 
 @always_inline

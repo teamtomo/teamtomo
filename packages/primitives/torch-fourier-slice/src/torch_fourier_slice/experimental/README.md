@@ -386,9 +386,9 @@ The **data** gradients use the adjoint relationship — each extraction/insertio
 pair are adjoints, so each one's data-backward is the *other* op's kernel
 (`d/d(volume)` of an extraction is the scatter; `d/d(projections)` of an
 insertion is the gather, with an exact correction for the Hermitian
-double-insert and the skipped `x=0` line). The pose / `shifts` / `weights`
-gradients are dedicated backward kernels (`_slice_3d_grad.mojo`, `_line_3d_grad.mojo`,
-`_line_2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
+double-insert and the per-sample input weights, see below). The pose / `shifts` /
+`weights` gradients are dedicated backward kernels (`_slice_3d_grad.mojo`,
+`_line_3d_grad.mojo`, `_line_2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
 the interpolated field (`_gather_grad.mojo`) through the rotated sample
 coordinate; the shift grad differentiates the phase ramp; the weight grad is the
 exact adjoint of the weight splat. The weight volume an insertion returns also
@@ -401,9 +401,9 @@ differences (CPU and GPU, both interpolations).
 
 `reference/` implements the same functions in plain torch, with the same
 signatures, layouts and results (to float32 rounding). It follows the kernels step
-by step: the same slice coordinates, Friedel folding, zero-padding past the stored
-grid and Hermitian double-insert. Every gradient comes from autograd rather than
-the dedicated backward kernels.
+by step: the same slice coordinates, Friedel folding, periodic reads past the
+stored grid, Nyquist cube and Hermitian bookkeeping (see the layout note). Every
+gradient comes from autograd rather than the dedicated backward kernels.
 
 It has two jobs:
 
@@ -414,7 +414,9 @@ It has two jobs:
 - **Reference.** `tests/test_experimental_reference.py` checks that each reference
   function has the Mojo function's signature and gives the same values and
   gradients. It also checks the reference's pose and shift gradients against
-  finite differences, which runs on CI too, where Mojo isn't installed.
+  finite differences, which runs on CI too, where Mojo isn't installed. The
+  Nyquist-edge and Hermitian-insertion tests (`test_nyquist_edge.py`,
+  `test_hermitian_insertion.py`) run on the reference as well as on Mojo.
 
 ---
 
@@ -435,5 +437,55 @@ slices = extract_central_slices_rfft_3d(rfft.contiguous(), rotations)
 slices = torch.fft.fftshift(slices, dim=-2)             # back to teamtomo layout
 ```
 
-Within the Nyquist band the two are identical (bit-exact for non-interpolating
-rotations); both zero-pad out-of-range samples, so results agree to interpolation precision.
+The two backends sample the DFT by the same rules, so they agree to float precision
+everywhere, the Nyquist edge included:
+
+- an interpolation stencil that reaches past the stored rfft reads it periodically
+  (the DFT of a sampled volume repeats every `n` samples), and negative kx as the
+  conjugate at `-k`. For even `n` this fills in the Nyquist plane, which each layout
+  stores on one side only (`+n/2` with DC at the origin, `-n/2` when fftshifted);
+- sample points outside the Nyquist box (`|k_i| > n/2` on any axis) read as 0, or
+  are dropped when backprojecting;
+- for even `n` the slice's own Nyquist row samples frequency `-n/2`, as in
+  `torch.fft.fftfreq`.
+
+### Hermitian bookkeeping
+
+A real volume's DFT is Hermitian, `V(-k) = conj V(k)`, and the rfft stores only the
+kx >= 0 half. For a voxel with `0 < kx < n/2` the mirror `(-kz, -ky, -kx)` has
+`-n/2 < -kx < 0`, and its periodic copy `n - kx` lies between `n/2` and `n`: neither
+is stored, so the mirror is implied and nothing has to be kept consistent. That
+fails on exactly two planes. `-0 = 0`, so the mirror of a kx = 0 voxel is on the
+same plane. And because the DFT repeats every `n`, for even `n` the frequency
+`-n/2` is the same as `+n/2`, so the mirror of a kx = n/2 voxel is on that plane
+too. On these two planes both voxels of a conjugate pair are stored and must stay
+conjugates. Odd `n` has no n/2 plane. The same holds for the kx = 0 and kx = n/2
+columns of a 2D image, and for the DC and Nyquist samples of a line.
+
+Backprojections (insertions) also share this bookkeeping, so both the data and the
+weights agree everywhere:
+
+- on the kx = 0 and, for even `n`, kx = n/2 planes each write also adds the
+  conjugate at the mirror `(-z, -y)`. A voxel that is its own mirror gets
+  `v + conj(v)`, which keeps the planes Hermitian;
+- each conjugate pair of the input counts once. A stored input sample stands for a
+  pair, itself and its implied mirror, except on the input's own kx = 0 and
+  kx = n/2 columns, which store both members of each pair. So every input sample
+  gets a weight, applied to its value and to its weight (`_input_pixel_scale`,
+  `_input_line_scale`):
+  - kx = 0 column: the mirror `(-ky, 0)` lands exactly on the volume's Friedel
+    mirror of `(ky, 0)`, so the `ky < 0` half is skipped (0) and the `ky > 0` half
+    counts for the pair (1);
+  - kx = n/2 column, even `n`: `(ky, n/2)` and `(-ky, n/2)` are one pair, but once
+    rotated they land at the `+n/2` and `-n/2` aliases of the frequency, which are
+    different points of the volume. Both are inserted at half weight (0.5). This
+    is the adjoint of the forward projection, whose `irfft2` averages the two;
+  - samples that are their own mirror (`ky = 0` and, for even `n`, `ky = n/2` on
+    these columns, and the DC and Nyquist samples of a line) are a single sample of
+    the full spectrum, but the volume's mirror write inserts them as a pair, so
+    they count 0.5 and the two writes add up to one sample.
+
+With these rules an insertion is the stored half of an insertion of the full
+(non-rfft) spectrum, data and weights alike. Each insertion is the exact adjoint of
+its extraction as a map between real arrays (`tests/test_hermitian_insertion.py`),
+and an untilted slice is inserted with weight 1 at every voxel.

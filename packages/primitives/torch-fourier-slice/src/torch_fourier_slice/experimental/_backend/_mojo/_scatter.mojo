@@ -10,7 +10,17 @@ from std.math import floor
 
 from layout import Coord, TensorLayout, TileTensor
 
-from _common import CUBIC, FourierSliceParams, _atomic_add_at, _cubic_kernel
+from _common import (
+    CUBIC,
+    FourierSliceParams,
+    _atomic_add_at,
+    _cubic_kernel,
+    _in_nyquist_cube,
+    _in_nyquist_square,
+    _is_hermitian_plane,
+    _rfft_pixel,
+    _rfft_voxel,
+)
 
 
 @always_inline
@@ -29,36 +39,19 @@ def _accumulate_3d[
     """
     comptime assert vol.flat_rank == 4, "volume view must be 4D [d, h, w, 2]"
     var sidelength = Int(vol.dim[0]())
-    var sidelength_half = Int(vol.dim[2]())
-    var z = z_in
-    var y = y_in
-    var x = x_in
-    var need_conj = False
-    if x < 0:
-        x = -x
-        y = -y
-        z = -z
-        need_conj = True
-    if x >= sidelength_half:
-        return
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo or z > hi or z < lo:
-        return
-    var y_eff = sidelength + y if y < 0 else y
-    var z_eff = sidelength + z if z < 0 else z
-    if y_eff >= sidelength or z_eff >= sidelength:
-        return
-    var fim = -vim if need_conj else vim
+    var v = _rfft_voxel(z_in, y_in, x_in, sidelength)
+    var z_eff = v.z
+    var y_eff = v.y
+    var x = v.x
+    var fim = -vim if v.conj else vim
     _atomic_add_at(vol, Coord(z_eff, y_eff, x, 0), vre)
     _atomic_add_at(vol, Coord(z_eff, y_eff, x, 1), fim)
-    # On the x=0 plane, also insert the Friedel-symmetric conjugate counterpart.
-    if friedel_double != 0 and x == 0:
+    # On the x = 0 and x = n/2 planes, also insert the Friedel-symmetric conjugate.
+    # A self-mirror voxel gets v + conj(v) = 2 Re(v), so the plane stays Hermitian.
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if z_eff2 >= sidelength or y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff and z_eff2 == z_eff:
             return
         _atomic_add_at(vol, Coord(z_eff2, y_eff2, x, 0), vre)
         _atomic_add_at(vol, Coord(z_eff2, y_eff2, x, 1), -fim)
@@ -79,31 +72,15 @@ def _accumulate_weight_3d[
     """
     comptime assert wvol.flat_rank == 3, "weight view must be 3D [d, h, w]"
     var sidelength = Int(wvol.dim[0]())
-    var sidelength_half = Int(wvol.dim[2]())
-    var z = z_in
-    var y = y_in
-    var x = x_in
-    if x < 0:
-        x = -x
-        y = -y
-        z = -z
-    if x >= sidelength_half:
-        return
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo or z > hi or z < lo:
-        return
-    var y_eff = sidelength + y if y < 0 else y
-    var z_eff = sidelength + z if z < 0 else z
-    if y_eff >= sidelength or z_eff >= sidelength:
-        return
+    var v = _rfft_voxel(z_in, y_in, x_in, sidelength)
+    var z_eff = v.z
+    var y_eff = v.y
+    var x = v.x
     _atomic_add_at(wvol, Coord(z_eff, y_eff, x), w)
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if z_eff2 >= sidelength or y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff and z_eff2 == z_eff:
             return
         _atomic_add_at(wvol, Coord(z_eff2, y_eff2, x), w)
 
@@ -216,7 +193,11 @@ def _splat_3d[
     wval: Float32,
 ):
     """Splat a complex value (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
+
+    Points outside the Nyquist cube are dropped, mirroring `_interp3d`.
     """
+    if not _in_nyquist_cube(kz, ky, kx, Int(vol.dim[0]())):
+        return
     comptime if interp == CUBIC:
         _splat_3d_cubic(vol, wvol, p, kz, ky, kx, vre, vim, wval)
     else:
@@ -246,32 +227,17 @@ def _accumulate_2d[
     """
     comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
     var sidelength = Int(img.dim[0]())
-    var sidelength_half = Int(img.dim[1]())
-    var y = y_in
-    var x = x_in
-    var need_conj = False
-    if x < 0:
-        x = -x
-        y = -y
-        need_conj = True
-    if x >= sidelength_half:
-        return
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo:
-        return
-    var y_eff = sidelength + y if y < 0 else y
-    if y_eff >= sidelength:
-        return
-    var fim = -vim if need_conj else vim
+    var v = _rfft_pixel(y_in, x_in, sidelength)
+    var y_eff = v.y
+    var x = v.x
+    var fim = -vim if v.conj else vim
     _atomic_add_at(img, Coord(y_eff, x, 0), vre)
     _atomic_add_at(img, Coord(y_eff, x, 1), fim)
-    # On the x=0 column, also insert the Friedel-symmetric conjugate counterpart.
-    if friedel_double != 0 and x == 0:
+    # On the x = 0 and x = n/2 columns, also insert the Friedel-symmetric conjugate.
+    # A self-mirror pixel gets v + conj(v) = 2 Re(v), so the column stays Hermitian.
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff:
             return
         _atomic_add_at(img, Coord(y_eff2, x, 0), vre)
         _atomic_add_at(img, Coord(y_eff2, x, 1), -fim)
@@ -291,27 +257,13 @@ def _accumulate_weight_2d[
     """
     comptime assert wimg.flat_rank == 2, "weight image view must be 2D [h, w]"
     var sidelength = Int(wimg.dim[0]())
-    var sidelength_half = Int(wimg.dim[1]())
-    var y = y_in
-    var x = x_in
-    if x < 0:
-        x = -x
-        y = -y
-    if x >= sidelength_half:
-        return
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo:
-        return
-    var y_eff = sidelength + y if y < 0 else y
-    if y_eff >= sidelength:
-        return
+    var v = _rfft_pixel(y_in, x_in, sidelength)
+    var y_eff = v.y
+    var x = v.x
     _atomic_add_at(wimg, Coord(y_eff, x), w)
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff:
             return
         _atomic_add_at(wimg, Coord(y_eff2, x), w)
 
@@ -405,7 +357,11 @@ def _splat_2d[
     wval: Float32,
 ):
     """Splat a complex value (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
+
+    Points outside the Nyquist square are dropped, mirroring `_interp2d`.
     """
+    if not _in_nyquist_square(ky, kx, Int(vol.dim[0]())):
+        return
     comptime if interp == CUBIC:
         _splat_2d_cubic(vol, wvol, p, ky, kx, vre, vim, wval)
     else:

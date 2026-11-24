@@ -32,6 +32,8 @@ from _common import (
     _line_3d_shift_phase,
     _rfft_half,
     _load_c2_line,
+    _in_nyquist_cube,
+    _input_line_scale,
 )
 from _gather_grad import _interp_3d_with_grad
 from _slice_3d_grad import _couple_shift_3d, _gather_weight_grad_3d, _redot
@@ -193,7 +195,10 @@ def _insert_line_3d_pose_grad_pixel[
     var pf = _line_3d_phase_factor(shifts_3d, i_bv, i_bp, k[0], k[1], k[2], p)
     # insertion applies the conjugate phase to the line value; both the direction
     # and shift terms pair that against the gathered grad_rec field.
-    var pvc = _cmul(pv, C2(pf[0], -pf[1]))
+    # the insertion scaled each input sample (`_input_line_scale`)
+    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * _input_line_scale(
+        x, p.proj_sidelength
+    )
     return _line_3d_pose_grad_terms(
         sx, k[0], k[1], k[2], pvc, gz, gy, gx, pvc, val, p
     )
@@ -222,6 +227,9 @@ def _insert_line_3d_weight_grad_pixel[
     var kz = k[0]
     var ky = k[1]
     var kx = k[2]
+    # outside the Nyquist cube the splat dropped the weight, so its grad is 0
+    if not _in_nyquist_cube(kz, ky, kx, p.sidelength):
+        return
     var kz_floor = floor(kz)
     var ky_floor = floor(ky)
     var kx_floor = floor(kx)
@@ -289,4 +297,6 @@ def _insert_line_3d_weight_grad_pixel[
             * _gather_weight_grad_3d(gwvol, i_bv, sl, z0 + 1, y0 + 1, x0 + 1, fd)
         )
     var line_half = p.proj_sidelength_half()
-    grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = acc
+    grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = (
+        _input_line_scale(x, p.proj_sidelength) * acc
+    )
