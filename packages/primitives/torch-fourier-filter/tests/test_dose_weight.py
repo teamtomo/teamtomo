@@ -369,6 +369,29 @@ def test_cumulative_dose_filter_3d_per_frame_filters_combine():
     assert torch.allclose(sum(frames) / 10.0, whole, rtol=1e-5, atol=1e-6)
 
 
+@pytest.mark.parametrize(
+    "voltage, divisor", [(300.0, 1.0), (200.0, 0.8), (100.0, 0.64)]
+)
+def test_cumulative_dose_filter_3d_voltage_scales_exposure(voltage, divisor):
+    """At 200 and 100 kV the filter is the 300 kV one at exposures / 0.8, / 0.64."""
+    shape = (16, 16, 16)
+    dose_filter = cumulative_dose_filter_3d(
+        volume_shape=shape,
+        pixel_size=1.0,
+        start_exposure=4.0,
+        end_exposure=8.0,
+        voltage=voltage,
+    )
+    expected = cumulative_dose_filter_3d(
+        volume_shape=shape,
+        pixel_size=1.0,
+        start_exposure=4.0 / divisor,
+        end_exposure=8.0 / divisor,
+    )
+    assert torch.allclose(dose_filter, expected, rtol=1e-6, atol=1e-7)
+    assert dose_filter[0, 0, 0] == pytest.approx(1.0, abs=1e-6)
+
+
 def test_cumulative_dose_filter_3d_single_exposure_and_bad_range():
     """start == end gives the filter at that exposure; end < start is an error."""
     shape = (16, 16, 16)
