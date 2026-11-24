@@ -1,4 +1,6 @@
+import pytest
 import torch
+from torch_grid_utils import fftfreq_grid
 
 from torch_fourier_filter.dose_weight import (
     critical_exposure,
@@ -309,6 +311,76 @@ def test_cumulative_dose_filter_3d():
         )
         assert torch.all(dose_filter >= 0) and torch.all(dose_filter <= 1), (
             f"Dose filter values out of range for bfac={bfac}"
+        )
+
+
+def _reference_mean_filter(shape, pixel_size, start, end, n=20001):
+    """exp(-N / 2 Ne) averaged numerically over N in [start, end], float64."""
+    freq = fftfreq_grid(image_shape=shape, rfft=True, norm=True).double() / pixel_size
+    ne = critical_exposure(freq.clamp(min=1e-10)).double()
+    exposures = torch.linspace(start, end, n, dtype=torch.float64)
+    decay = torch.exp(-exposures[:, None] / (2 * ne.reshape(-1)[None]))
+    return torch.trapezoid(decay, exposures, dim=0).reshape(ne.shape) / (end - start)
+
+
+@pytest.mark.parametrize(
+    "start, end", [(0.0, 10.0), (5.0, 10.0), (9.0, 10.0), (20.0, 54.5)]
+)
+def test_cumulative_dose_filter_3d_is_the_mean_over_the_exposure_range(start, end):
+    """The filter is the mean of exp(-N / 2 Ne) over [start, end], for any start."""
+    shape = (16, 16, 16)
+    dose_filter = cumulative_dose_filter_3d(
+        volume_shape=shape, pixel_size=1.0, start_exposure=start, end_exposure=end
+    )
+    reference = _reference_mean_filter(shape, 1.0, start, end)
+    assert torch.allclose(dose_filter.double(), reference, rtol=1e-4, atol=1e-6)
+
+
+@pytest.mark.parametrize("start, end", [(0.0, 10.0), (5.0, 10.0), (9.0, 10.0)])
+@pytest.mark.parametrize("crit_exposure_bfactor", [-1, 1.0])
+def test_cumulative_dose_filter_3d_passes_zero_frequency(
+    start, end, crit_exposure_bfactor
+):
+    """Dose damage does not attenuate zero frequency: the filter is 1 there."""
+    dose_filter = cumulative_dose_filter_3d(
+        volume_shape=(16, 16, 16),
+        pixel_size=1.0,
+        start_exposure=start,
+        end_exposure=end,
+        crit_exposure_bfactor=crit_exposure_bfactor,
+    )
+    assert dose_filter[0, 0, 0] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_cumulative_dose_filter_3d_per_frame_filters_combine():
+    """Exposure-weighted per-frame filters combine to the filter over all frames."""
+    shape = (16, 16, 16)
+    edges = [0.0, 1.0, 2.5, 4.0, 10.0]
+    frames = [
+        cumulative_dose_filter_3d(
+            volume_shape=shape, pixel_size=1.0, start_exposure=lo, end_exposure=hi
+        )
+        * (hi - lo)
+        for lo, hi in zip(edges[:-1], edges[1:])
+    ]
+    whole = cumulative_dose_filter_3d(
+        volume_shape=shape, pixel_size=1.0, start_exposure=0.0, end_exposure=10.0
+    )
+    assert torch.allclose(sum(frames) / 10.0, whole, rtol=1e-5, atol=1e-6)
+
+
+def test_cumulative_dose_filter_3d_single_exposure_and_bad_range():
+    """start == end gives the filter at that exposure; end < start is an error."""
+    shape = (16, 16, 16)
+    at_five = cumulative_dose_filter_3d(
+        volume_shape=shape, pixel_size=1.0, start_exposure=5.0, end_exposure=5.0
+    )
+    freq = fftfreq_grid(image_shape=shape, rfft=True, norm=True)
+    expected = torch.exp(-5.0 / (2 * critical_exposure(freq)))
+    assert torch.allclose(at_five, expected, rtol=1e-5, atol=1e-6)
+    with pytest.raises(ValueError):
+        cumulative_dose_filter_3d(
+            volume_shape=shape, pixel_size=1.0, start_exposure=6.0, end_exposure=5.0
         )
 
 
