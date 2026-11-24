@@ -11,9 +11,10 @@ The same pairing holds for the central-slice ops (``ProjectForward`` /
 ``InsertLineForward``) and the 2D central-line ops (``ProjectLine2DForward`` /
 ``InsertLine2DForward``).
 
-The insertions used for reconstruction also Hermitian double-insert on the kx=0
-plane, whose adjoint is a symmetrisation of the volume/image gradient before the
-gather (see :func:`_symmetrise_kx0_plane` / :func:`_symmetrise_kx0_column`).
+The insertions used for reconstruction also Hermitian double-insert on the kx = 0
+and kx = n/2 planes, whose adjoint is a symmetrisation of the volume/image gradient
+before the gather (see :func:`_symmetrise_hermitian_planes` /
+:func:`_symmetrise_hermitian_columns`).
 
 Gradients w.r.t. the pose (``rotations`` or ``directions``), the 2D / 3D shifts
 and the insertion ``weights`` come from dedicated backward kernels: the pose grad
@@ -59,41 +60,72 @@ def _reduce_to(grad: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return grad.reshape(target.shape).to(device=target.device, dtype=target.dtype)
 
 
-def _symmetrise_kx0_plane(grad_volume: torch.Tensor) -> torch.Tensor:
-    """Adjoint of the Hermitian double-insert on a volume's kx=0 plane.
+def _hermitian_planes(n: int) -> tuple[int, ...]:
+    """Rfft x indices whose plane stores its own Hermitian mirror, for edge `n`.
 
-    The insertion writes each kx=0 sample and its (-z, -y) conjugate mirror, so
-    the transpose adds the mirror's cotangent back onto each sample. Self-mirror
-    points (z, y each 0 or N/2) map to themselves and were inserted once, not
-    doubled, so they are excluded.
+    `-0 = 0`, and for even `n` `-n/2` is the same frequency as `+n/2`, so on these
+    planes both voxels of a conjugate pair are stored (`_is_hermitian_plane`).
+    """
+    return (0, n // 2) if n % 2 == 0 else (0,)
+
+
+def _symmetrise_hermitian_planes(grad_volume: torch.Tensor) -> torch.Tensor:
+    """Adjoint of the Hermitian double-insert on a volume's kx = 0 and n/2 planes.
+
+    The insertion writes each sample on these planes and its conjugate at the
+    (-z, -y) mirror, which for a self-mirror voxel is the voxel itself. The
+    transpose adds the mirror's conjugate cotangent back onto each sample.
     """
     out = grad_volume.contiguous().clone()
-    plane = grad_volume[..., 0]
-    mirror = torch.conj(plane.flip(dims=(-2, -1)).roll(shifts=(1, 1), dims=(-2, -1)))
-    self_mask = torch.zeros_like(plane, dtype=torch.bool)
-    d, h = plane.shape[-2], plane.shape[-1]
-    for zi in (0, d // 2):
-        for yi in (0, h // 2):
-            self_mask[..., zi, yi] = True
-    out[..., 0] = plane + torch.where(self_mask, plane.new_zeros(()), mirror)
+    for x in _hermitian_planes(grad_volume.shape[-3]):
+        plane = grad_volume[..., x]
+        mirror = plane.flip(dims=(-2, -1)).roll(shifts=(1, 1), dims=(-2, -1))
+        out[..., x] = plane + torch.conj(mirror)
     return out
 
 
-def _symmetrise_kx0_column(grad_image: torch.Tensor) -> torch.Tensor:
-    """Adjoint of the Hermitian double-insert on an image's kx=0 column.
+def _symmetrise_hermitian_columns(grad_image: torch.Tensor) -> torch.Tensor:
+    """Adjoint of the Hermitian double-insert on an image's kx = 0 and n/2 columns.
 
-    The 2D analogue of :func:`_symmetrise_kx0_plane`: add the ky -> (h - ky)
-    conjugate mirror, leaving the self-mirror rows (0 and h/2) single.
+    The 2D analogue of :func:`_symmetrise_hermitian_planes`: add the conjugate
+    ky -> (h - ky) mirror.
     """
     out = grad_image.contiguous().clone()
-    column = grad_image[..., 0]
-    mirror = torch.conj(column.flip(-1).roll(1, -1))
-    h = column.shape[-1]
-    self_mask = torch.zeros(h, dtype=torch.bool, device=column.device)
-    self_mask[0] = True
-    self_mask[h // 2] = True
-    out[..., 0] = column + torch.where(self_mask, column.new_zeros(()), mirror)
+    for x in _hermitian_planes(grad_image.shape[-2]):
+        column = grad_image[..., x]
+        out[..., x] = column + torch.conj(column.flip(-1).roll(1, -1))
     return out
+
+
+def _input_pixel_scale(n: int, device: torch.device) -> torch.Tensor:
+    """`(n, n // 2 + 1)` weight of each input rfft pixel in a backprojection.
+
+    Mirrors `_input_pixel_scale` in `_common.mojo`: each Hermitian pair of the
+    input image counts once. The redundant half of the kx = 0 column is skipped
+    (0), both copies of a pair on the kx = n/2 column (even `n`) are inserted at
+    half weight (0.5), since they land at the +n/2 and -n/2 aliases of the
+    frequency, and self-mirror pixels on these columns count 0.5, since the
+    volume's Friedel write inserts them twice.
+    """
+    scale = torch.ones((n, n // 2 + 1), device=device)
+    scale[n // 2 + 1 :, 0] = 0
+    scale[0, 0] = 0.5
+    if n % 2 == 0:
+        scale[n // 2, 0] = 0.5
+        scale[:, n // 2] = 0.5
+    return scale
+
+
+def _input_line_scale(n: int, device: torch.device) -> torch.Tensor:
+    """`(n // 2 + 1,)` weight of each input line sample in an insertion.
+
+    Mirrors `_input_line_scale` in `_common.mojo`: the DC and (even `n`) Nyquist
+    samples are their own mirror and count 0.5.
+    """
+    scale = torch.ones(n // 2 + 1, device=device)
+    for x in _hermitian_planes(n):
+        scale[x] = 0.5
+    return scale
 
 
 class ProjectForward(torch.autograd.Function):
@@ -283,8 +315,8 @@ class ProjectLineForward(torch.autograd.Function):
 class InsertLineForward(torch.autograd.Function):
     """Differentiable 1D->3D central-line insertion (reconstruction).
 
-    Hermitian double-inserts on the volume's kx=0 plane. Differentiable w.r.t.
-    the input ``lines`` (adjoint forward line projection of the kx=0-symmetrised
+    Hermitian double-inserts on the volume's kx = 0 and n/2 planes. Differentiable
+    w.r.t. the input ``lines`` (adjoint forward line projection of the symmetrised
     volume gradient), ``weights`` (weight-splat adjoint), ``directions`` and
     ``shifts_3d`` (line pose-gradient kernel).
     """
@@ -332,7 +364,7 @@ class InsertLineForward(torch.autograd.Function):
 
         g = None
         if needs[0] or needs[2] or needs[3]:
-            g = _symmetrise_kx0_plane(grad_data)
+            g = _symmetrise_hermitian_planes(grad_data)
 
         grad_lines = None
         if needs[0]:
@@ -345,6 +377,10 @@ class InsertLineForward(torch.autograd.Function):
                 ctx.interpolation,
                 ctx.shifts_3d,
             ).clone()
+            # adjoint of the insertion's per-sample scale
+            grad_lines = grad_lines * _input_line_scale(
+                ctx.line_sidelength, grad_lines.device
+            )
             if ctx.input_dim == 2:
                 grad_lines = grad_lines[0]
 
@@ -460,10 +496,10 @@ class ProjectLine2DForward(torch.autograd.Function):
 
 
 class InsertLine2DForward(torch.autograd.Function):
-    """Differentiable 1D->2D central-line insertion (Hermitian, kx=0 double-insert).
+    """Differentiable 1D->2D central-line insertion (Hermitian double-insert).
 
     Differentiable w.r.t. the input ``lines`` (adjoint forward 2D line projection
-    of the kx=0-symmetrised image gradient), ``weights`` (weight-splat adjoint),
+    of the symmetrised image gradient), ``weights`` (weight-splat adjoint),
     ``directions`` and ``shifts_2d`` (2D pose-grad kernel).
     """
 
@@ -511,7 +547,7 @@ class InsertLine2DForward(torch.autograd.Function):
 
         g = None
         if needs[0] or needs[2] or needs[3]:
-            g = _symmetrise_kx0_column(grad_img)
+            g = _symmetrise_hermitian_columns(grad_img)
 
         grad_lines = None
         if needs[0]:
@@ -524,6 +560,10 @@ class InsertLine2DForward(torch.autograd.Function):
                 ctx.interpolation,
                 ctx.shifts_2d,
             ).clone()
+            # adjoint of the insertion's per-sample scale
+            grad_lines = grad_lines * _input_line_scale(
+                ctx.line_sidelength, grad_lines.device
+            )
             if ctx.input_dim == 2:
                 grad_lines = grad_lines[0]
 
@@ -565,8 +605,9 @@ class BackprojectForward(torch.autograd.Function):
     """Differentiable 2D->3D backprojection (projections, weights, rotations, shifts).
 
     The data-gradient is the exact transpose of the (friedel_double +
-    skip_redundant) scatter: symmetrise the volume gradient on the kx=0 plane,
-    forward-project it, then zero the gradient of the skipped redundant x=0 line.
+    skip_redundant) scatter: symmetrise the volume gradient on the kx = 0 and
+    kx = n/2 planes, forward-project it, then scale it by each input pixel's
+    weight (`_input_pixel_scale`).
     The same symmetrised volume gradient feeds the rotation/shift backward kernel.
     """
 
@@ -617,7 +658,7 @@ class BackprojectForward(torch.autograd.Function):
 
         g = None
         if needs[0] or needs[2] or needs[3] or needs[4]:
-            g = _symmetrise_kx0_plane(grad_data)
+            g = _symmetrise_hermitian_planes(grad_data)
 
         grad_proj = None
         if needs[0]:
@@ -632,8 +673,8 @@ class BackprojectForward(torch.autograd.Function):
                 ctx.ewald_curvature,
                 ctx.shifts_3d,
             ).clone()
-            # adjoint of skip_redundant: skipped input pixels contributed nothing
-            grad_proj[..., side // 2 :, 0] = 0
+            # adjoint of skip_redundant: each input pixel was scaled by its weight
+            grad_proj = grad_proj * _input_pixel_scale(side, grad_proj.device)
             if ctx.input_dim == 3:
                 grad_proj = grad_proj[0]
 

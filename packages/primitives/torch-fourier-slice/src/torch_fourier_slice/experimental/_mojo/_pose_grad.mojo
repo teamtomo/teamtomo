@@ -31,6 +31,8 @@ from _common import (
     _shift_phase,
     _load_c2,
     _in_nyquist_cube,
+    _input_pixel_scale,
+    _is_hermitian_plane,
     _rfft_voxel,
 )
 from _gather_grad import _interp3d_with_grad
@@ -276,8 +278,9 @@ def _backproject_pose_grad_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return
-    # the scatter skipped the redundant x=0 half, so these pixels carry no grad.
-    if x == 0 and y >= p.proj_sidelength // 2:
+    # the scatter scaled each input pixel (`_input_pixel_scale`), and so does its grad
+    var scale = _input_pixel_scale(y, x, p.proj_sidelength)
+    if scale == 0.0:
         return
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
@@ -308,7 +311,7 @@ def _backproject_pose_grad_pixel[
     )
     # backprojection applies the conjugate phase to the projection value; both the
     # rotation and shift terms pair that against the gathered grad_rec field.
-    var pvc = _cmul(pv, C2(pf[0], -pf[1]))
+    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * scale
     _accumulate_pose_grads(
         grad_rot,
         grad_shift,
@@ -359,12 +362,10 @@ def _gather_weight_grad(
     var x = v.x
     var off = ((i_bv * sidelength + z_eff) * sidelength + y_eff) * sidelength_half + x
     var acc = gwvol[off]
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if z_eff2 >= sidelength or y_eff2 >= sidelength:
-            return acc
-        if y_eff2 == y_eff and z_eff2 == z_eff:
             return acc
         var off2 = (
             (i_bv * sidelength + z_eff2) * sidelength + y_eff2
@@ -396,7 +397,8 @@ def _weight_grad_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return
-    if x == 0 and y >= p.proj_sidelength // 2:
+    var scale = _input_pixel_scale(y, x, p.proj_sidelength)
+    if scale == 0.0:
         return
     var sx = coord_x * p.oversampling
     var sy = coord_y * p.oversampling
@@ -451,4 +453,4 @@ def _weight_grad_pixel[
     var off = (
         (i_bv * p.bp + i_bp) * p.proj_sidelength + y
     ) * p.proj_sidelength_half() + x
-    grad_weight[off] = acc
+    grad_weight[off] = scale * acc

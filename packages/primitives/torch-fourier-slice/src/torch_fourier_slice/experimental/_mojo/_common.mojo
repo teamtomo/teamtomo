@@ -604,6 +604,60 @@ def _rfft_pixel(y_in: Int, x_in: Int, n: Int) -> RfftPixel:
 
 
 @always_inline
+def _is_hermitian_plane(x: Int, n: Int) -> Bool:
+    """Whether rfft column `x` of a grid with edge `n` stores its own mirror.
+
+    The Hermitian mirror of `(z, y, x)` is `(-z, -y, -x)`. For most `x` that is
+    in the half the rfft drops, but `-0 = 0` and, for even `n`, `-n/2` is the same
+    frequency as `+n/2`. On those two planes both voxels of a conjugate pair are
+    stored, so a scatter has to write both to keep the plane Hermitian.
+    """
+    return x == 0 or (n % 2 == 0 and x == n // 2)
+
+
+@always_inline
+def _input_pixel_scale(y: Int, x: Int, n: Int) -> Float32:
+    """How much rfft pixel `(y, x)` of an n x n Hermitian image counts in a backprojection.
+
+    Every stored pixel stands for a conjugate pair, except on the columns that store
+    their own mirror (`_is_hermitian_plane`), where both members of a pair are
+    stored. Each pair has to count once:
+
+    - `x = 0`: the mirror `(-y, 0)` lands exactly on the volume's Friedel mirror,
+      so the redundant half (`y > n // 2`) is skipped (0) and the other half counts
+      for the pair (1).
+    - `x = n/2`, even `n`: `(y, n/2)` and `(-y, n/2)` are the same pair, but once
+      rotated they land at the `+n/2` and `-n/2` aliases of the frequency, which are
+      different points of the volume. Both are inserted at half weight (0.5), the
+      adjoint of the forward projection, whose `irfft2` averages the two.
+    - A pixel that is its own mirror (`y = 0` or `y = n/2` on these columns) is a
+      single sample of the full spectrum, but the volume's Friedel write inserts it
+      as a pair: it counts 0.5, so the two writes add up to one sample.
+
+    This makes the backprojection the stored half of a backprojection of the full
+    (non-rfft) spectrum, data and weights alike.
+    """
+    var self_mirror = y == 0 or (n % 2 == 0 and y == n // 2)
+    if x == 0 and y > n // 2:
+        return 0.0
+    if self_mirror and _is_hermitian_plane(x, n):
+        return 0.5
+    if n % 2 == 0 and x == n // 2:
+        return 0.5
+    return 1.0
+
+
+@always_inline
+def _input_line_scale(x: Int, n: Int) -> Float32:
+    """How much rfft sample `x` of a length-`n` Hermitian line counts in an insertion.
+
+    The 1D analogue of `_input_pixel_scale`: the DC and (even `n`) Nyquist samples
+    are their own mirror, so they count 0.5 and every other sample 1.
+    """
+    return 0.5 if _is_hermitian_plane(x, n) else 1.0
+
+
+@always_inline
 def _ewald_sz(p: FourierSliceParams, sx: Float32, sy: Float32) -> Float32:
     """Signed Ewald-sphere z-offset for a slice frequency (0 if curvature off).
 

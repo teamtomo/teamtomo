@@ -17,6 +17,7 @@ from _common import (
     _cubic_kernel,
     _in_nyquist_cube,
     _in_nyquist_square,
+    _is_hermitian_plane,
     _rfft_pixel,
     _rfft_voxel,
 )
@@ -45,13 +46,12 @@ def _accumulate_3d[
     var fim = -vim if v.conj else vim
     _atomic_add_at(vol, Coord(z_eff, y_eff, x, 0), vre)
     _atomic_add_at(vol, Coord(z_eff, y_eff, x, 1), fim)
-    # On the x=0 plane, also insert the Friedel-symmetric conjugate counterpart.
-    if friedel_double != 0 and x == 0:
+    # On the x = 0 and x = n/2 planes, also insert the Friedel-symmetric conjugate.
+    # A self-mirror voxel gets v + conj(v) = 2 Re(v), so the plane stays Hermitian.
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if z_eff2 >= sidelength or y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff and z_eff2 == z_eff:
             return
         _atomic_add_at(vol, Coord(z_eff2, y_eff2, x, 0), vre)
         _atomic_add_at(vol, Coord(z_eff2, y_eff2, x, 1), -fim)
@@ -77,12 +77,10 @@ def _accumulate_weight[
     var y_eff = v.y
     var x = v.x
     _atomic_add_at(wvol, Coord(z_eff, y_eff, x), w)
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var z_eff2 = sidelength - z_eff if z_eff != 0 else 0
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if z_eff2 >= sidelength or y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff and z_eff2 == z_eff:
             return
         _atomic_add_at(wvol, Coord(z_eff2, y_eff2, x), w)
 
@@ -235,12 +233,11 @@ def _accumulate_2d[
     var fim = -vim if v.conj else vim
     _atomic_add_at(img, Coord(y_eff, x, 0), vre)
     _atomic_add_at(img, Coord(y_eff, x, 1), fim)
-    # On the x=0 column, also insert the Friedel-symmetric conjugate counterpart.
-    if friedel_double != 0 and x == 0:
+    # On the x = 0 and x = n/2 columns, also insert the Friedel-symmetric conjugate.
+    # A self-mirror pixel gets v + conj(v) = 2 Re(v), so the column stays Hermitian.
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff:
             return
         _atomic_add_at(img, Coord(y_eff2, x, 0), vre)
         _atomic_add_at(img, Coord(y_eff2, x, 1), -fim)
@@ -264,11 +261,9 @@ def _accumulate_weight_2d[
     var y_eff = v.y
     var x = v.x
     _atomic_add_at(wimg, Coord(y_eff, x), w)
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if y_eff2 >= sidelength:
-            return
-        if y_eff2 == y_eff:
             return
         _atomic_add_at(wimg, Coord(y_eff2, x), w)
 

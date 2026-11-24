@@ -32,6 +32,56 @@ def _in_nyquist_box(
     return torch.all(frequencies.abs() * shape <= shape / 2 + NYQUIST_TOLERANCE, dim=-1)
 
 
+def _input_pixel_scale(
+    freq_grid: torch.Tensor, image_shape: tuple[int, int]
+) -> torch.Tensor:
+    """How much each rfft pixel of a Hermitian image counts when backprojected.
+
+    Every stored pixel stands for a conjugate pair, except on the kx = 0 column and,
+    for even `w`, the kx = 1/2 (Nyquist) column, which store both members of each
+    pair. Each pair has to count once:
+
+    - kx = 0: the mirror at -ky lands exactly on the volume's Friedel mirror, so the
+      redundant half (ky < 0) is skipped (0) and the other half counts for the pair.
+    - kx = 1/2: (ky, 1/2) and (-ky, 1/2) are the same pair, but once rotated they
+      land at the +1/2 and -1/2 aliases of the frequency, which are different points
+      of the volume. Both are inserted at half weight (0.5), the adjoint of the
+      forward projection, whose `irfft2` averages the two.
+    - A pixel that is its own mirror (ky = 0, or ky = -1/2 for even `h`, on these
+      columns) is a single sample of the full spectrum, but the volume's Friedel
+      write inserts it as a pair: it counts 0.5, so the two writes add up to one.
+
+    This makes the insertion the stored half of an insertion of the full (non-rfft)
+    spectrum, data and weights alike.
+
+    Parameters
+    ----------
+    freq_grid: torch.Tensor
+        `(h, w_rfft, d)` DFT sample frequencies of the image, yx in the last two
+        entries of the last dimension.
+    image_shape: tuple[int, int]
+        Real space `(h, w)` of the image.
+
+    Returns
+    -------
+    scale: torch.Tensor
+        `(h, w_rfft)` weights in {0, 0.5, 1}.
+    """
+    h, w = image_shape
+    y, x = freq_grid[..., -2], freq_grid[..., -1]
+    self_mirror = y == 0
+    if h % 2 == 0:
+        self_mirror |= y == -0.5
+    hermitian_column = x == 0
+    if w % 2 == 0:
+        hermitian_column |= x == 0.5
+    scale = torch.ones_like(x)
+    scale[hermitian_column] = 0.5
+    scale[(x == 0) & (y < 0) & ~self_mirror] = 0
+    scale[(x == 0) & (y > 0)] = 1
+    return scale
+
+
 def _sample_rfft_periodic(
     dft: torch.Tensor, coordinates: torch.Tensor, image_shape: tuple[int, ...]
 ) -> torch.Tensor:

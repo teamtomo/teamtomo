@@ -386,7 +386,7 @@ The **data** gradients use the adjoint relationship — each extraction/insertio
 pair are adjoints, so each one's data-backward is the *other* op's kernel
 (`d/d(volume)` of an extraction is the scatter; `d/d(projections)` of an
 insertion is the gather, with an exact correction for the Hermitian
-double-insert and the skipped `x=0` line). The pose / `shifts` / `weights`
+double-insert and the per-sample input weights, see below). The pose / `shifts` / `weights`
 gradients are dedicated backward kernels (`_pose_grad.mojo`, `_line_grad.mojo`,
 `_line2d_grad.mojo`): the pose grad chains the **analytical spatial gradient** of
 the interpolated field (`_gather_grad.mojo`) through the rotated sample
@@ -425,6 +425,20 @@ everywhere, the Nyquist edge included:
 - for even `n` the slice's own Nyquist row samples frequency `-n/2`, as in
   `torch.fft.fftfreq`.
 
-Backprojections differ only in the Friedel bookkeeping of self-conjugate voxels on
-the kx = 0 plane (DC and, for even `n`, the Nyquist voxels). The reconstructions,
-after dividing by the weights, are the same.
+Backprojections (insertions) also share their Hermitian bookkeeping, so both the
+data and the weights agree everywhere:
+
+- on the kx = 0 and, for even `n`, kx = n/2 planes both voxels of a conjugate pair
+  are stored (`-n/2` is the same frequency as `+n/2`), so each write there also adds
+  the conjugate at the mirror `(-z, -y)`. A voxel that is its own mirror gets
+  `v + conj(v)`, which keeps the planes Hermitian;
+- each conjugate pair of the input counts once. Of the input's kx = 0 column only
+  the `ky >= 0` half is inserted. On its kx = n/2 column both copies of a pair are
+  inserted at half weight, since once rotated they land at the `+n/2` and `-n/2`
+  aliases of the frequency, different points of the volume. Input samples that are
+  their own mirror (DC and the Nyquist samples of these columns, and of a line)
+  count half, as the mirror write inserts them twice.
+
+With these rules each insertion is the exact adjoint of its extraction as a map
+between real arrays (`tests/test_hermitian_insertion.py`), and an untilted slice is
+inserted with weight 1 at every voxel.
