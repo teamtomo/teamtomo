@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from torch_motion_correction.deformation_field import DeformationField
+from torch_motion_correction.optimization_state import OptimizationState
 
 
 def _sample_points(n: int = 200) -> torch.Tensor:
@@ -76,3 +77,10 @@ def test_to_same_device_returns_same_field():
     field = DeformationField(torch.zeros(2, 3, 2, 2))
     assert field.to("cpu") is field
     assert field.to(torch.device("cpu")) is field
+
+
+def test_optimization_state_copies_field():
+    data = torch.zeros(2, 3, 2, 2)
+    state = OptimizationState(deformation_field=data, loss=0.0, step=0)
+    data += 1
+    assert state.deformation_field.abs().max() == 0

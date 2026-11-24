@@ -27,7 +27,9 @@ class OptimizationState:
     step: int
 
     def __init__(self, deformation_field: torch.Tensor, loss: float, step: int):
-        self.deformation_field = deformation_field.cpu()
+        # Always a copy: .cpu() alone returns the same tensor for CPU input, which
+        # would make every checkpoint show the latest field
+        self.deformation_field = deformation_field.detach().to("cpu", copy=True)
         self.loss = loss
         self.step = step
 

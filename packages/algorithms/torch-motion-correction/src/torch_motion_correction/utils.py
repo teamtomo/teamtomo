@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch_fourier_filter.bandpass import bandpass_filter
 from torch_fourier_filter.envelopes import b_envelope
-from torch_grid_utils import circle, spatial_frequency_to_fftfreq
+from torch_grid_utils import coordinate_grid, spatial_frequency_to_fftfreq
 
 if TYPE_CHECKING:
     from torch_motion_correction.types import FourierFilterConfig
@@ -109,6 +109,46 @@ def normalize_image(
     return image
 
 
+def soft_circle(
+    radius: float,
+    image_shape: tuple[int, int],
+    smoothing_radius: float,
+    device: torch.device | None = None,
+) -> torch.Tensor:
+    """Circular mask with a cosine edge, computed directly from the radius.
+
+    Same shape as ``torch_grid_utils.circle`` (centre at ``(h // 2, w // 2)``, value 1
+    inside ``radius``, falling to 0 over ``smoothing_radius`` as a quarter cosine), but
+    with exact distances instead of its CPU distance transform, which takes seconds at
+    4096². The two differ only by that transform's rounding of the edge distance to
+    the nearest pixel inside (at most 0.003 at 4096², 0.006 for a 1024² patch).
+
+    Parameters
+    ----------
+    radius : float
+        Radius of the circle in pixels.
+    image_shape : tuple[int, int]
+        (h, w) of the mask.
+    smoothing_radius : float
+        Width of the cosine edge in pixels.
+    device : torch.device, optional
+        Device for the output tensor.
+
+    Returns
+    -------
+    torch.Tensor
+        (h, w) mask with values in [0, 1].
+    """
+    h, w = image_shape
+    distances = coordinate_grid(
+        image_shape=image_shape, center=(h // 2, w // 2), norm=True, device=device
+    )
+    if smoothing_radius <= 0:
+        return (distances < radius).float()
+    edge = torch.clamp((distances - radius) / smoothing_radius, min=0)
+    return torch.where(edge <= 1, torch.cos((torch.pi / 2) * edge), 0.0)
+
+
 def prepare_patch_filters(
     shape: tuple[int, int],
     pixel_spacing: float,
@@ -147,7 +187,7 @@ def prepare_patch_filters(
     radius = min(h, w) / 4
     smoothing_radius = radius * mask_smoothing_fraction
 
-    circle_mask = circle(
+    circle_mask = soft_circle(
         radius=radius,
         image_shape=shape,
         smoothing_radius=smoothing_radius,

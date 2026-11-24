@@ -9,6 +9,7 @@ from torch_grid_utils.patch_grid import patch_grid_lazy
 from torch_motion_correction.correct_motion import correct_motion, correct_motion_fast
 from torch_motion_correction.deformation_field import (
     DeformationField,
+    _fit_control_points,
     _subtract_mean_shift,
 )
 from torch_motion_correction.types import (
@@ -194,7 +195,9 @@ def estimate_motion_cross_correlation_patches(
     Returns
     -------
     DeformationField
-        Estimated deformation field with shape (2, t, gh, gw).
+        Estimated deformation field with shape (2, t, gh, gw). Its control points span
+        the whole image, and are fitted so the field passes through the shift measured
+        at each patch center.
     data_patch_positions: torch.Tensor
         (t, gh, gw, 3) patch center positions
     """
@@ -287,11 +290,20 @@ def estimate_motion_cross_correlation_patches(
     )
     combined_filter = bandpass * b_factor_envelope
 
-    # Initialize or update raw deformation field tensor
+    # Normalized (t, y, x) positions of the frames and patch centers, where the shifts
+    # are measured
+    frame_positions = torch.linspace(0, 1, steps=t, device=device)
+    patch_y = data_patch_positions[0, :, 0, 1].to(device, torch.float32) / (h - 1)
+    patch_x = data_patch_positions[0, 0, :, 2].to(device, torch.float32) / (w - 1)
+
+    # Shifts at the patch centers: zero, or those of the initial deformation field
     if initial_deformation_field is None:
         raw_field = torch.zeros((2, t, gh, gw), device=device)
     else:
-        raw_field = initial_deformation_field.resample((t, gh, gw)).data
+        tt, yy, xx = torch.meshgrid(frame_positions, patch_y, patch_x, indexing="ij")
+        with torch.no_grad():
+            raw_field = initial_deformation_field(torch.stack([tt, yy, xx], dim=-1))
+        raw_field = einops.rearrange(raw_field, "t gh gw yx -> yx t gh gw")
         if verbose:
             print(
                 "Using existing deformation field as base for cumulative motion "
@@ -382,7 +394,6 @@ def estimate_motion_cross_correlation_patches(
             shift_y, shift_x = _apply_outlier_rejection(
                 shift_y, shift_x, outlier_threshold, frame_idx, verbose=verbose
             )
-
         # Add shifts to existing deformation field (cumulative motion correction)
         # Convert pixels to Angstroms
         shift_y = shift_y * pixel_spacing
@@ -422,8 +433,15 @@ def estimate_motion_cross_correlation_patches(
         )
         print(f"Estimated deformation field shape: {deformation_field_tensor.shape}")
 
-    deformation_field_tensor = _subtract_mean_shift(deformation_field_tensor)
-    return DeformationField(data=deformation_field_tensor), data_patch_positions
+    # The control points span the whole image while the shifts were measured at the
+    # patch centers, so fit control points that reproduce them there
+    control_points = _fit_control_points(
+        deformation_field_tensor,
+        positions=(frame_positions, patch_y, patch_x),
+        grid_type="catmull_rom",
+    )
+    control_points = _subtract_mean_shift(control_points)
+    return DeformationField(data=control_points), data_patch_positions
 
 
 def _apply_sub_pixel_refinement(

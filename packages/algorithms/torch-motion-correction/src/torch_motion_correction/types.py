@@ -122,6 +122,15 @@ class OptimizationConfig:
     early_stopping_tolerance : float
         Minimum relative improvement in the smoothed loss to reset the patience
         counter. Default is 1e-5.
+    patch_batch_size : int | None
+        Number of patches processed together when computing the loss. Every patch
+        counts the same whatever the batch size, so this only trades speed for
+        memory. None processes all patches in one batch. Default is 64.
+    compile_loss : bool
+        Whether to compile the per-batch loss with ``torch.compile``. Each iteration
+        is faster but the first call in a process compiles for tens of seconds, so
+        this pays off when aligning many movies of the same size in one process.
+        Default is False.
     """
 
     max_iterations: int = 100
@@ -133,6 +142,8 @@ class OptimizationConfig:
     early_stopping_window_size: int = 3
     early_stopping_tolerance: float = 1e-5
     early_stopping: bool = False
+    patch_batch_size: int | None = 64
+    compile_loss: bool = False
 
     def build_early_stopper(self) -> Callable[[float], bool] | None:
         """Return a stateful early-stopping callable, or None if disabled."""
