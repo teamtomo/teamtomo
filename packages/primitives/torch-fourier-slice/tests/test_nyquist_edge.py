@@ -250,14 +250,7 @@ def test_backends_agree_on_slices():
 
 @requires_mojo
 def test_backends_agree_on_backprojection():
-    """Every voxel, except the Friedel bookkeeping of self-conjugate voxels.
-
-    On the kx = 0 plane the voxels at DC and, for even n, at the Nyquist
-    frequencies are their own Friedel mirror. The torch backend adds the mirrored
-    conjugate into the Nyquist ones (value 2 Re(v), weight 2w) and the Mojo
-    backend doesn't (v, w). After dividing by the weights the real parts match,
-    and those are all `irfftn` reads, so the reconstructions agree.
-    """
+    """Every voxel of the data and weights, self-conjugate ones included."""
     sidelength = 16
     rotations = _rotations(ndim=3)
     generator = torch.Generator().manual_seed(1)
@@ -279,19 +272,9 @@ def test_backends_agree_on_backprojection():
     canonical = torch.fft.ifftshift(canonical, dim=(-3, -2))
     canonical_weights = torch.fft.ifftshift(canonical_weights, dim=(-3, -2))
 
-    self_conjugate = torch.zeros_like(mojo_weights, dtype=torch.bool)
-    for z, y in itertools.product((0, sidelength // 2), repeat=2):
-        self_conjugate[z, y, 0] = True
     scale = canonical.abs().max().item()
-    assert torch.allclose(
-        mojo[~self_conjugate], canonical[~self_conjugate], atol=1e-5 * scale, rtol=0
-    )
-    assert torch.allclose(
-        mojo_weights[~self_conjugate],
-        canonical_weights[~self_conjugate],
-        atol=1e-5,
-        rtol=0,
-    )
+    assert torch.allclose(mojo, canonical, atol=1e-5 * scale, rtol=0)
+    assert torch.allclose(mojo_weights, canonical_weights, atol=1e-5, rtol=0)
 
     def reconstruct(dft, weights):
         normalised = torch.where(weights > 1e-3, dft / weights, 0)

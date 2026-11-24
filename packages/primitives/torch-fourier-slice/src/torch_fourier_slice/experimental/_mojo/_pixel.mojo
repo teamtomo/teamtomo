@@ -16,6 +16,7 @@ from _common import (
     _cmul,
     _ewald_sz,
     _fourier_coord,
+    _input_pixel_scale,
     _load_c2,
     _rfft_half,
     _rotated_coord,
@@ -98,9 +99,12 @@ def _scatter_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return
-    # backprojection skips the redundant half of the x=0 line (mirror handles it)
-    if p.skip_redundant != 0 and x == 0 and y >= p.proj_sidelength // 2:
-        return
+    # backprojection counts each Hermitian pair of the input image once
+    var scale: Float32 = 1.0
+    if p.skip_redundant != 0:
+        scale = _input_pixel_scale(y, x, p.proj_sidelength)
+        if scale == 0.0:
+            return
 
     # per-volume 4D view of the input projection block [bp, h, w, 2]
     var proj_half = p.proj_sidelength_half()
@@ -109,8 +113,8 @@ def _scatter_pixel[
         row_major(p.bp, p.proj_sidelength, proj_half, 2),
     )
     var vin = _load_c2(inp_b, i_bp, y, x)
-    var vre = vin[0]
-    var vim = vin[1]
+    var vre = vin[0] * scale
+    var vim = vin[1] * scale
 
     # the 3D shift phase needs the rotated coordinate, so compute `k` first
     var rb = 0 if p.bv_rot == 1 else i_bv
@@ -132,7 +136,7 @@ def _scatter_pixel[
 
     var wval: Float32 = 0.0
     if p.has_weights != 0:
-        wval = weights[
+        wval = scale * weights[
             (
                 ((i_bv * p.bp + i_bp) * p.proj_sidelength + y)
                 * p.proj_sidelength_half()

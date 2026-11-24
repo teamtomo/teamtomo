@@ -28,7 +28,9 @@ from _common import (
     _rfft_half,
     _load_c2_line,
     _in_nyquist_square,
+    _is_hermitian_plane,
     _rfft_pixel,
+    _input_line_scale,
 )
 from _gather_grad import _interp2d_with_grad
 from _pose_grad import _redot
@@ -218,7 +220,10 @@ def _backproject_line2d_pose_grad_pixel[
     )
     var pv = _load_c2_line(lines_b, i_bp, x)
     var pf = _line2d_phase_factor(shifts_2d, i_bv, i_bp, k[0], k[1], p)
-    var pvc = _cmul(pv, C2(pf[0], -pf[1]))
+    # the insertion scaled each input sample (`_input_line_scale`)
+    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * _input_line_scale(
+        x, p.proj_sidelength
+    )
     _accumulate_line2d_pose_grads(
         grad_dir,
         grad_shift,
@@ -254,11 +259,9 @@ def _gather_weight_grad_2d(
     var y_eff = v.y
     var x = v.x
     var acc = gwimg[(i_bv * sidelength + y_eff) * sidelength_half + x]
-    if friedel_double != 0 and x == 0:
+    if friedel_double != 0 and _is_hermitian_plane(x, sidelength):
         var y_eff2 = sidelength - y_eff if y_eff != 0 else 0
         if y_eff2 >= sidelength:
-            return acc
-        if y_eff2 == y_eff:
             return acc
         acc = acc + gwimg[(i_bv * sidelength + y_eff2) * sidelength_half + x]
     return acc
@@ -318,4 +321,6 @@ def _weight_line2d_grad_pixel[
             * _gather_weight_grad_2d(gwimg, i_bv, sl, y0 + 1, x0 + 1, fd)
         )
     var line_half = p.proj_sidelength_half()
-    grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = acc
+    grad_weight[(i_bv * p.bp + i_bp) * line_half + x] = (
+        _input_line_scale(x, p.proj_sidelength) * acc
+    )

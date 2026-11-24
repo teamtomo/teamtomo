@@ -29,6 +29,7 @@ from _common import (
     _load_c2_line,
     _rfft_half,
     _store_c2_line,
+    _input_line_scale,
 )
 from _gather import _interp3d
 from _scatter import _splat
@@ -108,8 +109,12 @@ def _scatter_line_pixel[
         row_major(p.bp, line_half, 2),
     )
     var vin = _load_c2_line(inp_b, i_bp, x)
-    var vre = vin[0]
-    var vim = vin[1]
+    # an insertion counts each Hermitian pair of the input line once
+    var scale: Float32 = 1.0
+    if p.friedel_double != 0:
+        scale = _input_line_scale(x, p.proj_sidelength)
+    var vre = vin[0] * scale
+    var vim = vin[1] * scale
 
     var db = 0 if p.bv_rot == 1 else i_bv
     var sx = coord_x * p.oversampling
@@ -128,7 +133,7 @@ def _scatter_line_pixel[
 
     var wval: Float32 = 0.0
     if p.has_weights != 0:
-        wval = weights[(i_bv * p.bp + i_bp) * line_half + x]
+        wval = scale * weights[(i_bv * p.bp + i_bp) * line_half + x]
 
     # per-volume views: complex data [d, h, w, 2] and real weights [d, h, w]
     var half = _rfft_half(p.sidelength)

@@ -120,9 +120,10 @@ def run_scatter(
 
     ``volume_shape`` is ``(d, sidelength, sidelength_half)`` (no batch).
     ``shifts_2d`` applies the *conjugate* phase ramp (adjoint of the forward shift).
-    ``friedel_double`` also inserts the Hermitian x=0 counterpart and
-    ``skip_redundant`` skips the redundant half of the x=0 line (both for
-    reconstruction). Returns ``(volume, weight_volume)`` -- complex
+    ``friedel_double`` also inserts the Hermitian counterpart on the x = 0 and
+    x = n/2 planes and ``skip_redundant`` counts each Hermitian pair of the input
+    once (both for reconstruction, see ``_input_pixel_scale`` in ``_common.mojo``).
+    Returns ``(volume, weight_volume)`` -- complex
     ``(bv, *volume_shape)`` and real weights if ``weights`` was given else
     ``None`` -- on the input device.
     """
@@ -273,7 +274,8 @@ def run_scatter_line(
 
     ``directions`` are zyx unit vectors; ``volume_shape`` is ``(d, sidelength,
     sidelength_half)`` (no batch). ``friedel_double`` also inserts the Hermitian
-    kx=0 counterpart (for reconstruction). Returns ``(volume, weight_volume)``.
+    counterpart on the kx = 0 and n/2 planes (for reconstruction). Returns
+    ``(volume, weight_volume)``.
     """
     device = lines.device
     use_gpu = device.type != "cpu"

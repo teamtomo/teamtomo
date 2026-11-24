@@ -32,6 +32,44 @@ def _in_nyquist_box(
     return torch.all(frequencies.abs() * shape <= shape / 2 + NYQUIST_TOLERANCE, dim=-1)
 
 
+def _input_pixel_scale(
+    freq_grid: torch.Tensor, image_shape: tuple[int, int]
+) -> torch.Tensor:
+    """How much each rfft pixel of a Hermitian image counts when backprojected.
+
+    0 for the redundant half (ky < 0) of the kx = 0 column, 0.5 on the kx = 1/2
+    column (even `w`) and for self-mirror pixels (ky = 0, or ky = -1/2 for even `h`)
+    on both columns, 1 otherwise. See "Hermitian bookkeeping" in
+    `torch_fourier_slice/experimental/README.md`, which covers both backends.
+
+    Parameters
+    ----------
+    freq_grid: torch.Tensor
+        `(h, w_rfft, d)` DFT sample frequencies of the image, yx in the last two
+        entries of the last dimension.
+    image_shape: tuple[int, int]
+        Real space `(h, w)` of the image.
+
+    Returns
+    -------
+    scale: torch.Tensor
+        `(h, w_rfft)` weights in {0, 0.5, 1}.
+    """
+    h, w = image_shape
+    y, x = freq_grid[..., -2], freq_grid[..., -1]
+    self_mirror = y == 0
+    if h % 2 == 0:
+        self_mirror |= y == -0.5
+    hermitian_column = x == 0
+    if w % 2 == 0:
+        hermitian_column |= x == 0.5
+    scale = torch.ones_like(x)
+    scale[hermitian_column] = 0.5
+    scale[(x == 0) & (y < 0) & ~self_mirror] = 0
+    scale[(x == 0) & (y > 0)] = 1
+    return scale
+
+
 def _sample_rfft_periodic(
     dft: torch.Tensor, coordinates: torch.Tensor, image_shape: tuple[int, ...]
 ) -> torch.Tensor:

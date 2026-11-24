@@ -2,7 +2,7 @@ import einops
 import torch
 from torch_grid_utils import dft_center, fftfreq_to_dft_coordinates, rfft_shape
 
-from .._dft_utils import _in_nyquist_box
+from .._dft_utils import _in_nyquist_box, _input_pixel_scale
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -63,19 +63,10 @@ def insert_central_slices_rfft_3d(
             size=image_rfft.shape[-2:], dtype=torch.bool, device=device
         )
 
-    # Only keep y >= 0 at x=0 to avoid
-    # double-inserting conjugate pairs (Friedel symmetry).
-    # In rfft, for x=0 plane: ft[z, y, 0] == conj(ft[-z, -y, 0])
-    # freq_grid shape is (h, w, 3) where last dim is zyx
-    x_coords = freq_grid[..., 2]  # (h, w)
-    y_coords = freq_grid[..., 1]  # (h, w)
-    friedel_redundant = (x_coords == 0) & (y_coords < 0)
-    # for even h, y = -0.5 (row 0) is its own mate (+0.5 aliases to -0.5), so
-    # there is no y > 0 sample to stand in for it
-    if volume_shape[-2] % 2 == 0:
-        friedel_redundant[0] = False
-    # Combine with existing frequency mask
-    freq_grid_mask = freq_grid_mask & ~friedel_redundant
+    # count each conjugate pair of the input once: skip the redundant half of the
+    # x = 0 column and halve both copies on the Nyquist column
+    pixel_scale = _input_pixel_scale(freq_grid, volume_shape[-2:])  # (h, w)
+    freq_grid_mask = freq_grid_mask & (pixel_scale > 0)
 
     valid_coords = freq_grid[freq_grid_mask, ...]  # (b, zyx)
     valid_coords = einops.rearrange(valid_coords, "b zyx -> b zyx 1")
@@ -133,6 +124,7 @@ def insert_central_slices_rfft_3d(
         image=dft_3d,
         volume_shape=volume_shape,
         weights=weights,
+        sample_weights=pixel_scale[freq_grid_mask],
     )
     return dft_3d, weights
 
@@ -194,19 +186,10 @@ def insert_central_slices_rfft_3d_multichannel(
             size=image_rfft.shape[-2:], dtype=torch.bool, device=device
         )
 
-    # Only keep y >= 0 at x=0 to avoid
-    # double-inserting conjugate pairs (Friedel symmetry).
-    # In rfft, for x=0 plane: ft[z, y, 0] == conj(ft[-z, -y, 0])
-    # freq_grid shape is (h, w, 3) where last dim is zyx
-    x_coords = freq_grid[..., 2]  # (h, w)
-    y_coords = freq_grid[..., 1]  # (h, w)
-    friedel_redundant = (x_coords == 0) & (y_coords < 0)
-    # for even h, y = -0.5 (row 0) is its own mate (+0.5 aliases to -0.5), so
-    # there is no y > 0 sample to stand in for it
-    if volume_shape[-2] % 2 == 0:
-        friedel_redundant[0] = False
-    # Combine with existing frequency mask
-    freq_grid_mask = freq_grid_mask & ~friedel_redundant
+    # count each conjugate pair of the input once: skip the redundant half of the
+    # x = 0 column and halve both copies on the Nyquist column
+    pixel_scale = _input_pixel_scale(freq_grid, volume_shape[-2:])  # (h, w)
+    freq_grid_mask = freq_grid_mask & (pixel_scale > 0)
 
     valid_coords = freq_grid[freq_grid_mask, ...]  # (b, zyx)
 
@@ -268,6 +251,7 @@ def insert_central_slices_rfft_3d_multichannel(
         image=dft_3d,
         volume_shape=volume_shape,
         weights=weights,
+        sample_weights=pixel_scale[freq_grid_mask],
     )
     return dft_3d, weights
 
@@ -278,6 +262,7 @@ def _insert_into_3d_dft(
     image: torch.Tensor,
     volume_shape: tuple[int, int, int],
     weights: torch.Tensor | None = None,
+    sample_weights: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert values into a 3D image using trilinear interpolation.
 
@@ -298,6 +283,10 @@ def _insert_into_3d_dft(
     weights: torch.Tensor | None
         `(d, h, w)` array containing weights associated with each voxel in `image`.
         This is useful for tracking weights across multiple calls to this function.
+    sample_weights: torch.Tensor | None
+        `(b,)` weight of each of the last `b` values (the samples of one image),
+        broadcast over leading batch dimensions and applied to both the inserted
+        value and its weight. None for weight 1.
 
     Returns
     -------
@@ -327,6 +316,12 @@ def _insert_into_3d_dft(
         image = einops.rearrange(image, "d h w -> 1 d h w")
         values = einops.rearrange(values, "... -> ... 1")
 
+    if sample_weights is None:
+        sample_weights = torch.ones(
+            values_shape[-1:], dtype=weights.dtype, device=image.device
+        )
+    sample_weights = sample_weights.to(weights.dtype).expand(values_shape).reshape(-1)
+
     # linearise data and coordinates
     values, _ = einops.pack([values], pattern="* c")
     coordinates, _ = einops.pack([coordinates], pattern="* zyx")
@@ -336,7 +331,12 @@ def _insert_into_3d_dft(
     upper_bound = torch.tensor((d, h, w), device=image.device) - 1
     in_array = torch.all((coordinates >= 0) & (coordinates <= upper_bound), dim=-1)
     image, weights = _insert_into_3d_dft_linear(
-        values[in_array], coordinates[in_array], image, weights
+        values[in_array],
+        coordinates[in_array],
+        sample_weights[in_array],
+        image,
+        weights,
+        volume_shape,
     )
 
     # Points past the stored array but inside the Nyquist box (e.g. next to the
@@ -348,7 +348,13 @@ def _insert_into_3d_dft(
     edge = torch.nonzero(~in_array).squeeze(-1)
     edge = edge[_in_nyquist_box((coordinates[edge] - dc_index) / shape, volume_shape)]
     image, weights = _insert_into_3d_dft_linear(
-        values[edge], coordinates[edge], image, weights, wrap_shape=volume_shape
+        values[edge],
+        coordinates[edge],
+        sample_weights[edge],
+        image,
+        weights,
+        volume_shape,
+        wrap=True,
     )
 
     # ensure correct output image shape
@@ -363,12 +369,14 @@ def _insert_into_3d_dft(
 def _insert_into_3d_dft_linear(
     data: torch.Tensor,  # (b, c)
     coordinates: torch.Tensor,  # (b, zyx)
+    sample_weights: torch.Tensor,  # (b,)
     image: torch.Tensor,  # (c, d, h, w)
     weights: torch.Tensor,  # (d, h, w)
-    wrap_shape: tuple[int, int, int] | None = None,
+    volume_shape: tuple[int, int, int],  # real space shape of the volume
+    wrap: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    # wrap_shape: real space shape of the volume, to wrap corners which fall past
-    # the stored array periodically back onto it. None if all corners are inside.
+    # wrap: wrap corners which fall past the stored array periodically back onto it.
+    # False if all corners are inside.
     # b is number of data points to insert per channel, c is number of channels
     b, c = data.shape
 
@@ -395,9 +403,9 @@ def _insert_into_3d_dft_linear(
     # period away. The rfft x index is the frequency itself: wrap it into one period,
     # and store negative x frequencies as the conjugate at -k. Full dims are
     # fftshifted, so -k sits at 2 * (n // 2) - i.
+    n_z, n_y, n_x = volume_shape
     corner_conj = None
-    if wrap_shape is not None:
-        n_z, n_y, n_x = wrap_shape
+    if wrap:
         x_min = n_x // 2 - n_x + 1
         idx_x = torch.remainder(idx_x - x_min, n_x) + x_min
         corner_conj = idx_x < 0
@@ -420,6 +428,7 @@ def _insert_into_3d_dft_linear(
     w[:, 1, 0, 1] = tz * (1 - ty) * tx  # C101
     w[:, 1, 1, 0] = tz * ty * (1 - tx)  # C110
     w[:, 1, 1, 1] = tz * ty * tx  # C111
+    w = w * einops.rearrange(sample_weights, "b -> b 1 1 1")
 
     # make sure indices broadcast correctly
     idx_c = torch.arange(c, device=coordinates.device, dtype=torch.long)
@@ -442,63 +451,37 @@ def _insert_into_3d_dft_linear(
     )
     weights.index_put_(indices=(idx_z, idx_y, idx_x), values=w, accumulate=True)
 
-    # Enforce Friedel symmetry for insertions into x=0 plane
-    # For any value inserted at (z, y, 0), also insert conj(value) at (d-z, d-y, 0)
-    d, h, _ = weights.shape
+    # On the x = 0 and (even n_x) x = n/2 planes both voxels of a conjugate pair
+    # are stored: -0 = 0 and -n/2 is the same frequency as +n/2. For each corner on
+    # them also insert the conjugate at the mirror (-z, -y). A self-mirror voxel
+    # gets v + conj(v) = 2 Re(v), so the planes stay Hermitian. Full dims are
+    # fftshifted, so -k sits at 2 * (n // 2) - i.
+    plane_mask = idx_x == 0  # (b, 1, 2, 2, 2)
+    if n_x % 2 == 0:
+        plane_mask |= idx_x == n_x // 2
+    idx_z_mirror = (2 * (n_z // 2) - idx_z) % n_z
+    idx_y_mirror = (2 * (n_y // 2) - idx_y) % n_y
 
-    # Find which corners are on the x=0 plane
-    # idx_x has shape (b, 1, 2, 2, 2) after rearranging
-    x0_mask = idx_x == 0  # (b, 1, 2, 2, 2) boolean mask
-
-    if torch.any(x0_mask):
-        # Calculate mirrored indices for Friedel symmetry about DC at (d//2, h//2)
-        # Mirror: (z, y, 0) -> ((2 * (d//2) - z) % d, (2 * (h//2) - y) % h, 0)
-        # For even sizes this is (d - z) % d, for odd sizes d - 1 - z
-        idx_z_mirror = (2 * (d // 2) - idx_z) % d
-        idx_y_mirror = (2 * (h // 2) - idx_y) % h
-
-        # Only insert conjugate at mirrored positions when original is at x=0
-        # Exclude the origin (d//2, h//2, 0) to avoid double insertion at DC
-        # Note: after fftshift, DC is at (d//2, h//2)
-        is_dc = (idx_z == d // 2) & (idx_y == h // 2) & (idx_x == 0)
-        insert_conjugate_mask = x0_mask & ~is_dc
-
-        if torch.any(insert_conjugate_mask):
-            data_conj = torch.conj(data)
-
-            # Ensure all the tensors have the same shape for masking
-            # Using expand() creates views (no memory copies) instead of repeat()
-            insert_conjugate_mask_expanded = insert_conjugate_mask.expand(b, c, 2, 2, 2)
-            idx_c_expanded = idx_c.expand(b, c, 2, 2, 2)
-            idx_z_mirror_expanded = idx_z_mirror.expand(b, c, 2, 2, 2)
-            idx_y_mirror_expanded = idx_y_mirror.expand(b, c, 2, 2, 2)
-            idx_x_expanded = idx_x.expand(b, c, 2, 2, 2)
-            data_conj_expanded = data_conj.expand(b, c, 2, 2, 2)
-            w_expanded = w.expand(b, c, 2, 2, 2).to(data_conj.dtype)
-
-            # Insert conjugated, weighted data at mirrored positions
-            image.index_put_(
-                indices=(
-                    idx_c_expanded[insert_conjugate_mask_expanded],
-                    idx_z_mirror_expanded[insert_conjugate_mask_expanded],
-                    idx_y_mirror_expanded[insert_conjugate_mask_expanded],
-                    idx_x_expanded[insert_conjugate_mask_expanded],
-                ),
-                values=(data_conj_expanded * w_expanded)[
-                    insert_conjugate_mask_expanded
-                ],
-                accumulate=True,
-            )
-
-            # For weights, use original mask shape (no channel dimension)
-            weights.index_put_(
-                indices=(
-                    idx_z_mirror[insert_conjugate_mask],
-                    idx_y_mirror[insert_conjugate_mask],
-                    idx_x[insert_conjugate_mask],
-                ),
-                values=w[insert_conjugate_mask],
-                accumulate=True,
-            )
+    if torch.any(plane_mask):
+        plane_mask_c = plane_mask.expand(b, c, 2, 2, 2)
+        image.index_put_(
+            indices=(
+                idx_c.expand(b, c, 2, 2, 2)[plane_mask_c],
+                idx_z_mirror.expand(b, c, 2, 2, 2)[plane_mask_c],
+                idx_y_mirror.expand(b, c, 2, 2, 2)[plane_mask_c],
+                idx_x.expand(b, c, 2, 2, 2)[plane_mask_c],
+            ),
+            values=corner_values.conj()[plane_mask_c],
+            accumulate=True,
+        )
+        weights.index_put_(
+            indices=(
+                idx_z_mirror[plane_mask],
+                idx_y_mirror[plane_mask],
+                idx_x[plane_mask],
+            ),
+            values=w[plane_mask],
+            accumulate=True,
+        )
 
     return image, weights

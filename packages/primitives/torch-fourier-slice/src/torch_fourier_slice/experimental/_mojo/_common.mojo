@@ -604,6 +604,43 @@ def _rfft_pixel(y_in: Int, x_in: Int, n: Int) -> RfftPixel:
 
 
 @always_inline
+def _is_hermitian_plane(x: Int, n: Int) -> Bool:
+    """Whether rfft column `x` stores its own mirror: `x = 0` and, for even `n`, `n/2`.
+
+    See "Hermitian bookkeeping" in `experimental/README.md`.
+    """
+    return x == 0 or (n % 2 == 0 and x == n // 2)
+
+
+@always_inline
+def _input_pixel_scale(y: Int, x: Int, n: Int) -> Float32:
+    """How much rfft pixel `(y, x)` of an n x n Hermitian image counts in a backprojection.
+
+    0 for the redundant half (`y > n // 2`) of the `x = 0` column, 0.5 on the
+    `x = n/2` column (even `n`) and for self-mirror pixels on both columns, 1
+    otherwise. See "Hermitian bookkeeping" in `experimental/README.md`.
+    """
+    var self_mirror = y == 0 or (n % 2 == 0 and y == n // 2)
+    if x == 0 and y > n // 2:
+        return 0.0
+    if self_mirror and _is_hermitian_plane(x, n):
+        return 0.5
+    if n % 2 == 0 and x == n // 2:
+        return 0.5
+    return 1.0
+
+
+@always_inline
+def _input_line_scale(x: Int, n: Int) -> Float32:
+    """How much rfft sample `x` of a length-`n` Hermitian line counts in an insertion.
+
+    0.5 for the self-mirror DC and (even `n`) Nyquist samples, 1 otherwise. See
+    "Hermitian bookkeeping" in `experimental/README.md`.
+    """
+    return 0.5 if _is_hermitian_plane(x, n) else 1.0
+
+
+@always_inline
 def _ewald_sz(p: FourierSliceParams, sx: Float32, sy: Float32) -> Float32:
     """Signed Ewald-sphere z-offset for a slice frequency (0 if curvature off).
 
