@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch_fourier_filter.bandpass import bandpass_filter
 from torch_fourier_filter.envelopes import b_envelope
-from torch_grid_utils import circle, spatial_frequency_to_fftfreq
+from torch_grid_utils import soft_circle, spatial_frequency_to_fftfreq
 
 if TYPE_CHECKING:
     from torch_motion_correction.types import FourierFilterConfig
@@ -147,7 +147,7 @@ def prepare_patch_filters(
     radius = min(h, w) / 4
     smoothing_radius = radius * mask_smoothing_fraction
 
-    circle_mask = circle(
+    circle_mask = soft_circle(
         radius=radius,
         image_shape=shape,
         smoothing_radius=smoothing_radius,

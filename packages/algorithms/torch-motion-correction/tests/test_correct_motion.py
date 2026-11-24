@@ -280,6 +280,7 @@ class TestCorrectMotionSlow:
         corrected = correct_motion_slow(
             image=sample_image,
             deformation_field=DeformationField(data=sample_deformation_field),
+            pixel_spacing=1.0,
             device=torch.device("cpu"),
         )
         # Check output shape matches input
@@ -291,6 +292,7 @@ class TestCorrectMotionSlow:
         corrected = correct_motion_slow(
             image=sample_image,
             deformation_field=DeformationField(data=sample_deformation_field),
+            pixel_spacing=1.0,
             grad=False,
             device=torch.device("cpu"),
         )
@@ -304,6 +306,7 @@ class TestCorrectMotionSlow:
             corrected = correct_motion_slow(
                 image=sample_image,
                 deformation_field=DeformationField(data=sample_deformation_field),
+                pixel_spacing=1.0,
                 device=torch.device("cuda"),
             )
             assert corrected.device.type == "cuda"
@@ -317,6 +320,7 @@ class TestCorrectMotionSlow:
         corrected = correct_motion_slow(
             image=sample_image,
             deformation_field=DeformationField(data=torch.zeros((2, t, 2, 2))),
+            pixel_spacing=1.0,
             device=torch.device("cpu"),
         )
         assert corrected.shape == sample_image.shape
@@ -665,9 +669,10 @@ class TestPixelGridHoisting:
             [
                 _correct_frame_slow(
                     frame=frame,
-                    deformation_grid=sample_deformation_field,
+                    deformation_field=DeformationField(data=sample_deformation_field),
                     t=frame_t,
                     pixel_grid=coordinate_grid(image_shape=(h, w), device=frame.device),
+                    pixel_spacing=1.0,
                 )
                 for frame, frame_t in zip(sample_image, normalized_t)
             ],
@@ -677,7 +682,112 @@ class TestPixelGridHoisting:
         actual = correct_motion_slow(
             image=sample_image,
             deformation_field=DeformationField(data=sample_deformation_field),
+            pixel_spacing=1.0,
             device=torch.device("cpu"),
         )
         torch.testing.assert_close(actual, expected)
         # even if requires_grad was set to True
+
+
+class TestGradients:
+    """Gradients reach the field being optimized when asked for."""
+
+    def test_two_grids_gradient_reaches_new_field(self, sample_image, pixel_spacing):
+        t = sample_image.shape[0]
+        new_field, base_field = DeformationField.from_initial_field(
+            resolution=(t, 2, 2),
+            initial_field=None,
+            grid_type="catmull_rom",
+            device=torch.device("cpu"),
+        )
+        corrected = correct_motion_two_grids(
+            image=sample_image,
+            new_deformation_field=new_field,
+            base_deformation_field=base_field,
+            pixel_spacing=pixel_spacing,
+            grad=True,
+            device=torch.device("cpu"),
+        )
+        (corrected * torch.linspace(0, 1, sample_image.shape[-1])).sum().backward()
+        gradient = next(new_field.parameters()).grad
+        assert gradient is not None
+        assert gradient.abs().sum() > 0
+
+    def test_correct_motion_grad_keeps_graph(
+        self, sample_image, sample_deformation_field, pixel_spacing
+    ):
+        field = DeformationField(data=sample_deformation_field)
+        corrected = correct_motion(
+            image=sample_image,
+            deformation_field=field,
+            pixel_spacing=pixel_spacing,
+            grad=True,
+            device=torch.device("cpu"),
+        )
+        assert corrected.requires_grad
+        (corrected * torch.linspace(0, 1, sample_image.shape[-1])).sum().backward()
+        assert next(field.parameters()).grad.abs().sum() > 0
+
+    def test_correct_motion_fast_has_no_graph(
+        self, sample_image, sample_single_patch_deformation_field, pixel_spacing
+    ):
+        corrected = correct_motion_fast(
+            image=sample_image,
+            deformation_field=DeformationField(
+                data=sample_single_patch_deformation_field
+            ),
+            pixel_spacing=pixel_spacing,
+            device=torch.device("cpu"),
+        )
+        assert not corrected.requires_grad
+
+
+class TestCorrectMotionSlowUnits:
+    """correct_motion_slow takes the field in Angstroms, like correct_motion."""
+
+    @pytest.mark.parametrize("grid_type", ["catmull_rom", "bspline"])
+    def test_matches_correct_motion(self, sample_image, grid_type):
+        t = sample_image.shape[0]
+        data = torch.zeros(2, t, 3, 3)
+        data[0] = 6.0 * torch.linspace(-1, 1, t)[:, None, None]  # Angstroms
+        data[1] = 3.0 * torch.linspace(0, 1, 3)[None, None, :]
+        field = DeformationField(data=data, grid_type=grid_type)
+        kwargs = {"image": sample_image, "deformation_field": field}
+        slow = correct_motion_slow(pixel_spacing=2.0, **kwargs)
+        regular = correct_motion(pixel_spacing=2.0, **kwargs)
+        torch.testing.assert_close(slow, regular, atol=2e-3, rtol=0)
+
+
+class TestPixelShiftUpsampling:
+    """The bicubic resize of the shift grid matches the former grid_sample path."""
+
+    def test_matches_grid_sample_in_interior(self):
+        import einops
+        import torch.nn.functional as F
+        from torch_grid_utils import coordinate_grid
+
+        from torch_motion_correction.correct_motion import get_pixel_shifts
+
+        torch.manual_seed(0)
+        h, w, gh, gw = 97, 130, 20, 30
+        grid = torch.randn(2, gh, gw)
+        frame = torch.zeros(h, w)
+        shifts = get_pixel_shifts(frame, 1.5, grid)
+
+        # Former implementation: grid_sample at pixel / (size - 1) * (grid - 1)
+        pixel_grid = coordinate_grid(image_shape=(h, w))
+        positions = pixel_grid / torch.tensor([h - 1, w - 1]) * 2 - 1
+        expected = F.grid_sample(
+            grid[None],
+            positions.flip(-1)[None],
+            mode="bicubic",
+            padding_mode="reflection",
+            align_corners=True,
+        )
+        expected = einops.rearrange(expected[0], "yx h w -> h w yx") / 1.5
+        # Away from the edges, where only the padding differs
+        margin_h, margin_w = 2 * h // gh + 1, 2 * w // gw + 1
+        interior = (slice(margin_h, -margin_h), slice(margin_w, -margin_w))
+        torch.testing.assert_close(
+            shifts[interior], expected[interior], atol=1e-4, rtol=0
+        )

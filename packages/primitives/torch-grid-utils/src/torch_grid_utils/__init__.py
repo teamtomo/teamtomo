@@ -36,7 +36,7 @@ from torch_grid_utils.polar_grid import (
     polar_grid,
     polar_to_cartesian,
 )
-from torch_grid_utils.shapes_2d import circle, rectangle, square, wedge
+from torch_grid_utils.shapes_2d import circle, rectangle, soft_circle, square, wedge
 from torch_grid_utils.shapes_3d import cone, cube, cuboid, sphere
 
 try:
@@ -77,6 +77,7 @@ __all__ = [
     "polar_to_cartesian",
     "rectangle",
     "rfft_shape",
+    "soft_circle",
     "spatial_frequency_to_fftfreq",
     "sphere",
     "square",

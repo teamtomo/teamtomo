@@ -19,12 +19,62 @@ import h5py
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from torch_cubic_spline_grids import CubicBSplineGrid3d, CubicCatmullRomGrid3d
+from torch_cubic_spline_grids import (
+    CubicBSplineGrid1d,
+    CubicBSplineGrid3d,
+    CubicCatmullRomGrid1d,
+    CubicCatmullRomGrid3d,
+)
 
 
 def _subtract_mean_shift(data: torch.Tensor) -> torch.Tensor:
     """Remove the mean y shift and the mean x shift from (2, nt, nh, nw) data."""
     return data - torch.mean(data, dim=(1, 2, 3), keepdim=True)
+
+
+def _spline_basis_1d(
+    n_knots: int, positions: torch.Tensor, grid_type: str
+) -> torch.Tensor:
+    """Return the (m, n_knots) matrix mapping 1D control points to spline values.
+
+    Row i holds the weight of each control point in the spline's value at normalized
+    position ``positions[i]``, edge extrapolation included.
+    """
+    grid_class = (
+        CubicCatmullRomGrid1d if grid_type == "catmull_rom" else CubicBSplineGrid1d
+    )
+    identity = torch.eye(n_knots, dtype=positions.dtype, device=positions.device)
+    grid = grid_class.from_grid_data(identity).to(positions.device)
+    with torch.no_grad():
+        return grid(positions[:, None])
+
+
+def _fit_control_points(
+    values: torch.Tensor,
+    positions: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+    grid_type: str,
+) -> torch.Tensor:
+    """Return control points whose spline passes through values on a grid of points.
+
+    Parameters
+    ----------
+    values : torch.Tensor
+        (2, mt, mh, mw) shifts at the grid of points given by ``positions``.
+    positions : tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        Normalized (t, y, x) positions of the points along each axis, each in [0, 1].
+    grid_type : str
+        "catmull_rom" or "bspline".
+
+    Returns
+    -------
+    torch.Tensor
+        (2, mt, mh, mw) control points, least-squares if a system is singular.
+    """
+    inverses = [
+        torch.linalg.pinv(_spline_basis_1d(len(p), p.to(values), grid_type))
+        for p in positions
+    ]
+    return torch.einsum("ti,hj,wk,cijk->cthw", *inverses, values)
 
 
 class DeformationField:
@@ -112,7 +162,14 @@ class DeformationField:
         return self.data.device
 
     def to(self, device: torch.device | str) -> "DeformationField":
-        """Return a copy of the deformation field on the specified device."""
+        """Return the deformation field on the specified device.
+
+        Returns ``self`` when already there, so gradients still reach the original
+        field's parameters. Otherwise returns a copy, which has its own parameters.
+        """
+        # Resolve e.g. "cuda" to "cuda:0" before comparing
+        if torch.empty(0, device=device).device == self.device:
+            return self
         return DeformationField(
             data=self.data.to(device),
             grid_type=self.grid_type,
@@ -144,28 +201,41 @@ class DeformationField:
 
     # --- Creating or modifying deformation fields --------------
 
-    def resample(self, target_resolution: tuple[int, int, int]) -> "DeformationField":
+    def resample(
+        self,
+        target_resolution: tuple[int, int, int],
+        grid_type: str | None = None,
+    ) -> "DeformationField":
         """Return a new DeformationField resampled to a target resolution.
+
+        The new field passes through this field's values at its own control points, so
+        resampling to the same resolution reproduces the field for either grid type.
 
         Parameters
         ----------
         target_resolution: tuple[int, int, int]
             Target resolution as (nt, nh, nw).
+        grid_type: str | None
+            Grid type of the new field. Defaults to this field's grid type.
 
         Returns
         -------
         DeformationField
-            New field resampled to the target resolution with the same grid type.
+            New field resampled to the target resolution.
         """
-        nt, nh, nw = target_resolution
-        t = torch.linspace(0, 1, steps=nt)
-        y = torch.linspace(0, 1, steps=nh)
-        x = torch.linspace(0, 1, steps=nw)
-        tt, yy, xx = torch.meshgrid(t, y, x, indexing="ij")
+        grid_type = grid_type if grid_type is not None else self.grid_type
+        positions = tuple(
+            torch.linspace(0, 1, steps=n, device=self.device) for n in target_resolution
+        )
+        tt, yy, xx = torch.meshgrid(*positions, indexing="ij")
         tyx = einops.rearrange([tt, yy, xx], "tyx nt nh nw -> nt nh nw tyx")
-        new_data = self(tyx.to(self.device))
-        new_data = einops.rearrange(new_data, "nt nh nw yx -> yx nt nh nw")
-        return DeformationField(data=new_data, grid_type=self.grid_type)
+        values = einops.rearrange(self(tyx), "nt nh nw yx -> yx nt nh nw")
+        if grid_type == "catmull_rom":
+            # Catmull-Rom control points are the values at the knots
+            new_data = values
+        else:
+            new_data = _fit_control_points(values, positions, grid_type)
+        return DeformationField(data=new_data, grid_type=grid_type)
 
     @classmethod
     def from_frame_shifts(
@@ -196,6 +266,11 @@ class DeformationField:
         if device is None:
             device = shifts.device
         data = einops.rearrange(shifts * pixel_spacing, "t c -> c t 1 1").to(device)
+        if grid_type != "catmull_rom":
+            # The shifts are the field's values at the frames, not its control points
+            frames = torch.linspace(0, 1, steps=data.shape[1], device=device)
+            single = torch.zeros(1, device=device)
+            data = _fit_control_points(data, (frames, single, single), grid_type)
         return cls(data=data, grid_type=grid_type)
 
     @classmethod
@@ -248,8 +323,10 @@ class DeformationField:
         if initial_field is None:
             base_data = torch.zeros(size=(2, *resolution), device=device)
         else:
-            base_data = initial_field.resample(resolution).data.to(device)
-            base_data = _subtract_mean_shift(base_data)
+            # The base is frozen, so it should carry no autograd history
+            with torch.no_grad():
+                resampled = initial_field.resample(resolution, grid_type=grid_type)
+                base_data = _subtract_mean_shift(resampled.data.to(device))
         base_raw_grid = grid_class.from_grid_data(base_data).to(device)
         base_field = cls(data=base_data, grid_type=grid_type)
         base_field._grid = base_raw_grid

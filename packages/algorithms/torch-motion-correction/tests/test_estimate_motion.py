@@ -6,6 +6,7 @@ import torch
 from torch_motion_correction.deformation_field import DeformationField
 from torch_motion_correction.estimate_motion_optimizer import (
     _compute_loss,
+    _phase_shift_rfft_2d,
     estimate_local_motion,
 )
 from torch_motion_correction.estimate_motion_xc import (
@@ -405,10 +406,24 @@ class TestEstimateMotionCrossCorrelationPatches:
             expected_field[0, frame_idx] = shift_y.view(gh, gw) * pixel_spacing
             expected_field[1, frame_idx] = shift_x.view(gh, gw) * pixel_spacing
 
-        expected_field = expected_field - expected_field.mean(
-            dim=(1, 2, 3), keepdim=True
+        # The returned field passes through the shifts at the patch centers (up to
+        # a constant per axis, from the mean removal)
+        tt, yy, xx = torch.meshgrid(
+            torch.linspace(0, 1, t),
+            data_patch_positions[0, :, 0, 1].float() / (h - 1),
+            data_patch_positions[0, 0, :, 2].float() / (w - 1),
+            indexing="ij",
         )
-        assert torch.allclose(result.data, expected_field, atol=1e-4)
+        at_centers = einops.rearrange(
+            result(torch.stack([tt, yy, xx], dim=-1)), "t gh gw yx -> yx t gh gw"
+        )
+
+        def remove_mean(field: torch.Tensor) -> torch.Tensor:
+            return field - field.mean(dim=(1, 2, 3), keepdim=True)
+
+        torch.testing.assert_close(
+            remove_mean(at_centers), remove_mean(expected_field), atol=1e-4, rtol=0
+        )
 
 
 class TestOutlierRejection:
@@ -726,3 +741,247 @@ class TestFourierResolutionCropping:
         torch.testing.assert_close(
             result_cropped.data, result_uncropped.data, atol=0.5, rtol=0.5
         )
+
+
+def _textured_movie(
+    field: DeformationField, shape: tuple[int, int], seed: int = 0
+) -> torch.Tensor:
+    """Warp one smooth random texture by a known field, one frame per field time."""
+    from torch_motion_correction.correct_motion import correct_motion
+
+    generator = torch.Generator().manual_seed(seed)
+    texture = torch.randn(shape, generator=generator)
+    kernel = torch.exp(-(torch.arange(-6, 7.0) ** 2) / (2 * 2.0**2))
+    kernel = kernel / kernel.sum()
+    texture = torch.nn.functional.conv2d(
+        texture[None, None], kernel[None, None, :, None], padding=(6, 0)
+    )
+    texture = torch.nn.functional.conv2d(
+        texture, kernel[None, None, None, :], padding=(0, 6)
+    )[0, 0]
+    t = field.resolution[0]
+    return correct_motion(
+        image=texture.expand(t, *shape).clone(),
+        deformation_field=field,
+        pixel_spacing=1.0,
+        device=torch.device("cpu"),
+    )
+
+
+class TestCrossCorrelationPatchGeometry:
+    """The patch estimator's field must pass through the shifts at patch centers."""
+
+    def test_linear_shear_slope_recovered(self):
+        t, h, w = 6, 256, 256
+        amplitude = 3 * (2 * torch.arange(t) / (t - 1) - 1)  # (t,), A at y = 0, 1
+        true_data = torch.zeros(2, t, 2, 2)
+        true_data[1, :, 0, :] = -amplitude[:, None]
+        true_data[1, :, 1, :] = amplitude[:, None]
+        movie = _textured_movie(DeformationField(data=true_data), (h, w))
+
+        result, positions = estimate_motion_cross_correlation_patches(
+            image=movie,
+            pixel_spacing=1.0,
+            patch_sampling=PatchSamplingConfig(patch_shape=(64, 64)),
+            reference_strategy="middle_frame",
+            refinement=XCRefinementConfig(
+                temporal_smoothing=False, outlier_rejection=False
+            ),
+            device=torch.device("cpu"),
+        )
+
+        # x shift against normalized y at the patch centers, for each frame
+        y = positions[0, :, 0, 1].float() / (h - 1)
+        x = positions[0, 0, :, 2].float() / (w - 1)
+        tt, yy, xx = torch.meshgrid(torch.linspace(0, 1, t), y, x, indexing="ij")
+        with torch.no_grad():
+            x_shift = result(torch.stack([tt, yy, xx], dim=-1))[..., 1].mean(dim=-1)
+        y_centered = y - y.mean()
+        slopes = (x_shift * y_centered).sum(dim=-1) / y_centered.square().sum()
+
+        # The field undoes the motion relative to the middle (reference) frame.
+        # Before the patch-center fit, the slope came out (last - first patch
+        # center) = 0.75 times too small here.
+        true_slopes = 2 * amplitude
+        expected = -(true_slopes - true_slopes[t // 2])
+        ratio = (slopes * expected).sum() / expected.square().sum()
+        assert abs(ratio.item() - 1) < 0.1
+
+
+class TestLossWeighting:
+    """Every patch must count the same, whatever the batch size."""
+
+    @pytest.fixture
+    def patch_state(self, sample_image, pixel_spacing):
+        from torch_motion_correction.estimate_motion_optimizer import (
+            _prepare_patch_state,
+        )
+
+        state = _prepare_patch_state(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            deformation_field_resolution=(sample_image.shape[0], 2, 2),
+            patch_sampling=PatchSamplingConfig(patch_shape=(24, 24)),
+            fourier_filter=FourierFilterConfig(),
+            grid_type="catmull_rom",
+            initial_deformation_field=None,
+            device=torch.device("cpu"),
+        )
+        with torch.no_grad():
+            next(state.new_deformation_field.parameters()).normal_(std=0.5)
+        return state
+
+    @pytest.mark.parametrize("loss_type", ["mse", "ncc"])
+    def test_loss_and_gradient_independent_of_batch_size(
+        self, patch_state, sample_image, loss_type
+    ):
+        from torch_motion_correction.estimate_motion_optimizer import (
+            _accumulate_loss_and_gradients,
+            _process_patch_batch,
+        )
+
+        state = patch_state
+        n_patches = state.cached_fft.shape[0]
+        assert n_patches % 3 != 0  # a short last batch is what used to go wrong
+        parameter = next(state.new_deformation_field.parameters())
+
+        def process_batch(fft, centers, base_shifts):
+            return _process_patch_batch(
+                fft_batch=fft,
+                patch_batch_centers=centers,
+                base_shifts_batch=base_shifts,
+                new_deformation_field=state.new_deformation_field,
+                pixel_spacing=state.pixel_spacing,
+                ph=state.ph,
+                pw=state.pw,
+                loss_type=loss_type,
+                t=sample_image.shape[0],
+            )
+
+        results = []
+        for batch_size in (None, 3, 5):
+            parameter.grad = None
+            loss = _accumulate_loss_and_gradients(
+                process_batch_fn=process_batch,
+                cached_fft=state.cached_fft,
+                centers_norm=state.centers_norm,
+                base_shifts_cache=state.base_shifts_cache,
+                patch_batch_size=batch_size,
+            )
+            results.append((loss, parameter.grad.clone()))
+        for loss, gradient in results[1:]:
+            torch.testing.assert_close(loss, results[0][0])
+            torch.testing.assert_close(gradient, results[0][1])
+
+    def test_estimate_local_motion_independent_of_batch_size(
+        self, sample_image, pixel_spacing
+    ):
+        results = []
+        for batch_size in (None, 3):
+            result, _ = estimate_local_motion(
+                image=sample_image,
+                pixel_spacing=pixel_spacing,
+                deformation_field_resolution=(sample_image.shape[0], 2, 2),
+                patch_sampling=PatchSamplingConfig(patch_shape=(24, 24)),
+                optimization=OptimizationConfig(
+                    max_iterations=5,
+                    loss_type="ncc",
+                    optimizer_kwargs={"lr": 0.05},
+                    patch_batch_size=batch_size,
+                ),
+                device=torch.device("cpu"),
+            )
+            results.append(result.data)
+        torch.testing.assert_close(results[1], results[0], atol=1e-5, rtol=1e-4)
+
+
+class TestOptimizerOutputs:
+    """The trajectory and the result describe the field that is returned."""
+
+    @pytest.fixture
+    def initial_field(self, sample_image, pixel_spacing):
+        return estimate_global_motion(
+            image=sample_image, pixel_spacing=pixel_spacing, device=torch.device("cpu")
+        )
+
+    def test_trajectory_records_the_returned_field(
+        self, sample_image, pixel_spacing, initial_field
+    ):
+        result, trajectory = estimate_local_motion(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            deformation_field_resolution=(sample_image.shape[0], 2, 2),
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            initial_deformation_field=initial_field,
+            optimization=OptimizationConfig(
+                max_iterations=4, loss_type="ncc", optimizer_kwargs={"lr": 0.05}
+            ),
+            device=torch.device("cpu"),
+        )
+        checkpoints = trajectory.checkpoints
+        assert len(checkpoints) == 4
+        # The last checkpoint is the field after the last step but one; each
+        # checkpoint includes the starting field, and none shares storage with
+        # the live parameters
+        assert not torch.equal(
+            checkpoints[0].deformation_field, checkpoints[-1].deformation_field
+        )
+        with torch.no_grad():
+            start = initial_field.resample((sample_image.shape[0], 2, 2)).data
+        start = start - start.mean(dim=(1, 2, 3), keepdim=True)
+        assert start.abs().max() > 1  # the starting field is far from zero
+        # One Adam step of lr 0.05 per control point, plus the mean removal
+        step = checkpoints[0].deformation_field - start
+        assert step.abs().max() < 0.1
+        assert (result.data - checkpoints[-1].deformation_field).abs().max() < 0.1
+
+    def test_result_has_no_autograd_history(
+        self, sample_image, pixel_spacing, initial_field
+    ):
+        result, _ = estimate_local_motion(
+            image=sample_image,
+            pixel_spacing=pixel_spacing,
+            deformation_field_resolution=(sample_image.shape[0], 2, 2),
+            patch_sampling=PatchSamplingConfig(patch_shape=(32, 32)),
+            initial_deformation_field=initial_field,
+            optimization=OptimizationConfig(max_iterations=2),
+            device=torch.device("cpu"),
+        )
+        assert result.data.grad_fn is None
+        result.data.numpy()
+
+    def test_lbfgs_patch_subsample_is_deterministic(self, sample_image, pixel_spacing):
+        results = []
+        for _ in range(2):
+            result, trajectory = estimate_local_motion(
+                image=sample_image,
+                pixel_spacing=pixel_spacing,
+                deformation_field_resolution=(sample_image.shape[0], 2, 2),
+                patch_sampling=PatchSamplingConfig(patch_shape=(24, 24)),
+                optimization=OptimizationConfig(
+                    max_iterations=3,
+                    optimizer_type="lbfgs",
+                    loss_type="ncc",
+                    optimizer_kwargs={"lbfgs_patch_subsample": 3},
+                ),
+                device=torch.device("cpu"),
+            )
+            results.append(result.data)
+            losses = torch.tensor([c.loss for c in trajectory.checkpoints])
+            assert torch.isfinite(losses).all()
+        torch.testing.assert_close(results[0], results[1], atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("shape", [(64, 64), (63, 50)])
+def test_phase_shift_matches_fourier_shift(shape):
+    from torch_fourier_shift import fourier_shift_dft_2d
+
+    torch.manual_seed(0)
+    images = torch.randn(3, 4, *shape)
+    dft = torch.fft.rfftn(images, dim=(-2, -1))
+    shifts = 5 * torch.randn(3, 4, 2)
+    expected = fourier_shift_dft_2d(
+        dft=dft, image_shape=shape, shifts=shifts, rfft=True, fftshifted=False
+    )
+    actual = _phase_shift_rfft_2d(dft, shifts, shape)
+    torch.testing.assert_close(actual, expected, atol=1e-4, rtol=1e-4)

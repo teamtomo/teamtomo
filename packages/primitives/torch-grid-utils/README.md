@@ -16,5 +16,8 @@
   give the same number of columns), `fftfreq_shell_centers` (shell centers at
   `k / n`) and `fftfreq_to_dft_coordinates` (frequencies to array indices).
   `fftfreq_grid` now also builds 1D grids.
+- New `soft_circle`: a circular mask whose cosine edge is computed from each
+  pixel's distance to the circle. Unlike `circle`, it needs no distance transform
+  on the CPU, so it stays fast for large masks and on the GPU.
 - `polar_grid` now centers at `(h // 2, w // 2)` by default, as documented and as
   the other grids do. Odd sizes move by half a pixel; even sizes are unchanged.
