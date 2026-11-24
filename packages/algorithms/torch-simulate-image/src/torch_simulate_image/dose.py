@@ -37,8 +37,7 @@ def apply_dose_weight(
         Pixel size in Angstroms.
     voltage_kv : float
         Acceleration voltage in kilovolts. At 200 and 100 kV the exposures are
-        scaled up by 1/0.8 and 1/0.64, as in RELION and
-        :func:`torch_fourier_filter.dose_weight.dose_weight_2d`.
+        divided by 0.8 and 0.64, as in RELION.
 
     Returns
     -------
@@ -53,12 +52,12 @@ def apply_dose_weight(
         raise ValueError(msg)
 
     image_shape = image_shape_from_tensor(image)
-    scale = _voltage_damage_scale(voltage_kv)
     dose_filter = cumulative_dose_filter_3d(
         volume_shape=image_shape,
         pixel_size=pixel_size,
-        start_exposure=config.dose_start * scale,
-        end_exposure=config.dose_end * scale,
+        start_exposure=config.dose_start,
+        end_exposure=config.dose_end,
+        voltage=voltage_kv,
         crit_exposure_bfactor=config.crit_exposure_bfactor,
         rfft=True,
         fftshift=False,
@@ -72,12 +71,3 @@ def apply_dose_weight(
         norm="backward",
     )
     return weighted
-
-
-def _voltage_damage_scale(voltage_kv: float) -> float:
-    """Exposure multiplier for damage at lower voltages (RELION's convention)."""
-    if abs(voltage_kv - 200.0) <= 2.0:
-        return 1.0 / 0.8
-    if abs(voltage_kv - 100.0) <= 2.0:
-        return 1.0 / 0.64
-    return 1.0
