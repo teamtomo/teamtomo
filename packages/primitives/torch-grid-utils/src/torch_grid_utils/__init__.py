@@ -3,10 +3,16 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from torch_grid_utils.coordinate_grid import coordinate_grid, image_center
-from torch_grid_utils.fft_shape import next_fft_size, rfft_shape
+from torch_grid_utils.fft_shape import (
+    image_shape_from_dft_shape,
+    next_fft_size,
+    rfft_shape,
+)
 from torch_grid_utils.fftfreq_grid import (
     dft_center,
     fftfreq_grid,
+    fftfreq_shell_centers,
+    fftfreq_to_dft_coordinates,
     fftfreq_to_spatial_frequency,
     fftshift_1d,
     fftshift_2d,
@@ -50,6 +56,8 @@ __all__ = [
     "dft_center",
     "fftfreq_grid",
     "fftfreq_grid_polar",
+    "fftfreq_shell_centers",
+    "fftfreq_to_dft_coordinates",
     "fftfreq_to_spatial_frequency",
     "fftshift_1d",
     "fftshift_2d",
@@ -58,6 +66,7 @@ __all__ = [
     "ifftshift_2d",
     "ifftshift_3d",
     "image_center",
+    "image_shape_from_dft_shape",
     "next_fft_size",
     "normalize_polar_grid",
     "patch_grid",

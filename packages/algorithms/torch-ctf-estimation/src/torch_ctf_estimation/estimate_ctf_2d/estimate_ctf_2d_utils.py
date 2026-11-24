@@ -18,6 +18,44 @@ def _astig_angle_to_m90_p90(angle_0_180: float) -> float:
     return a if a <= 90.0 else a - 180.0
 
 
+def _principal_defocus(mean_defocus: float, astigmatism: float) -> tuple[float, float]:
+    """Return (defocus_u, defocus_v) in microns.
+
+    ``astigmatism`` follows the torch-ctf convention: the defocus along a direction
+    at angle phi is ``mean_defocus + astigmatism * cos(2 * (phi - angle))``, so it is
+    half the difference between the principal defocuses.
+    """
+    return mean_defocus + astigmatism, mean_defocus - astigmatism
+
+
+def _fold_gradient_direction(angle_deg: float, magnitude: float) -> tuple[float, float]:
+    """Fold a gradient angle into [0, 180), negating the magnitude when it moves."""
+    angle = angle_deg % 360.0
+    if angle >= 180.0:
+        return angle - 180.0, -magnitude
+    return angle, magnitude
+
+
+def _mean_linear_gradient(
+    magnitude: torch.Tensor,
+    direction_u: torch.Tensor,
+    direction_v: torch.Tensor,
+) -> tuple[float, float]:
+    """Average linear defocus gradients as vectors; return (angle_deg, magnitude).
+
+    Each gradient is ``magnitude * (u, v) / |(u, v)|``. Averaging these vectors, rather
+    than angles and magnitudes separately, keeps gradients whose angles straddle
+    0/180 degrees from cancelling. The result is folded into [0, 180).
+    """
+    direction_norm = torch.sqrt(direction_u**2 + direction_v**2 + 1e-8)
+    gradient_u = (magnitude * direction_u / direction_norm).mean()
+    gradient_v = (magnitude * direction_v / direction_norm).mean()
+    angle_deg = math.degrees(math.atan2(float(gradient_v), float(gradient_u)))
+    return _fold_gradient_direction(
+        angle_deg, math.hypot(float(gradient_u), float(gradient_v))
+    )
+
+
 def _clamp_optional_bounds(
     values: torch.Tensor,
     bounds: tuple[float, float] | None,
@@ -217,6 +255,7 @@ def estimate_defocus_2d_at_1x1(
     fixed_phase_shift_deg: float | None = None,
     early_stopper: Callable[[float], bool] | None = None,
     use_amplitude: bool = False,
+    image_shape: tuple[int, int] | None = None,
 ) -> Defocus2DResults:
     """
     Run 2D defocus estimation at 1x1 spatial resolution (center only).
@@ -272,6 +311,11 @@ def estimate_defocus_2d_at_1x1(
     use_amplitude : bool, optional
         If True, fit against the CTF amplitude rather than CTF squared.
         Default False.
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. Needed to tell odd from even
+        widths, since both give the same rfft width. If None, square patches
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -327,6 +371,7 @@ def estimate_defocus_2d_at_1x1(
         fixed_phase_shift_deg=fixed_phase_shift_deg,
         early_stopper=early_stopper,
         use_amplitude=use_amplitude,
+        image_shape=image_shape,
     )
 
 

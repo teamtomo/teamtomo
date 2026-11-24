@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from torch_subpixel_crop import subpixel_crop_3d
@@ -74,9 +75,8 @@ def test_subpixel_crop_single_3d_return_rfft_decenter_odd_sidelength():
         decenter=True,
     )
     cropped_image_decenter = torch.fft.irfftn(cropped_image_decenter, s=(5, 5, 5))
-    # for odd sidelengths, fftshift and ifftshift differ by one sample;
-    # decenter shifts by +(sidelength // 2), so ifftshift is the correct undo
-    cropped_image_decenter = torch.fft.ifftshift(
+    # decenter moves the patch centre to [0]; fftshift moves it back to [n // 2]
+    cropped_image_decenter = torch.fft.fftshift(
         cropped_image_decenter, dim=(-3, -2, -1)
     )
     assert torch.allclose(cropped_image_decenter, cropped_image_real, atol=1e-5)
@@ -100,3 +100,21 @@ def test_subpixel_crop_multi_3d():
     expected_1 = torch.zeros((4, 4, 4))
     expected_1[1:3, 1:3, 1:3] = 1
     assert torch.allclose(cropped_image[1], expected_1)
+
+
+@pytest.mark.parametrize("sidelength", [4, 5, 20, 21])
+def test_subpixel_crop_3d_decenter_puts_origin_at_zero(sidelength):
+    """A delta at the crop position lands at real-space index 0 after decenter."""
+    image = torch.zeros((32, 32, 32))
+    image[16, 16, 16] = 1
+    patch_rfft = subpixel_crop_3d(
+        image=image,
+        positions=torch.tensor([16.0, 16.0, 16.0]),
+        sidelength=sidelength,
+        return_rfft=True,
+        decenter=True,
+    )
+    patch = torch.fft.irfftn(patch_rfft, s=(sidelength,) * 3)
+    assert patch.shape == (sidelength,) * 3
+    assert int(patch.argmax()) == 0
+    torch.testing.assert_close(patch[0, 0, 0], torch.tensor(1.0), atol=1e-5, rtol=0)

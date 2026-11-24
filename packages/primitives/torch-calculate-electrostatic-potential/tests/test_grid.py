@@ -3,6 +3,7 @@ import torch
 
 from torch_calculate_electrostatic_potential import (
     GridConfig,
+    calculate_scattering_potential_3d,
     default_sublattice_radius,
 )
 
@@ -229,6 +230,59 @@ class TestAtomAnchoring:
         indices = torch.tensor([[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]])
         flat = grid.convert_cubic_index_to_flat_index(indices)
         assert flat.tolist() == [0, 1, 4, 12]
+
+
+class TestFFTCenteredGrid:
+    @pytest.mark.parametrize("n", [8, 9])
+    @pytest.mark.parametrize("ndim", [2, 3])
+    def test_center_on_voxel_n_over_2(self, n, ndim):
+        voxel_size = (0.5,) * ndim
+        grid = GridConfig.from_fft_centered((n,) * ndim, voxel_size)
+        assert grid.grid_shape.tolist() == [n] * ndim
+        center_index = torch.full((ndim,), n // 2)
+        center_coord = grid.left_bottom_point + center_index * grid.voxel_size
+        assert torch.allclose(center_coord, torch.zeros(ndim))
+        assert torch.allclose(
+            grid.right_upper_point - grid.left_bottom_point,
+            torch.full((ndim,), (n - 1) * 0.5),
+        )
+
+    def test_non_cubic_shape_is_preserved(self):
+        grid = GridConfig.from_fft_centered((4, 6, 9), (1.0, 1.0, 1.0))
+        assert grid.grid_shape.tolist() == [4, 6, 9]
+        assert torch.allclose(grid.left_bottom_point, torch.tensor([-2.0, -3.0, -4.0]))
+
+    def test_explicit_center(self):
+        center = (1.0, -2.0, 3.5)
+        grid = GridConfig.from_fft_centered(
+            (10, 10, 10), (2.0, 2.0, 2.0), center=center
+        )
+        assert torch.allclose(
+            grid.left_bottom_point + 5 * grid.voxel_size, torch.tensor(center)
+        )
+
+    def test_matches_geometric_center_for_odd_shapes(self):
+        fft = GridConfig.from_fft_centered((7, 7, 7), (1.0, 1.0, 1.0))
+        geometric = GridConfig.from_grid_shape_and_voxel_size(
+            (7, 7, 7), (1.0, 1.0, 1.0), center_zyx=(0.0, 0.0, 0.0)
+        )
+        assert torch.allclose(fft.left_bottom_point, geometric.left_bottom_point)
+
+    def test_single_atom_peaks_at_n_over_2(self, simple_atoms):
+        grid = GridConfig.from_fft_centered((16, 16, 16), (1.0, 1.0, 1.0))
+        volume = calculate_scattering_potential_3d(
+            simple_atoms["atom_pos_zyx"][:1],
+            simple_atoms["atom_bfactors"][:1],
+            simple_atoms["atom_params_a"][:1],
+            simple_atoms["atom_params_b"][:1],
+            grid,
+        )
+        peak = torch.unravel_index(volume.argmax(), volume.shape)
+        assert [int(i) for i in peak] == [8, 8, 8]
+
+    def test_rejects_mismatched_center(self):
+        with pytest.raises(ValueError, match="center must have the same length"):
+            GridConfig.from_fft_centered((4, 4, 4), (1.0, 1.0, 1.0), center=(0.0, 0.0))
 
 
 def test_default_sublattice_radius():

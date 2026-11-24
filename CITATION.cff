@@ -9,6 +9,8 @@ authors:
 - given-names: EuanPyle
 - given-names: HanyiZhang
 - given-names: MrCurtis
+- given-names: aaronkanzer
+  affiliation: Scigantic
 - given-names: alexjnoble
 - given-names: amineuron
   orcid: https://orcid.org/0000-0001-9480-5915
@@ -32,6 +34,9 @@ authors:
   affiliation: Monash University
 - given-names: Alister
   family-names: Burt
+- given-names: Jackson
+  family-names: Carrion
+  orcid: https://orcid.org/0009-0008-2384-9492
 - given-names: Marten
   family-names: Chaillet
   affiliation: Hubrecht Institute

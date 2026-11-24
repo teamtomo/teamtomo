@@ -12,7 +12,10 @@ from torch_fourier_slice import (
     project_3d_to_2d,
     project_3d_to_2d_multichannel,
 )
-from torch_fourier_slice.slice_insertion import insert_central_slices_rfft_3d
+from torch_fourier_slice.slice_insertion import (
+    insert_central_slices_rfft_3d,
+    insert_central_slices_rfft_3d_multichannel,
+)
 
 DEVICES = ["cpu"]
 if torch.cuda.is_available():
@@ -159,9 +162,6 @@ def test_3d_2d_projection_backprojection_cycle_odd_size(device):
     assert device in str(volume.device)
 
     # calculate FSC between the ground truth volume and the reconstruction
-    # odd grids have slightly different boundary interpolation behaviour than
-    # even ones, so fidelity is consistently a little lower here (~0.984-0.99
-    # across seeds) than the >0.99 achieved for the even-size cube below
     _fsc = fsc(cube.to("cpu"), volume.float().to("cpu"))
     assert torch.all(_fsc[-10:] > 0.98)
 
@@ -382,6 +382,39 @@ def test_backprojection_friedel_symmetry_x0_plane(cube, device):
     print(mean_error)
     assert mean_error < 1e-5, (
         f"Friedel symmetry violated: mean error = {mean_error:.9f}"
+    )
+
+
+@pytest.mark.parametrize("multichannel", [False, True])
+@pytest.mark.parametrize("sidelength", [7, 20, 21, 51, 96, 97, 105, 112])
+def test_insert_central_slices_rfft_3d_identity_fills_central_plane(
+    sidelength, multichannel
+):
+    """At the identity, every sample of the slice lands on the z = n // 2 plane.
+
+    Covers the edge samples which float32 places just outside the array for some odd
+    sizes (7, 51, 105, ...), and, for even sizes, the -Nyquist sample on the x = 0
+    line, which is its own Friedel mate and must not be dropped as redundant.
+    """
+    n = sidelength
+    image = torch.randn((n, n), generator=torch.Generator().manual_seed(n))
+    image_rfft = torch.fft.rfftn(torch.fft.ifftshift(image), dim=(-2, -1))
+    image_rfft = torch.fft.fftshift(image_rfft, dim=(-2,))
+
+    if multichannel:
+        dft, weights = insert_central_slices_rfft_3d_multichannel(
+            image_rfft[None, None], (n, n, n), torch.eye(3)[None]
+        )
+        dft = dft[0]
+    else:
+        dft, weights = insert_central_slices_rfft_3d(
+            image_rfft[None], (n, n, n), torch.eye(3)[None]
+        )
+
+    assert torch.all(weights[n // 2] > 0)
+    atol = 1e-5 * image_rfft.abs().max().item()
+    torch.testing.assert_close(
+        dft[n // 2] / weights[n // 2], image_rfft, rtol=1e-4, atol=atol
     )
 
 

@@ -1,5 +1,6 @@
 """Tests for joint defocus+thickness refine primitives."""
 
+import pytest
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
 
@@ -68,8 +69,8 @@ def test_refine_defocus_and_thickness_2d_grid():
         astigmatism=0.05,
         astigmatism_angle=10.0,
         envelope_B=20.0,
-        defocus_u=1.825,
-        defocus_v=1.775,
+        defocus_u=1.85,
+        defocus_v=1.75,
         phase_shift_degrees=0.0,
     )
     out2d, thick2d = refine_defocus_and_thickness_2d(
@@ -85,6 +86,8 @@ def test_refine_defocus_and_thickness_2d_grid():
     assert out2d.defocus_model_type == "grid"
     assert thick2d.mean_thickness >= 1.0
     assert out2d.defocus_u is not None
+    assert out2d.defocus_v is not None
+    assert out2d.defocus_u - out2d.defocus_v == pytest.approx(2 * out2d.astigmatism)
 
 
 def test_refine_defocus_and_thickness_2d_linear():
@@ -118,6 +121,38 @@ def test_refine_defocus_and_thickness_2d_linear():
     assert out2d.defocus_model_type == "linear"
     assert isinstance(out2d.defocus_model, LinearDefocusModel)
     assert thick2d.mean_thickness >= 1.0
+
+
+def test_refine_defocus_and_thickness_2d_linear_keeps_gradient_sign():
+    """Folding the gradient angle into [0, 180) negates the magnitude with it."""
+    t, gh, gw, ph, pw = 1, 2, 2, 32, 17
+    linear = LinearDefocusModel(
+        defocus_0=1.6,
+        defocus_gradient_magnitude=0.1,
+        defocus_gradient_angle=200.0,
+    )
+    result2d = Defocus2DResults(
+        defocus_model_type="linear",
+        defocus_model=linear,
+        astigmatism=0.0,
+        astigmatism_angle=0.0,
+        envelope_B=0.0,
+        defocus_u=1.6,
+        defocus_v=1.6,
+        phase_shift_degrees=0.0,
+    )
+    out2d, _thick2d = refine_defocus_and_thickness_2d(
+        patch_power_spectra=torch.rand(t, gh, gw, ph, pw) + 0.01,
+        normalised_patch_positions=torch.rand(t, gh, gw, 3),
+        result2d=result2d,
+        initial_thickness_angstroms=1200.0,
+        frequency_fit_range_angstroms=(25.0, 6.0),
+        pixel_spacing_angstroms=1.2,
+        n_iterations=0,
+    )
+    model = out2d.defocus_model
+    assert model.defocus_gradient_angle == pytest.approx(20.0, abs=1e-4)
+    assert model.defocus_gradient_magnitude == pytest.approx(-0.1, abs=1e-6)
 
 
 def test_refine_defocus_and_thickness_2d_early_stops_before_n_iterations():

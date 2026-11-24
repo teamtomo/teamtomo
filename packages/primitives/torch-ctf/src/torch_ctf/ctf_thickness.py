@@ -156,6 +156,7 @@ def calculate_ctf_thickness_1d(
     pixel_size: float | torch.Tensor,
     n_samples: int,
     oversampling_factor: int,
+    image_sidelength: int | None = None,
 ) -> torch.Tensor:
     """1D CTF including sample thickness (amplitude or Thon-ring power spectrum).
 
@@ -182,11 +183,17 @@ def calculate_ctf_thickness_1d(
         Number of samples along the 1D frequency axis.
     oversampling_factor : int
         Factor by which to oversample before averaging back to ``n_samples``.
+    image_sidelength : int | None, optional
+        Real-space side length ``N`` of the image. If given, the CTF is sampled
+        at ``rfftfreq(N)`` and ``n_samples`` must equal ``N // 2 + 1``. If None
+        (default), it is sampled at ``linspace(0, 0.5, n_samples)``. See
+        :func:`~torch_ctf.calculate_ctf_1d`.
 
     Returns
     -------
     ctf : torch.Tensor
-        Thickness-modulated 1D CTF (real-valued).
+        Thickness-modulated 1D CTF (real-valued). The amplitude form has the same
+        sign as :func:`calculate_ctf_1d` and equals it at zero thickness.
 
     """
     (
@@ -206,6 +213,7 @@ def calculate_ctf_thickness_1d(
         pixel_size=pixel_size,
         n_samples=n_samples,
         oversampling_factor=oversampling_factor,
+        image_sidelength=image_sidelength,
     )
 
     chi = calculate_total_phase_shift(
@@ -352,7 +360,8 @@ def calculate_ctf_thickness_2d(
         Amount of astigmatism in micrometers.
         ``(defocus_u - defocus_v) / 2``
     astigmatism_angle : float | torch.Tensor
-        Angle of astigmatism in degrees. 0 places ``defocus_u`` along the y-axis.
+        Angle of astigmatism in degrees. 0 places ``defocus_u`` along the x-axis,
+        and positive angles rotate it towards +y (increasing row index).
     voltage : float | torch.Tensor
         Acceleration voltage in kilovolts (kV).
     spherical_aberration : float | torch.Tensor
@@ -386,7 +395,8 @@ def calculate_ctf_thickness_2d(
     -------
     ctf : torch.Tensor
         Thickness-modulated 2D CTF. Real if ``return_power_spectrum`` or no odd
-        aberrations; otherwise complex.
+        aberrations; otherwise complex. The amplitude form has the same sign as
+        :func:`calculate_ctf_2d` and equals it at zero thickness.
 
     """
     return _calculate_ctf_thickness_2d_or_lpp(
@@ -484,7 +494,8 @@ def calculate_ctf_thickness_lpp(
     focal_length_angstrom : float
         Focal length in Angstroms.
     laser_xy_angle_deg : float
-        Laser rotation in the xy plane (degrees).
+        Laser rotation in the xy plane (degrees), measured from the +ky axis
+        (row direction) towards +kx. See :func:`torch_ctf.make_laser_coords`.
     laser_xz_angle_deg : float
         Laser angle in the xz plane (degrees).
     laser_long_offset_angstrom : float
@@ -510,6 +521,8 @@ def calculate_ctf_thickness_lpp(
     -------
     ctf : torch.Tensor
         Thickness-modulated LPP CTF (real for power spectrum or no odd phase).
+        The amplitude form has the same sign as :func:`calc_LPP_ctf_2D` and
+        equals it at zero thickness.
 
     """
     phase_shift_provider = _make_lpp_phase_shift_provider(

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_thickness_ctf_ps_t,
@@ -77,6 +78,7 @@ def estimate_thickness_2d(
     laser_params: LaserParams | None = None,
     debug: bool = False,
     early_stopper: Callable[[float], bool] | None = None,
+    image_shape: tuple[int, int] | None = None,
 ) -> Thickness2DResults:
     """
     Estimate sample thickness in 2D using a 3D spline grid over (t, x, y).
@@ -129,6 +131,11 @@ def estimate_thickness_2d(
     early_stopper : callable or None, optional
         Stateful ``(loss) -> should_stop`` callback. Default None (run all
         ``n_iterations``).
+    image_shape : tuple[int, int] or None, optional
+        Real-space ``(h, w)`` of the patches. Needed to tell odd from even
+        widths, since both give the same rfft width. If None, square patches
+        ``(ph, ph)`` are assumed; a ValueError is raised if that does not
+        match the rfft width.
 
     Returns
     -------
@@ -137,8 +144,13 @@ def estimate_thickness_2d(
         per-iteration model traces.
     """
     # --- Setup: collapse time dim when nt==1, derive image shape ---
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     nt = thickness_grid_resolution[0]
     if nt == 1:

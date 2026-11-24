@@ -78,6 +78,26 @@ def test_atomic_structure_batches_broadcast_into_potential_volumes():
 
     assert structure.batch_shape == (2,)
     assert potential.shape == (2, 11, 11, 11)
+
+
+def test_atomic_numbers_structure_matches_dataframe_and_keeps_gradients():
+    expected = potential_from_structure_3d(
+        AtomicStructure.from_dataframe(_frame()), _grid(3)
+    )
+    positions = torch.tensor([[0.0, 0.0, 0.0], [0.7, -0.4, 1.2]], requires_grad=True)
+    structure = AtomicStructure.from_atomic_numbers(
+        positions,
+        [6, 8],
+        b_factors=torch.tensor([10.0, 12.0]),
+        occupancies=torch.tensor([1.0, 0.8]),
+    )
+
+    potential = potential_from_structure_3d(structure, _grid(3))
+    potential.sum().backward()
+
+    assert torch.equal(potential.detach(), expected)
+    assert positions.grad is not None
+    assert positions.grad.abs().sum() > 0
     assert not torch.equal(potential[0], potential[1])
 
 

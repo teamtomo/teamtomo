@@ -5,7 +5,6 @@ from typing import Any
 import einops
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch_fourier_rescale import fourier_rescale_rfft_2d
 from torch_fourier_slice import insert_central_slices_rfft_3d_multichannel
 from torch_grid_utils import fftfreq_grid
@@ -97,7 +96,7 @@ def _reconstruct_subvolume(
         dim=(-3, -2, -1),
     )
 
-    patches = torch.fft.ifftshift(patches, dim=(-3, -2, -1))
+    patches = torch.fft.fftshift(patches, dim=(-3, -2, -1))
 
     grid = fftfreq_grid(
         image_shape=(sidelength_padded_output,) * 3,
@@ -108,8 +107,11 @@ def _reconstruct_subvolume(
     )
     patches = patches / torch.sinc(grid) ** 2
 
-    p = (sidelength_padded_output - sidelength) // 2
-    patches = F.pad(patches, [-p] * 6)
+    # central crop keeping the centre [n // 2] at [sidelength // 2]; a symmetric
+    # crop of the (always even) padded box would leave sidelength + 1 when odd
+    lo = sidelength_padded_output // 2 - sidelength // 2
+    hi = lo + sidelength
+    patches = patches[..., lo:hi, lo:hi, lo:hi]
 
     [patches] = einops.unpack(patches, ps, "* d h w")
 

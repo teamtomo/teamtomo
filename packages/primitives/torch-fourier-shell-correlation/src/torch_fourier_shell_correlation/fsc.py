@@ -3,10 +3,9 @@
 from typing import Sequence
 
 import torch
-from torch_grid_utils import fftfreq_grid
+from torch_grid_utils import fftfreq_grid, fftfreq_shell_centers
 
 from .utils import (
-    _compute_frequency_bins_weighted,
     _compute_shell_correlations_weighted,
     _prepare_fft_data,
 )
@@ -151,7 +150,8 @@ def fourier_correlation(
     )
 
     # Compute frequency bins using weighted approach
-    bin_centers = _compute_frequency_bins_weighted(image_shape, a_fft.device)
+    # shells 1 / n apart for the smallest dimension n (see fftfreq_shell_centers)
+    bin_centers = fftfreq_shell_centers(min(image_shape), device=a_fft.device)
 
     # Compute broadcast batch dimensions for correlation computation
     broadcast_shape = torch.broadcast_shapes(a_fft.shape, b_fft.shape)

@@ -76,7 +76,10 @@ def calculate_cross_correlation(
     # result = result / torch.sqrt(result.abs() + .0001)
     # result = result * b_envelope(300, a.shape, 10)
     result = torch.fft.irfftn(result, dim=(-2, -1), s=(h, w))
-    result = torch.fft.ifftshift(result, dim=(-2, -1))
+    # move zero shift from [0, 0] to the centre [h // 2, w // 2] that
+    # get_shift_from_correlation_image measures from; ifftshift would put it at
+    # [(h + 1) // 2, (w + 1) // 2], one pixel off along odd dimensions
+    result = torch.fft.fftshift(result, dim=(-2, -1))
     result /= h * w  # normalize the result
     return result
 

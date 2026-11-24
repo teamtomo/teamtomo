@@ -56,7 +56,8 @@ def estimate_local_mean(
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning)
-        background_model = LSQBivariateSpline(y, x, z, tx, ty)
+        # knots pair with coordinates by position: (y, ty) then (x, tx)
+        background_model = LSQBivariateSpline(y, x, z, ty, tx)
 
     # evaluate the model over a grid covering the whole image
     y = np.arange(image.shape[-2])

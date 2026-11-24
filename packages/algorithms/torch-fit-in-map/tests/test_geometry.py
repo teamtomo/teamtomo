@@ -2,13 +2,19 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 from torch_structure_manipulation import df_to_atomxyz
 
-from torch_fit_in_map import AlignmentResult, apply_alignment_to_structure
+from torch_fit_in_map import (
+    AlignmentResult,
+    apply_alignment_to_structure,
+    crop_or_pad_to_shape,
+)
 from torch_fit_in_map._geometry import (
     coords_xyz_from_simulation_voxels,
     coords_xyz_to_simulation_voxels,
+    crop_start_zyx,
     simulation_box_center_angstroms,
 )
 
@@ -53,3 +59,28 @@ def test_identity_alignment_round_trip_through_simulation_geometry():
     expected_centre = simulation_box_center_angstroms(box, px)
     centroid = out[["x", "y", "z"]].to_numpy().mean(0)
     np.testing.assert_allclose(centroid, [expected_centre] * 3, atol=1e-3)
+
+
+@pytest.mark.parametrize("sim_box_size", [40, 41, 45, 47, 48, 50, 52, 53])
+def test_crop_start_matches_crop_or_pad_to_shape(sim_box_size):
+    """Simulation voxel p sits at p - crop_start after crop_or_pad_to_shape.
+
+    The non-cubic target crops some axes and pads others, with even and odd
+    size differences.
+    """
+    box_shape = (48, 45, 50)
+    start = crop_start_zyx(sim_box_size, box_shape)
+    for axis in range(3):
+        # voxels hold 1 + their index along `axis`; padding stays 0
+        shape = [1, 1, 1]
+        shape[axis] = sim_box_size
+        index = torch.arange(1, sim_box_size + 1, dtype=torch.float32).view(shape)
+        volume = index.expand(sim_box_size, sim_box_size, sim_box_size).contiguous()
+
+        out = crop_or_pad_to_shape(volume, box_shape).movedim(axis, 0)
+        # through the middle of the other axes, which is never padding
+        line = out[:, out.shape[1] // 2, out.shape[2] // 2]
+
+        out_index = torch.nonzero(line).squeeze(-1)
+        assert len(out_index) > 0
+        torch.testing.assert_close(line[out_index] - 1, out_index.float() + start[axis])
