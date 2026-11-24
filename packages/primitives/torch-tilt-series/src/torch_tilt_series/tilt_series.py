@@ -142,6 +142,30 @@ class TiltSeries:
     def pixel_spacing(self, value: float | None) -> None:
         self._pixel_spacing = value
 
+    def copy(self) -> "TiltSeries":
+        """A new TiltSeries with detached, cloned tensors.
+
+        Geometry tensors and image_indices are cloned, so changing the copy in
+        place leaves this series untouched. The local_shifts and
+        local_shifts_2d models are shared, not copied.
+        """
+        return TiltSeries(
+            tilt_angles=self.tilt_angles.detach().clone(),
+            tilt_axis_angle=self.tilt_axis_angle.detach().clone(),
+            sample_translations=self.sample_translations.detach().clone(),
+            x_tilts=self.x_tilts.detach().clone(),
+            sample2levelled=self.sample2levelled.detach().clone(),
+            levelled2tomo=self.levelled2tomo.detach().clone(),
+            local_shifts=self.local_shifts,
+            local_shifts_2d=self.local_shifts_2d,
+            image_path=self.image_path,
+            image_indices=(
+                self.image_indices.clone() if self.image_indices is not None else None
+            ),
+            pixel_spacing=self._pixel_spacing,
+            device=self.device,
+        )
+
     @property
     def levelled2sample(self) -> torch.Tensor:
         """Inverse of sample2levelled: levelled sample space -> sample space."""

@@ -11,8 +11,15 @@ __email__ = "alisterburt@gmail.com"
 
 from torch_tiltxcorr.tiltxcorr import tiltxcorr
 from torch_tiltxcorr.tiltxcorr_no_stretch import tiltxcorr_no_stretch
+from torch_tiltxcorr.tiltxcorr_patches import chop_tracks, tiltxcorr_patches
 from torch_tiltxcorr.tiltxcorr_with_sample_tilt_estimation import (
     tiltxcorr_with_sample_tilt_estimation,
 )
 
-__all__ = ["tiltxcorr", "tiltxcorr_no_stretch", "tiltxcorr_with_sample_tilt_estimation"]
+__all__ = [
+    "chop_tracks",
+    "tiltxcorr",
+    "tiltxcorr_no_stretch",
+    "tiltxcorr_patches",
+    "tiltxcorr_with_sample_tilt_estimation",
+]
