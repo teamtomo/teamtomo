@@ -53,10 +53,10 @@ def _rotate(array: np.ndarray, rotation_matrix: np.ndarray) -> np.ndarray:
 def _project(array: np.ndarray, rotation_matrix: np.ndarray) -> np.ndarray:
     """Real-space projection along z (or y) with the rotation the package takes.
 
-    The projection functions take the passive rotation (image frame -> volume
-    frame), so the projection with `R` is of the volume rotated by `R.T`.
+    The real-space projection functions take the active rotation of the volume, so the
+    projection with `R` is of the volume rotated by `R`.
     """
-    return _rotate(array, rotation_matrix.T).sum(axis=0)
+    return _rotate(array, rotation_matrix).sum(axis=0)
 
 
 def _cc(a, b) -> float:
