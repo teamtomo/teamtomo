@@ -103,25 +103,35 @@ def _mojo_slices(
     rotations: torch.Tensor,
     interpolation: str = "linear",
     cutoff: float = NO_CUTOFF,
+    oversampling: float = 1.0,
+    **shifts,
 ) -> _Insertion:
+    """`shifts` are `shifts_2d` / `shifts_3d`, passed to both operations."""
+    volume_sidelength = round(sidelength * oversampling)
+
     def insert(slices, weights=None):
         return mojo_insert_central_slices_rfft_3d(
             slices,
             rotations,
             weights=weights,
+            oversampling=oversampling,
             fourier_radius_cutoff=cutoff,
             interpolation=interpolation,
+            **shifts,
         )
 
     def extract(volume):
         return mojo_extract_central_slices_rfft_3d(
             volume.contiguous(),
             rotations,
+            output_shape=(sidelength, sidelength),
+            oversampling=oversampling,
             fourier_radius_cutoff=cutoff,
             interpolation=interpolation,
+            **shifts,
         )
 
-    return _Insertion(insert, extract, (sidelength,) * 2, (sidelength,) * 3)
+    return _Insertion(insert, extract, (sidelength,) * 2, (volume_sidelength,) * 3)
 
 
 def _mojo_lines(
@@ -129,7 +139,10 @@ def _mojo_lines(
     directions: torch.Tensor,
     interpolation: str = "linear",
     cutoff: float = NO_CUTOFF,
+    oversampling: float = 1.0,
+    **shifts,
 ) -> _Insertion:
+    """`shifts` are `shifts_3d` (3D lines) / `shifts_2d` (2D lines)."""
     ndim = directions.shape[-1]
     if ndim == 3:
         insert_fn, extract_fn = (
@@ -147,19 +160,25 @@ def _mojo_lines(
             lines,
             directions,
             weights=weights,
+            oversampling=oversampling,
             fourier_radius_cutoff=cutoff,
             interpolation=interpolation,
+            **shifts,
         )
 
     def extract(array):
         return extract_fn(
             array.contiguous(),
             directions,
+            output_length=sidelength,
+            oversampling=oversampling,
             fourier_radius_cutoff=cutoff,
             interpolation=interpolation,
+            **shifts,
         )
 
-    return _Insertion(insert, extract, (sidelength,), (sidelength,) * ndim)
+    output_sidelength = round(sidelength * oversampling)
+    return _Insertion(insert, extract, (sidelength,), (output_sidelength,) * ndim)
 
 
 CASES = [
@@ -186,6 +205,49 @@ for _interpolation in ("linear", "cubic"):
     ]
 
 
+def _shifts(ndim: int, seed: int = 5) -> torch.Tensor:
+    """Random non-integer shifts in pixels, so the Nyquist phases are not trivial."""
+    return 1.3 * torch.randn(
+        N_POSES, ndim, generator=torch.Generator().manual_seed(seed)
+    )
+
+
+# shifts and oversampling change the data but not the Hermitian bookkeeping, so
+# only the tests that hold for any linear insertion run on them
+OPTION_CASES = [
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), shifts_2d=_shifts(2)),
+        id="mojo-slices-shifts-2d",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), shifts_3d=_shifts(3)),
+        id="mojo-slices-shifts-3d",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), oversampling=2.0),
+        id="mojo-slices-oversampling-2",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(3), shifts_3d=_shifts(3)),
+        id="mojo-lines-3d-shifts",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(2), shifts_2d=_shifts(2)),
+        id="mojo-lines-2d-shifts",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(3), oversampling=2.0),
+        id="mojo-lines-3d-oversampling-2",
+        marks=requires_mojo,
+    ),
+]
+
+
 def _rfft(x: torch.Tensor, ndim: int) -> torch.Tensor:
     return torch.fft.rfftn(x, dim=tuple(range(-ndim, 0)))
 
@@ -198,7 +260,7 @@ def _random_real(shape: tuple[int, ...], seed: int) -> torch.Tensor:
     return torch.randn(shape, generator=torch.Generator().manual_seed(seed))
 
 
-@pytest.mark.parametrize("make_case", CASES)
+@pytest.mark.parametrize("make_case", CASES + OPTION_CASES)
 def test_insertion_is_real_space_adjoint_of_extraction(make_case):
     """<irfft(insert(rfft(p))), v> = c <p, irfft(extract(rfft(v)))> for real p, v.
 
@@ -285,7 +347,7 @@ def _linear_backward_ok(loss_fn, param, n=4, scale=0.05, tol=1e-3):
     return True
 
 
-MOJO_CASES = [case for case in CASES if case.id.startswith("mojo")]
+MOJO_CASES = [case for case in CASES + OPTION_CASES if case.id.startswith("mojo")]
 
 
 @pytest.mark.parametrize("make_case", MOJO_CASES)
