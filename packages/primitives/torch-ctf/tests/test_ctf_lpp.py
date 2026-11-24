@@ -325,7 +325,7 @@ def test_calc_LPP_ctf_2D_with_beam_tilt_only():
 
 
 def test_calc_LPP_ctf_2D_return_complex_ctf_symmetric_path():
-    """LPP return_complex_ctf: unit modulus; imag matches real WPOA when chi_a=0."""
+    """LPP return_complex_ctf: unit modulus; -imag matches real WPOA when chi_a=0."""
     common = {
         "defocus": 1.5,
         "astigmatism": 0,
@@ -354,7 +354,7 @@ def test_calc_LPP_ctf_2D_return_complex_ctf_symmetric_path():
     assert ctf_c.shape == ctf_real.shape
     assert torch.all(torch.isfinite(ctf_c))
     assert torch.allclose(torch.abs(ctf_c), torch.ones_like(ctf_c.real), atol=1e-5)
-    assert torch.allclose(ctf_c.imag, ctf_real, atol=1e-5)
+    assert torch.allclose(-ctf_c.imag, ctf_real, atol=1e-5)
 
 
 def test_calc_LPP_ctf_2D_return_complex_ctf_beam_tilt_unit_modulus():
@@ -512,3 +512,30 @@ def test_calc_LPP_ctf_2D_with_transform_matrix():
 
     # The transform matrix should change the output (they should be different)
     assert not torch.allclose(result_no_transform, result_with_transform, atol=1e-6)
+
+
+@pytest.mark.parametrize("angle_deg", [0.0, 30.0, 90.0])
+def test_make_laser_coords_axis_convention(angle_deg):
+    """With a [ky, kx] fftfreq grid the laser axis is at angle θ from +ky.
+
+    The transverse coordinate Ly vanishes along (kx, ky) = (sin θ, cos θ).
+    """
+    from torch_grid_utils.fftfreq_grid import fftfreq_grid
+
+    grid = fftfreq_grid(image_shape=(32, 32), rfft=False, fftshift=False, norm=False)
+    laser_coords = make_laser_coords(
+        fft_freq_grid_angstrom=grid,
+        electron_wavelength_angstrom=1.0,
+        focal_length_angstrom=1.0,
+        laser_xy_angle_deg=angle_deg,
+        laser_long_offset_angstrom=0.0,
+        laser_trans_offset_angstrom=0.0,
+        beam_waist_angstroms=1.0,
+        rayleigh_range_angstroms=1.0,
+    )
+    theta = torch.deg2rad(torch.tensor(angle_deg))
+    ky, kx = grid[..., 0], grid[..., 1]
+    expected_ly = kx * torch.cos(theta) - ky * torch.sin(theta)
+    expected_lx = ky * torch.cos(theta) + kx * torch.sin(theta)
+    torch.testing.assert_close(laser_coords[..., 1], expected_ly)
+    torch.testing.assert_close(laser_coords[..., 0], expected_lx)

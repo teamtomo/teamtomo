@@ -486,3 +486,35 @@ def test_ctf_thickness_lpp_amplitude_with_beam_tilt_returns_complex():
     )
     assert result.shape == (8, 8)
     assert torch.is_complex(result)
+
+
+@pytest.mark.parametrize("n", [20, 21])
+def test_ctf_thickness_1d_image_sidelength_matches_2d_rfft_row(n):
+    """With image_sidelength the 1D power spectrum is the ky=0 row of the 2D one."""
+    common = {
+        "defocus": 1.5,
+        "voltage": 300.0,
+        "spherical_aberration": 2.7,
+        "amplitude_contrast": 0.07,
+        "phase_shift": 0.0,
+        "pixel_size": 1.5,
+    }
+    ps_1d = calculate_ctf_thickness_1d(
+        True,
+        800.0,
+        **common,
+        n_samples=n // 2 + 1,
+        oversampling_factor=1,
+        image_sidelength=n,
+    )
+    ps_2d = calculate_ctf_thickness_2d(
+        True,
+        800.0,
+        **common,
+        astigmatism=0.0,
+        astigmatism_angle=0.0,
+        image_shape=(n, n),
+        rfft=True,
+        fftshift=False,
+    )
+    assert torch.allclose(ps_1d, ps_2d[0], atol=1e-6)

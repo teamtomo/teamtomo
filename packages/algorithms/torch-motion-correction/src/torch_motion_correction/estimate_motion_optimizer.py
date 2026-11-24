@@ -12,7 +12,10 @@ import tqdm
 from torch_fourier_rescale import fourier_rescale_2d
 from torch_fourier_shift import fourier_shift_dft_2d
 
-from torch_motion_correction.deformation_field import DeformationField
+from torch_motion_correction.deformation_field import (
+    DeformationField,
+    _subtract_mean_shift,
+)
 from torch_motion_correction.optimization_state import OptimizationTracker
 from torch_motion_correction.types import (
     FourierFilterConfig,
@@ -336,8 +339,7 @@ def estimate_local_motion(
 
     # Return final deformation field
     final_data = new_deformation_field.data.detach() + deformation_field.data
-    average_shift = torch.mean(final_data)
-    final_data = final_data - average_shift
+    final_data = _subtract_mean_shift(final_data)
 
     result = DeformationField(data=final_data, grid_type=grid_type)
 

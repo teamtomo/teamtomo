@@ -22,6 +22,11 @@ import torch.nn.functional as F
 from torch_cubic_spline_grids import CubicBSplineGrid3d, CubicCatmullRomGrid3d
 
 
+def _subtract_mean_shift(data: torch.Tensor) -> torch.Tensor:
+    """Remove the mean y shift and the mean x shift from (2, nt, nh, nw) data."""
+    return data - torch.mean(data, dim=(1, 2, 3), keepdim=True)
+
+
 class DeformationField:
     """A spatio-temporal deformation field represented by cubic spline grids.
 
@@ -244,7 +249,7 @@ class DeformationField:
             base_data = torch.zeros(size=(2, *resolution), device=device)
         else:
             base_data = initial_field.resample(resolution).data.to(device)
-            base_data -= torch.mean(base_data)
+            base_data = _subtract_mean_shift(base_data)
         base_raw_grid = grid_class.from_grid_data(base_data).to(device)
         base_field = cls(data=base_data, grid_type=grid_type)
         base_field._grid = base_raw_grid

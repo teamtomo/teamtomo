@@ -134,6 +134,15 @@ def test_polar_grid_basic():
     assert theta.max() <= torch.pi
 
 
+@pytest.mark.parametrize("image_shape", [(4, 6), (5, 7), (5, 6), (21, 20)])
+def test_polar_grid_default_center_is_dft_center(image_shape):
+    """Default center is (h // 2, w // 2) for odd and even sizes."""
+    h, w = image_shape
+    rho, _ = polar_grid(image_shape=image_shape)
+    assert rho[h // 2, w // 2] < 1e-5
+    assert divmod(int(rho.argmin()), w) == (h // 2, w // 2)
+
+
 def test_polar_grid_with_center():
     """Test polar grid with custom center."""
     rho, theta = polar_grid(image_shape=(4, 4), center=(1.0, 1.0))
@@ -293,3 +302,39 @@ def test_polar_to_cartesian_3d_batch():
     theta_diff = torch.abs(theta - theta_recovered)
     theta_diff = torch.minimum(theta_diff, 2 * torch.pi - theta_diff)
     assert torch.allclose(theta_diff, torch.zeros_like(theta_diff), atol=1e-6)
+
+
+def test_cartesian_to_polar_origin_values_unchanged():
+    """The origin keeps theta = 0, matching torch.atan2(0, 0)."""
+    cartesian = torch.tensor([[0.0, 0.0], [1.0, 0.0], [0.0, -1.0], [-1.0, -1.0]])
+    _, theta = cartesian_to_polar(cartesian)
+    expected = torch.atan2(cartesian[..., 0], cartesian[..., 1])
+    assert torch.equal(theta, expected)
+
+
+def test_cartesian_to_polar_gradient_finite_at_origin():
+    """Gradients through theta stay finite when the grid contains the origin.
+
+    torch.atan2's backward returns NaN at (0, 0) on older PyTorch (e.g. 2.6) and 0
+    on newer releases, so without the fix this only fails on older versions.
+    """
+    cartesian = torch.tensor([[0.0, 0.0], [1.0, 2.0], [-0.5, 0.25]], requires_grad=True)
+    rho, theta = cartesian_to_polar(cartesian)
+    (rho.sum() + theta.sum()).backward()
+    assert torch.isfinite(cartesian.grad).all()
+    # Away from the origin: d(theta)/dy = x / r^2, d(theta)/dx = -y / r^2
+    # (plus the rho terms y / r and x / r).
+    y, x = 1.0, 2.0
+    r2 = x**2 + y**2
+    expected = torch.tensor([x / r2 + y / r2**0.5, -y / r2 + x / r2**0.5])
+    torch.testing.assert_close(cartesian.grad[1], expected)
+
+
+def test_fftfreq_grid_polar_gradient_through_transformed_grid():
+    """A trainable transform of a frequency grid (which includes the origin)."""
+    matrix = torch.tensor([[1.01, 0.002], [0.001, 0.99]], requires_grad=True)
+    grid = fftfreq_grid(image_shape=(8, 8), rfft=True)
+    transformed = torch.einsum("ij,...j->...i", matrix, grid)
+    rho, theta = fftfreq_grid_polar(transformed)
+    (rho * torch.cos(2 * theta)).sum().backward()
+    assert torch.isfinite(matrix.grad).all()

@@ -1,6 +1,12 @@
+import pytest
 import torch
 
-from torch_grid_utils import fftfreq_grid, transform_fftfreq_grid
+from torch_grid_utils import (
+    fftfreq_grid,
+    fftfreq_shell_centers,
+    fftfreq_to_dft_coordinates,
+    transform_fftfreq_grid,
+)
 
 
 def test_fftfreq_grid_2d_basic():
@@ -694,3 +700,76 @@ def test_fftfreq_grid_2d_with_transform_matrix_fftshifted():
         fftshift=True,
     )
     assert not torch.allclose(grid, grid_untransformed, atol=1e-6)
+
+
+@pytest.mark.parametrize("n", [1, 2, 7, 20, 21, 96, 97])
+def test_fftfreq_shell_centers_match_rfftfreq(n):
+    """Shells are 1 / n apart and end at the highest sampled frequency (n // 2) / n."""
+    centers = fftfreq_shell_centers(n)
+    assert centers.shape == (n // 2 + 1,)
+    assert torch.allclose(centers, torch.fft.rfftfreq(n), atol=1e-7)
+    assert torch.allclose(centers[-1], torch.fft.fftfreq(n).abs().max())
+
+
+@pytest.mark.parametrize("n", [20, 21])
+def test_fftfreq_shell_centers_end_at_nyquist_only_for_even_sizes(n):
+    expected_last = 0.5 if n % 2 == 0 else 0.5 - 1 / (2 * n)
+    assert fftfreq_shell_centers(n)[-1].item() == pytest.approx(expected_last)
+
+
+@pytest.mark.parametrize("w", [20, 21])
+@pytest.mark.parametrize("rfft", [True, False])
+@pytest.mark.parametrize("fftshift", [True, False])
+def test_fftfreq_grid_1d(w, rfft, fftshift):
+    """1D grids are (w, 1), matching the (*image_shape, ndim) layout of 2D/3D."""
+    grid = fftfreq_grid((w,), rfft=rfft, fftshift=fftshift, spacing=2.0)
+    expected = torch.fft.rfftfreq(w, d=2.0) if rfft else torch.fft.fftfreq(w, d=2.0)
+    if fftshift and not rfft:
+        expected = torch.fft.fftshift(expected)
+    assert grid.shape == (expected.shape[0], 1)
+    torch.testing.assert_close(grid[..., 0], expected)
+    torch.testing.assert_close(
+        fftfreq_grid((w,), rfft=rfft, fftshift=fftshift, spacing=2.0, norm=True),
+        expected.abs(),
+    )
+
+
+@pytest.mark.parametrize(
+    "image_shape", [(7,), (20,), (7, 7), (20, 21), (21, 20), (5, 20, 21), (51, 51)]
+)
+@pytest.mark.parametrize("rfft", [True, False])
+@pytest.mark.parametrize("fftshift", [True, False])
+def test_fftfreq_to_dft_coordinates_round_trips_sample_indices(
+    image_shape, rfft, fftshift
+):
+    """Every DFT sample's frequency maps back to its own array index."""
+    grid = fftfreq_grid(image_shape, rfft=rfft, fftshift=fftshift)
+    coordinates = fftfreq_to_dft_coordinates(
+        grid, image_shape, rfft=rfft, fftshift=fftshift
+    )
+    dft_shape = grid.shape[:-1]
+    indices = torch.stack(
+        torch.meshgrid(*[torch.arange(n) for n in dft_shape], indexing="ij"), dim=-1
+    ).float()
+    torch.testing.assert_close(coordinates, indices, atol=1e-4, rtol=0)
+
+
+@pytest.mark.parametrize("n", [254, 255])
+def test_fftfreq_to_dft_coordinates_unshifted_wraps_negative_frequencies(n):
+    """Negative frequencies sit at the end; (n - 1, n) is between n - 1 and 0."""
+    frequencies = torch.tensor([[-0.5 / n], [0.0], [2.0 / n], [-1.0 / n]])
+    coordinates = fftfreq_to_dft_coordinates(frequencies, (n,), rfft=False)
+    expected = torch.tensor([[n - 0.5], [0.0], [2.0], [n - 1.0]])
+    torch.testing.assert_close(coordinates, expected)
+
+
+@pytest.mark.parametrize("fftshift", [True, False])
+def test_fftfreq_to_dft_coordinates_rfft_dimension_is_not_wrapped(fftshift):
+    """The rfft dimension starts at DC with or without fftshift."""
+    frequencies = torch.tensor([[0.0, 0.25], [0.0, 0.5]])
+    coordinates = fftfreq_to_dft_coordinates(
+        frequencies, (20, 20), rfft=True, fftshift=fftshift
+    )
+    dc_row = 10 if fftshift else 0
+    expected = torch.tensor([[dc_row, 5.0], [dc_row, 10.0]])
+    torch.testing.assert_close(coordinates, expected)

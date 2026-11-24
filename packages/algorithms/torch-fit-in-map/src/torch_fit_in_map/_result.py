@@ -35,6 +35,12 @@ class AlignmentResult:
     translation_angstroms : torch.Tensor or None
         ``(3,)`` translation in Angstroms.  Populated only when
         ``pixel_size_angstroms`` is supplied to the alignment function.
+    sim_box_size : int or None
+        Cubic box size, in voxels, of the potential simulated by
+        ``fit_structure_in_map`` before it was cropped or padded to the
+        reference map.  ``apply_alignment_to_structure`` reads it to put the
+        atoms where the simulation put their potential.  ``None`` for other
+        alignment functions.
     """
 
     rotation_matrix: torch.Tensor
@@ -42,3 +48,4 @@ class AlignmentResult:
     score: float
     simulated_potential: torch.Tensor | None = field(default=None, repr=False)
     translation_angstroms: torch.Tensor | None = field(default=None, repr=False)
+    sim_box_size: int | None = None

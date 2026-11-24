@@ -274,3 +274,73 @@ def test_4d_grid_with_singleton_dimension(grid_cls):
     grid = grid_cls(resolution=(1, 1, 1, 1))
     result = grid([0.5, 0.5, 0.5, 0.5])
     assert torch.allclose(result, torch.tensor([0.0, 0.0, 0.0, 0.0]))
+
+
+@pytest.mark.parametrize(
+    'grid_class, resolution',
+    [
+        (CubicBSplineGrid1d, (7,)),
+        (CubicBSplineGrid2d, (3, 3)),
+        (CubicBSplineGrid2d, (4, 6)),
+        (CubicBSplineGrid3d, (3, 4, 5)),
+        (CubicBSplineGrid4d, (2, 3, 3, 4)),
+        (CubicCatmullRomGrid2d, (3, 5)),
+    ],
+)
+def test_from_interpolants_at_control_points_passes_through_the_data(
+    grid_class, resolution
+):
+    data = torch.randn(2, *resolution)
+    grid = grid_class.from_interpolants_at_control_points(data)
+    axes = [torch.linspace(0, 1, r) for r in resolution]
+    grid_points = torch.stack(torch.meshgrid(*axes, indexing='ij'), dim=-1)
+    grid_points = grid_points.reshape(-1, grid.ndim)
+    interpolated = grid(grid_points)  # (n, 2)
+    expected = data.reshape(2, -1).T
+    assert torch.allclose(interpolated, expected, atol=1e-5)
+    # control points differ from the data for the B-spline (approximating basis)
+    if grid_class is not CubicCatmullRomGrid2d:
+        assert not torch.allclose(grid.data, data)
+    # round trip: evaluating at the grid points returns the input values
+    assert torch.allclose(grid.to_interpolants_at_control_points(), data, atol=1e-5)
+
+
+@pytest.mark.parametrize('grid_class', [CubicBSplineGrid2d, CubicCatmullRomGrid2d])
+def test_to_interpolants_at_control_points_single_channel(grid_class):
+    data = torch.randn(4, 6)
+    grid = grid_class.from_interpolants_at_control_points(data)
+    assert torch.allclose(
+        grid.to_interpolants_at_control_points(), data[None], atol=1e-5
+    )
+
+
+@pytest.mark.parametrize(
+    'grid_class, resolution',
+    [
+        (CubicBSplineGrid1d, (7,)),
+        (CubicBSplineGrid2d, (4, 6)),
+        (CubicBSplineGrid3d, (3, 4, 5)),
+        (CubicCatmullRomGrid2d, (3, 5)),
+    ],
+)
+def test_from_samples_recovers_a_grid(grid_class, resolution):
+    truth = grid_class.from_grid_data(torch.randn(2, *resolution))
+    points = torch.rand(500, len(resolution))  # scattered, not on the grid points
+    values = truth(points)  # (500, 2)
+    grid = grid_class.from_samples(points, values, resolution)
+    assert grid.resolution == resolution
+    assert torch.allclose(grid.data, truth.data, atol=1e-4)
+
+
+def test_from_samples_single_channel():
+    truth = CubicBSplineGrid2d.from_grid_data(torch.randn(4, 6))
+    points = torch.rand(200, 2)
+    grid = CubicBSplineGrid2d.from_samples(points, truth(points), (4, 6))
+    assert grid.n_channels == 1
+    assert torch.allclose(grid.data, truth.data, atol=1e-4)
+
+
+def test_from_samples_warns_when_underdetermined():
+    points = torch.rand(100, 2) * 0.2  # samples only in one corner
+    with pytest.warns(UserWarning, match='control points'):
+        CubicBSplineGrid2d.from_samples(points, torch.randn(100), (4, 4))

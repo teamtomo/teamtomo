@@ -84,6 +84,68 @@ def test_fresnel_propagator_half_turn_case():
     assert torch.allclose(propagator, torch.tensor([[-1.0 + 0.0j]]), atol=1e-6)
 
 
+def test_fresnel_propagator_sign_matches_kirkland():
+    """H(k) = exp(-i * pi * wavelength * dz * k^2), Kirkland Eq. (6.92).
+
+    A quarter turn (pi * wavelength * dz * k^2 == pi / 2) gives H == -i. The
+    opposite sign gives +i, so this pins the direction of propagation.
+    """
+    frequency_grid = torch.tensor([[1.0]])
+    propagator = fresnel_propagator(frequency_grid, wavelength=0.5, dz=1.0)
+    assert torch.allclose(propagator, torch.tensor([[-1.0j]]), atol=1e-6)
+
+
+def test_fresnel_propagator_matches_exact_angular_spectrum():
+    """H is the paraxial limit of the exact angular-spectrum propagator.
+
+    For an exp(+i k z) wave (the convention set by T = exp(+i sigma V dz)),
+    free space advances each plane-wave component by
+    exp(2*pi*i*dz*(sqrt(1/wavelength^2 - k^2) - 1/wavelength)). At electron
+    wavelengths and cryo-EM frequencies the paraxial phase differs from it
+    by far less than 1e-3 rad, so the two must agree.
+    """
+    wavelength = 0.019687  # 300 kV
+    dz = 1.0e4
+    frequency_grid = fftfreq_grid(
+        image_shape=(64, 64), rfft=False, spacing=4.0, norm=True
+    ).to(torch.float64)
+    exact = torch.exp(
+        2j
+        * C.pi
+        * dz
+        * (torch.sqrt(1 / wavelength**2 - frequency_grid**2) - 1 / wavelength)
+    )
+    propagator = fresnel_propagator(frequency_grid, wavelength=wavelength, dz=dz)
+    assert torch.allclose(propagator, exact, atol=1e-3)
+
+
+def test_forward_propagation_focuses_positive_phase_object():
+    """A positive potential is a converging lens, so its centre must brighten.
+
+    T = exp(+i sigma V dz) advances the phase most where V is largest, which
+    focuses the wave downstream of the slice. Propagating forwards must
+    therefore raise the intensity at the centre of a positive Gaussian blob
+    above the background. Propagating backwards (the opposite propagator
+    sign) would darken it instead.
+    """
+    size = 128
+    wavelength = 0.019687  # 300 kV
+    coords = torch.arange(size, dtype=torch.float64) - size // 2
+    r2 = coords[:, None] ** 2 + coords[None, :] ** 2
+    potential_slice = torch.exp(-r2 / (2 * 8.0**2))
+    wave = transmission_function(potential_slice, sigma=0.05, dz=1.0)
+    frequency_grid = fftfreq_grid(
+        image_shape=(size, size), rfft=False, spacing=1.0, norm=True
+    ).to(torch.float64)
+    propagator = fresnel_propagator(frequency_grid, wavelength=wavelength, dz=1.0e4)
+
+    intensity = torch.fft.ifft2(torch.fft.fft2(wave) * propagator).abs() ** 2
+
+    centre = intensity[size // 2, size // 2]
+    background = intensity[0, 0]
+    assert centre > background + 0.02
+
+
 def test_transmission_function_is_unitary_for_real_potential():
     """A real-valued (non-absorbing) potential must give a pure phase mask.
 

@@ -13,8 +13,7 @@ def default_sublattice_radius(pixel_spacing: float) -> float:
     """Return the default per-atom stencil radius for a given voxel spacing.
 
     The radius is ``max(5.0, 3.0 * pixel_spacing)`` Angstroms. This matches the
-    sizing used by ``torch-fit-in-map`` and ``ttsim3d`` when no explicit radius
-    is supplied.
+    sizing used by ``torch-fit-in-map`` when no explicit radius is supplied.
     """
     if pixel_spacing <= 0:
         raise ValueError("pixel_spacing must be positive")
@@ -361,6 +360,79 @@ class GridConfig:
             right_upper_point=right_upper_point,
             sublattice_radius=sublattice_radius,
             equal_length=equal_length,
+            dtype=dtype,
+            device=device,
+        )
+
+    @classmethod
+    def from_fft_centered(
+        cls,
+        grid_shape: tuple[int, ...],
+        voxel_size: tuple[float, ...] | torch.Tensor,
+        *,
+        center: tuple[float, ...] | torch.Tensor | None = None,
+        sublattice_radius: float = 10.0,
+        dtype: torch.dtype = torch.float32,
+        device: torch.device | None = None,
+    ) -> GridConfig:
+        """Create a grid whose ``center`` coordinate lies on voxel index ``N // 2``.
+
+        This is the centering convention used by FFT-based cryo-EM software
+        (e.g. RELION, cisTEM, ``torch.fft.fftshift``): along every axis the
+        physical point ``center`` falls exactly on the voxel with index
+        ``N // 2``. For odd ``N`` this is the same grid as
+        :meth:`from_grid_shape_and_voxel_size` with ``center_zyx`` /
+        ``center_yx``; for even ``N`` that constructor instead places the center
+        midway between voxels ``N // 2 - 1`` and ``N // 2``.
+
+        The grid is never padded to equal length (``equal_length=False``), so
+        the requested ``grid_shape`` is preserved.
+
+        Parameters
+        ----------
+        grid_shape : tuple[int, ...]
+            Shape of the grid in voxels, length 2 (YX) or 3 (ZYX).
+        voxel_size : tuple[float, ...] | torch.Tensor
+            Size of each voxel in Angstroms, same length as ``grid_shape``.
+        center : tuple[float, ...] | torch.Tensor | None, optional
+            Physical coordinate, in Angstroms, of voxel ``N // 2``. Defaults to
+            the origin.
+        sublattice_radius : float, optional
+            Radius of the per-atom stencil, in Angstroms. Default is 10.0.
+        dtype : torch.dtype, optional
+            Data type for grid computations, by default torch.float32.
+        device : torch.device, optional
+            Device for grid computations, by default torch.device("cpu").
+
+        Returns
+        -------
+        GridConfig
+            The FFT-centered grid configuration.
+        """
+        if device is None:
+            device = torch.device("cpu")
+        shape_tensor = torch.as_tensor(grid_shape, dtype=torch.int64, device=device)
+        voxel_tensor = torch.as_tensor(voxel_size, dtype=dtype, device=device)
+        if center is None:
+            center_tensor = torch.zeros(len(grid_shape), dtype=dtype, device=device)
+        else:
+            center_tensor = torch.as_tensor(center, dtype=dtype, device=device)
+        if center_tensor.shape != shape_tensor.shape:
+            raise ValueError(
+                f"center must have the same length as grid_shape "
+                f"({len(grid_shape)}), got {tuple(center_tensor.shape)}"
+            )
+        half_extent = (shape_tensor // 2).to(dtype) * voxel_tensor
+        left_bottom_point = center_tensor - half_extent
+        full_extent = (shape_tensor - 1).to(dtype) * voxel_tensor
+        right_upper_point = left_bottom_point + full_extent
+        return cls(
+            grid_shape=grid_shape,
+            voxel_size=voxel_size,
+            left_bottom_point=left_bottom_point,
+            right_upper_point=right_upper_point,
+            sublattice_radius=sublattice_radius,
+            equal_length=False,
             dtype=dtype,
             device=device,
         )

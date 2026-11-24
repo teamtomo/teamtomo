@@ -46,7 +46,8 @@ def calculate_ctfp_and_ctfq_2d(
         Amount of astigmatism in micrometers.
         `(defocus_u - defocus_v) / 2`
     astigmatism_angle : float | torch.Tensor
-        Angle of astigmatism in degrees. 0 places `defocus_u` along the y-axis.
+        Angle of astigmatism in degrees. 0 places `defocus_u` along the x-axis,
+        and positive angles rotate it towards +y (increasing row index).
     voltage : float | torch.Tensor
         Acceleration voltage in kilovolts (kV).
     spherical_aberration : float | torch.Tensor
@@ -65,8 +66,9 @@ def calculate_ctfp_and_ctfq_2d(
     fftshift : bool
         Whether to apply fftshift on the resulting CTF images.
     discontinuity_angle : float
-        Discontinuity angle in degrees (default: 0.0).
-        If > 0, mixes ctfp and ctfq based on angle threshold:
+        Discontinuity angle in degrees (default: 0.0), measured from the +ky axis
+        (increasing row index) towards +kx, as in RELION. If > 0, mixes ctfp and
+        ctfq based on angle threshold:
         - ctfp: uses ctfp at angles >= discontinuity_angle,
           ctfq at angles < discontinuity_angle
         - ctfq: uses ctfq at angles >= discontinuity_angle,
@@ -101,6 +103,18 @@ def calculate_ctfp_and_ctfq_2d(
         The P component of the CTF for the given parameters (complex tensor).
     ctfq : torch.Tensor
         The Q component of the CTF for the given parameters (complex tensor).
+
+    Notes
+    -----
+    Same sign convention as :func:`calculate_ctf_2d`: ``(ctfp + ctfq) / 2`` is
+    the real CTF, so positive potential at underfocus gives a dark image. ``ctfp``
+    and ``ctfq`` are the negatives of RELION's CTFP and CTFQ. In terms of the
+    complex CTF ``H`` from ``calculate_ctf_2d(..., return_complex_ctf=True)``,
+    ``ctfq = i H(k)`` and ``ctfp = -i conj(H(-k))`` (away from the ``kx = 0``
+    column, where Friedel symmetry is enforced).
+
+    Changed in 0.7.0: ``ctfp`` and ``ctfq`` used to have the opposite sign.
+    Multiply both by -1 to reproduce earlier results.
     """
     # Enforce rfft=True for Ewald sphere correction
     if not rfft:
@@ -143,17 +157,19 @@ def calculate_ctfp_and_ctfq_2d(
         even_zernike_coeffs=even_zernike_coeffs,
     )
 
-    # calculate ctf
-    # ctfp: real = -sin, imag = +cos
+    # calculate ctf, with the same sign as calculate_ctf_2d: (ctfp + ctfq) / 2 is
+    # the real CTF sin(chi). Both are the negative of RELION's CTFP/CTFQ, so the
+    # roles of P and Q are unchanged.
+    # ctfp: real = +sin, imag = -cos
     ctfp = torch.complex(
-        -torch.sin(total_phase_shift),
-        torch.cos(total_phase_shift),
+        torch.sin(total_phase_shift),
+        -torch.cos(total_phase_shift),
     )
 
-    # ctfq: real = -sin, imag = -cos
+    # ctfq: real = +sin, imag = +cos
     ctfq = torch.complex(
-        -torch.sin(total_phase_shift),
-        -torch.cos(total_phase_shift),
+        torch.sin(total_phase_shift),
+        torch.cos(total_phase_shift),
     )
 
     # Apply odd zernike coefficients if provided
@@ -225,8 +241,9 @@ def _enforce_symmetry(
 ) -> torch.Tensor:
     """Enforce Friedel symmetry along the y-axis at x=0 in rfft.
 
-    For pixels at x=0, +y must equal the complex conjugate of -y.
-    This ensures F(0, y) = F*(0, -y) for all y.
+    For pixels at x=0, +y must equal the complex conjugate of -y. This ensures
+    ``F(0, y) = F*(0, -y)`` for all y. Rows with ky < 0 are overwritten. DC and the
+    even-h Nyquist row are their own mirror and are left unchanged.
 
     Parameters
     ----------
@@ -242,70 +259,25 @@ def _enforce_symmetry(
     rfft_tensor : torch.Tensor
         The tensor with enforced symmetry.
     """
-    device = rfft_tensor.device
-    eps = 1e-10
+    h = image_shape[0]
+    out = rfft_tensor.clone()
+    col = out[..., 0]  # kx = 0 column, (..., h)
 
-    # Get frequency grid
-    fft_freq_grid = fftfreq_grid(
-        image_shape=image_shape,
-        rfft=True,
-        fftshift=fftshift,
-        norm=False,
-        device=device,
-    )
+    if fftshift:
+        col = torch.fft.ifftshift(col, dim=-1)
 
-    # Get x and y coordinates
-    x_coords = fft_freq_grid[..., 0]  # (h, w//2+1) - x frequencies
-    y_coords = fft_freq_grid[..., 1]  # (h, w//2+1) - y frequencies
+    # In an unshifted column, the sample holding -ky for row i is row (-i) % h
+    idx = torch.arange(h, device=col.device)
+    mirror = (-idx) % h
+    ky = torch.fft.fftfreq(h, device=col.device)
+    replace = (ky < 0) & (mirror != idx)  # even-h Nyquist row is its own mirror
+    col = torch.where(replace, torch.conj(col[..., mirror]), col)
 
-    # Find points at x=0
-    x_is_zero = torch.abs(x_coords) < eps
+    if fftshift:
+        col = torch.fft.fftshift(col, dim=-1)
+    out[..., 0] = col
 
-    # Find Friedel redundant points: x=0 and y<0
-    y_negative = y_coords < -eps
-    friedel_redundant = x_is_zero & y_negative
-
-    rfft_tensor = rfft_tensor.clone()
-
-    # For each point at x=0 with y<0, set it to conjugate of corresponding y>0 point
-    # Get indices of redundant points
-    redundant_indices = torch.where(friedel_redundant)
-    h_neg = redundant_indices[0]
-    w_neg = redundant_indices[1]
-
-    # Only process if there are redundant points
-    if len(h_neg) > 0:
-        # For each negative y point, find its positive y counterpart
-        y_neg_vals = y_coords[h_neg, w_neg]
-        y_pos_vals = -y_neg_vals
-
-        # Find matching positive y points at x=0
-        # Use broadcasting to find all matches
-        y_diff = torch.abs(y_coords[None, ...] - y_pos_vals[:, None, None])
-        # Only consider points at x=0
-        y_diff = torch.where(x_is_zero[None, ...], y_diff, torch.inf)
-        # Find minimum difference for each negative y
-        min_diff, min_indices_flat = torch.min(y_diff.view(len(y_neg_vals), -1), dim=1)
-        # Convert flat index back to (h, w) indices
-        _, w_shape = y_coords.shape
-        h_pos = min_indices_flat // w_shape
-        w_pos = min_indices_flat % w_shape
-
-        # Only process where we found a valid match
-        valid_match = min_diff < eps
-        if valid_match.any():
-            h_neg_valid = h_neg[valid_match]
-            w_neg_valid = w_neg[valid_match]
-            h_pos_valid = h_pos[valid_match]
-            w_pos_valid = w_pos[valid_match]
-
-            # Set negative y values to conjugate of positive y values
-            # F(0, y_neg) = F*(0, y_pos)
-            rfft_tensor[..., h_neg_valid, w_neg_valid] = torch.conj(
-                rfft_tensor[..., h_pos_valid, w_pos_valid]
-            )
-
-    return rfft_tensor
+    return out
 
 
 def _get_fourier_angle(
@@ -315,6 +287,11 @@ def _get_fourier_angle(
     device: torch.device | None = None,
 ) -> torch.Tensor:
     """Get the Fourier angle for each pixel in the rfft (0-180 degrees).
+
+    The angle is measured from the +ky axis (increasing row index) towards +kx,
+    i.e. ``acos(ky / |k|)`` as in RELION's ``CTF::getCTFPImage``. It is 0 degrees
+    along +ky, 90 degrees along +kx and 180 degrees along -ky, so it spans the
+    whole rfft half-plane without ambiguity.
 
     Parameters
     ----------
@@ -345,14 +322,14 @@ def _get_fourier_angle(
         device=device,
     )
 
-    # Calculate angle using atan2 (returns -π to π)
-    kx = fft_freq_grid[..., 0]
-    ky = fft_freq_grid[..., 1]
-    theta = torch.atan2(ky, kx)
+    # fftfreq_grid returns (ky, kx) in its last dimension
+    ky = fft_freq_grid[..., 0]
+    kx = fft_freq_grid[..., 1]
 
-    # Convert to 0-180 degrees range
-    # For rfft, we want angles from 0 to π (0-180 degrees)
-    # Take absolute value to get 0 to π, then convert to degrees
+    # Angle from the +ky axis, as RELION's acos(ky / |k|). In the rfft half-plane
+    # (kx >= 0), atan2(kx, ky) lies in [0, π]; abs() folds the kx < 0 half of a
+    # full fft onto the same range.
+    theta = torch.atan2(kx, ky)
     angle_radians = torch.abs(theta)
     angle_degrees = torch.rad2deg(angle_radians)
 
