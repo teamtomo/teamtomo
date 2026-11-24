@@ -488,10 +488,15 @@ def _in_nyquist_cube(kz: Float32, ky: Float32, kx: Float32, n: Int) -> Bool:
     Points outside it are past the sampled band and read as 0 (gather) or are
     dropped (scatter). Inside it, the stencil reads the DFT periodically (see
     `_rfft_voxel`), so neighbours past the stored grid hold their true values.
-    For a 2D image pass `kz = 0`.
     """
     var edge = Float32(n) * 0.5 + NYQUIST_TOLERANCE
     return abs(kz) <= edge and abs(ky) <= edge and abs(kx) <= edge
+
+
+@always_inline
+def _in_nyquist_square(ky: Float32, kx: Float32, n: Int) -> Bool:
+    """2D `_in_nyquist_cube`: whether `(ky, kx)` is inside `|k_i| <= n / 2`."""
+    return _in_nyquist_cube(0.0, ky, kx, n)
 
 
 @always_inline
@@ -561,8 +566,7 @@ def _rfft_voxel(z_in: Int, y_in: Int, x_in: Int, n: Int) -> RfftVoxel:
     into the stored range, folding again if `x` wrapped negative. Every integer
     frequency maps to a stored voxel, so the stencil never reads or writes outside
     the grid. Folding before wrapping stores `x = -n/2` as the conjugate at
-    `(-z, -y, +n/2)`, as the torch backend (which flips whole points) does. For a 2D
-    image pass `z_in = 0`.
+    `(-z, -y, +n/2)`, as the torch backend (which flips whole points) does.
     """
     var conj = x_in < 0
     var x = -x_in if conj else x_in
@@ -573,6 +577,30 @@ def _rfft_voxel(z_in: Int, y_in: Int, x_in: Int, n: Int) -> RfftVoxel:
     if x > hi or y < lo or y > hi or z < lo or z > hi:
         return _rfft_voxel_wrapped(z, y, x, conj, n)
     return RfftVoxel(n + z if z < 0 else z, n + y if y < 0 else y, x, conj)
+
+
+@fieldwise_init
+struct RfftPixel(Copyable, Movable):
+    """Where the DFT value at an integer frequency is stored in an rfft image.
+
+    `y` is the array index (DC at 0), `x` is the rfft index, and `conj` says the
+    stored value is the conjugate of the requested one (Hermitian symmetry).
+    """
+
+    var y: Int
+    var x: Int
+    var conj: Bool
+
+
+@always_inline
+def _rfft_pixel(y_in: Int, x_in: Int, n: Int) -> RfftPixel:
+    """2D `_rfft_voxel`: stored rfft pixel for DFT frequency `(y, x)` of an n×n image.
+
+    Shares `_rfft_voxel`'s fold/wrap logic, so 2D gathers and scatters stay exact
+    adjoints of each other and consistent with 3D.
+    """
+    var v = _rfft_voxel(0, y_in, x_in, n)
+    return RfftPixel(v.y, v.x, v.conj)
 
 
 @always_inline

@@ -18,8 +18,10 @@ from _common import (
     CUBIC,
     _cubic_kernel,
     _in_nyquist_cube,
+    _in_nyquist_square,
     _load_c2,
     _load_c2_line,
+    _rfft_pixel,
     _rfft_voxel,
 )
 
@@ -152,7 +154,7 @@ def _sample_rfft_2d[
     2D scatter, so gather and scatter are exact adjoints.
     """
     comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
-    var v = _rfft_voxel(0, y_in, x_in, Int(img.dim[0]()))
+    var v = _rfft_pixel(y_in, x_in, Int(img.dim[0]()))
     var val = _load_c2_line(img, v.y, v.x)
     return C2(val[0], -val[1]) if v.conj else val
 
@@ -217,7 +219,7 @@ def _interp2d[
 
     Points outside the Nyquist square read as 0.
     """
-    if not _in_nyquist_cube(0.0, ky, kx, Int(img.dim[0]())):
+    if not _in_nyquist_square(ky, kx, Int(img.dim[0]())):
         return C2(0.0, 0.0)
     comptime if interp == CUBIC:
         return _interp2d_cubic(img, ky, kx)

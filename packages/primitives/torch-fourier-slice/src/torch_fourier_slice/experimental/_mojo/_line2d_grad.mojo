@@ -27,8 +27,8 @@ from _common import (
     _line_k_2d,
     _rfft_half,
     _load_c2_line,
-    _in_nyquist_cube,
-    _rfft_voxel,
+    _in_nyquist_square,
+    _rfft_pixel,
 )
 from _gather_grad import _interp2d_with_grad
 from _pose_grad import _redot
@@ -250,7 +250,7 @@ def _gather_weight_grad_2d(
     Transpose of `_accumulate_weight_2d`: same index/Friedel logic, summing reads.
     """
     var sidelength_half = _rfft_half(sidelength)
-    var v = _rfft_voxel(0, y_in, x_in, sidelength)
+    var v = _rfft_pixel(y_in, x_in, sidelength)
     var y_eff = v.y
     var x = v.x
     var acc = gwimg[(i_bv * sidelength + y_eff) * sidelength_half + x]
@@ -287,7 +287,7 @@ def _weight_line2d_grad_pixel[
     var ky = k[0]
     var kx = k[1]
     # outside the Nyquist square the splat dropped the weight, so its grad is 0
-    if not _in_nyquist_cube(0.0, ky, kx, p.sidelength):
+    if not _in_nyquist_square(ky, kx, p.sidelength):
         return
     var ky_floor = floor(ky)
     var kx_floor = floor(kx)

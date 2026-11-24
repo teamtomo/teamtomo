@@ -20,6 +20,7 @@ from _common import (
     _cubic_kernel,
     _cubic_kernel_derivative,
     _in_nyquist_cube,
+    _in_nyquist_square,
 )
 from _gather import (
     _sample_rfft_2d,
@@ -220,7 +221,7 @@ def _interp2d_with_grad[
 
     Points outside the Nyquist square read as 0, with zero gradient.
     """
-    if not _in_nyquist_cube(0.0, ky, kx, Int(img.dim[0]())):
+    if not _in_nyquist_square(ky, kx, Int(img.dim[0]())):
         return C6(0.0)
     comptime if interp == CUBIC:
         return _interp2d_cubic_with_grad(img, ky, kx)

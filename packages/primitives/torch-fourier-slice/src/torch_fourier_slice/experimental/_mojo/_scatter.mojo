@@ -16,6 +16,8 @@ from _common import (
     _atomic_add_at,
     _cubic_kernel,
     _in_nyquist_cube,
+    _in_nyquist_square,
+    _rfft_pixel,
     _rfft_voxel,
 )
 
@@ -227,7 +229,7 @@ def _accumulate_2d[
     """
     comptime assert img.flat_rank == 3, "image view must be 3D [h, w, 2]"
     var sidelength = Int(img.dim[0]())
-    var v = _rfft_voxel(0, y_in, x_in, sidelength)
+    var v = _rfft_pixel(y_in, x_in, sidelength)
     var y_eff = v.y
     var x = v.x
     var fim = -vim if v.conj else vim
@@ -258,7 +260,7 @@ def _accumulate_weight_2d[
     """
     comptime assert wimg.flat_rank == 2, "weight image view must be 2D [h, w]"
     var sidelength = Int(wimg.dim[0]())
-    var v = _rfft_voxel(0, y_in, x_in, sidelength)
+    var v = _rfft_pixel(y_in, x_in, sidelength)
     var y_eff = v.y
     var x = v.x
     _atomic_add_at(wimg, Coord(y_eff, x), w)
@@ -363,7 +365,7 @@ def _splat2d[
 
     Points outside the Nyquist square are dropped, mirroring `_interp2d`.
     """
-    if not _in_nyquist_cube(0.0, ky, kx, Int(vol.dim[0]())):
+    if not _in_nyquist_square(ky, kx, Int(vol.dim[0]())):
         return
     comptime if interp == CUBIC:
         _splat2d_cubic(vol, wvol, p, ky, kx, vre, vim, wval)
