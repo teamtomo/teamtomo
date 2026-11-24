@@ -633,7 +633,14 @@ def cumulative_dose_filter_3d(
     """
     Dose weight a 3D volume using Grant and Grigorieff 2015.
 
-    Use integration to speed up.
+    The filter is the mean of the exposure filter exp(-N / 2 Ne) over the
+    exposures N from ``start_exposure`` to ``end_exposure``, in closed form:
+
+        exp(-start / 2 Ne) * (1 - exp(-x)) / x,   x = (end - start) / (2 Ne),
+
+    evaluated with ``expm1`` so that it stays accurate where Ne is large (it is
+    1 at zero frequency). With ``start_exposure == end_exposure`` it is the
+    filter at that single exposure, exp(-start / 2 Ne).
 
     Parameters
     ----------
@@ -666,7 +673,17 @@ def cumulative_dose_filter_3d(
     -------
     torch.Tensor
         The dose weighting filter.
+
+    Raises
+    ------
+    ValueError
+        If ``end_exposure`` is smaller than ``start_exposure``.
     """
+    if end_exposure < start_exposure:
+        raise ValueError(
+            f"end_exposure ({end_exposure}) must not be smaller than "
+            f"start_exposure ({start_exposure})."
+        )
     eps = 1e-10
     Ne = _critical_exposure_grid(
         image_shape=volume_shape,
@@ -680,12 +697,8 @@ def cumulative_dose_filter_3d(
         device=device,
     ).clamp(min=eps)
 
-    return (
-        2
-        * Ne
-        * (
-            torch.exp((-0.5 * start_exposure) / Ne)
-            - torch.exp((-0.5 * end_exposure) / Ne)
-        )
-        / end_exposure
-    )
+    # mean of exp(-N / 2 Ne) over N in [start, end]; (1 - e^-x) / x -> 1 as x -> 0
+    x = (end_exposure - start_exposure) / (2 * Ne)
+    safe_x = torch.where(x > 0, x, torch.ones_like(x))
+    mean_decay = torch.where(x > 0, -torch.expm1(-safe_x) / safe_x, torch.ones_like(x))
+    return torch.exp((-0.5 * start_exposure) / Ne) * mean_decay
