@@ -3,11 +3,13 @@
 import math
 
 import numpy as np
+import pytest
 import torch
 from scipy.ndimage import affine_transform
 from scipy.spatial.transform import Rotation
 
 from torch_fit_in_map import ProjectionAlignmentConfig, projection_align
+from torch_fit_in_map._projection import _cross_correlate_2d, _find_2d_peak_shift
 
 
 def _asymmetric_volume(d: int) -> torch.Tensor:
@@ -84,3 +86,16 @@ def test_projection_align_recovers_known_rotation():
         atol=1.5,
         rtol=0.0,
     )
+
+
+@pytest.mark.parametrize("d", [32, 33])
+@pytest.mark.parametrize("shift", [(3, -8), (-14, 14), (15, -15)])
+def test_cross_correlate_2d_recovers_shift_for_odd_and_even_sizes(d, shift):
+    """CC map keeps the input size and its peak gives the exact shift."""
+    reference = torch.rand(d, d)
+    mobile = torch.roll(reference, shifts=shift, dims=(-2, -1))
+    cc = _cross_correlate_2d(reference, mobile)
+    assert cc.shape == (d, d)
+    recovered, _ = _find_2d_peak_shift(cc)
+    # mobile is reference moved by +shift, the CC peak sits at -shift
+    assert recovered.tolist() == [-float(shift[0]), -float(shift[1])]

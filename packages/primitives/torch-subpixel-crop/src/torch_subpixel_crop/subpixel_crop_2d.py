@@ -6,9 +6,8 @@ import einops
 import torch
 from torch.nn import functional as F
 from torch_fourier_shift import fourier_shift_dft_2d, fourier_shift_image_2d
-from torch_grid_utils import coordinate_grid
+from torch_grid_utils import coordinate_grid, dft_center
 
-from torch_subpixel_crop.dft_utils import dft_center
 from torch_subpixel_crop.grid_sample_utils import array_to_grid_sample
 
 
@@ -98,7 +97,7 @@ def _extract_patches_batched(
 
     # Generate coordinate grid
     ph = pw = output_image_sidelength
-    center = dft_center((ph, pw), rfft=False, fftshifted=True, device=images.device)
+    center = dft_center((ph, pw), rfft=False, fftshift=True, device=images.device)
     grid = coordinate_grid(
         image_shape=(ph, pw), center=center, device=images.device
     )  # (ph, pw, 2)
@@ -143,7 +142,8 @@ def _extract_patches_batched(
         patches_dft = torch.fft.rfftn(patches, dim=(-2, -1))
 
         if decenter:
-            shifts = shifts + pw // 2
+            # move the patch centre [pw // 2] to [0] (ifftshift for odd and even)
+            shifts = shifts - pw // 2
 
         # apply the subpixel shift
         patches_dft = fourier_shift_dft_2d(

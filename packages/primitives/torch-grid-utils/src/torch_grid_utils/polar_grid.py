@@ -40,7 +40,7 @@ def polar_grid(
 
     # Create Cartesian coordinate grid
     if center is None:
-        center = (image_shape[0] / 2, image_shape[1] / 2)
+        center = (image_shape[0] // 2, image_shape[1] // 2)
 
     cartesian_grid = coordinate_grid(
         image_shape=image_shape,
@@ -90,7 +90,15 @@ def cartesian_to_polar(
     x = cartesian_grid[..., 1]
 
     rho = torch.sqrt(x**2 + y**2 + eps)
-    theta = torch.atan2(y, x)
+
+    # The angle at the origin is arbitrary (atan2 returns 0 there), but its
+    # gradient is 0/0 = NaN. When the grid depends on trainable parameters (e.g. an
+    # anisotropic magnification matrix), that NaN propagates to the parameters even
+    # if theta at the origin is later multiplied by zero. Feed atan2 a dummy input
+    # at the origin and select 0 there, so the gradient at the origin is 0.
+    at_origin = (x == 0) & (y == 0)
+    safe_x = torch.where(at_origin, torch.ones_like(x), x)
+    theta = torch.where(at_origin, torch.zeros_like(x), torch.atan2(y, safe_x))
 
     return rho, theta
 

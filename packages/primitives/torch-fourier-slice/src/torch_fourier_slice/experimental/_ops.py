@@ -26,6 +26,7 @@ from ._gpu import prepare_launch
 from ._kernels import device_session, kernels
 from ._validation import (
     KernelParams,
+    even_line_sidelength,
     interp_code,
     prep_directions,
     prep_directions_2d,
@@ -303,7 +304,7 @@ def run_scatter_line(
     else:
         w_in = torch.zeros(bv, bp, w, dtype=torch.float32, device=tgt)  # unused
 
-    line_sidelength = 2 * (w - 1)
+    line_sidelength = even_line_sidelength(w)
     radius = (
         line_sidelength / 2.0
         if fourier_radius_cutoff is None
@@ -438,7 +439,7 @@ def run_scatter_line_2d(
     else:
         w_in = torch.zeros(bv, bp, lw, dtype=torch.float32, device=tgt)  # unused
 
-    line_sidelength = 2 * (lw - 1)
+    line_sidelength = even_line_sidelength(lw)
     radius = (
         line_sidelength / 2.0
         if fourier_radius_cutoff is None
@@ -496,7 +497,7 @@ def run_line2d_pose_grad(
     bv_shift_2d = shifts_2d_t.shape[0]
     if line_pixels.dim() == 2:
         line_pixels = line_pixels.unsqueeze(0)
-    line_sidelength = 2 * (int(line_pixels.shape[2]) - 1)
+    line_sidelength = even_line_sidelength(line_pixels.shape[2])
 
     img_r = torch.view_as_real(
         image.to(device=tgt, dtype=torch.complex64).contiguous()
@@ -628,7 +629,7 @@ def run_line_pose_grad(
     bv_shift_3d = shifts_3d_t.shape[0]
     if line_pixels.dim() == 2:
         line_pixels = line_pixels.unsqueeze(0)
-    line_sidelength = 2 * (int(line_pixels.shape[2]) - 1)
+    line_sidelength = even_line_sidelength(line_pixels.shape[2])
 
     vol_r = torch.view_as_real(
         volume.to(device=tgt, dtype=torch.complex64).contiguous()

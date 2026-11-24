@@ -51,7 +51,7 @@ build `R` from ZYZ Euler angles, e.g. with
 `scipy.spatial.transform.Rotation.from_euler("ZYZ", (phi, theta, psi))`, then
 `R.T` corresponds to `("ZYZ", (-psi, -theta, -phi))`.
 
-> **Changed in 0.7:** the real-space functions used to take the passive rotation,
+> **Changed in 0.7.0:** the real-space functions used to take the passive rotation,
 > the same as the Fourier-space functions. To keep results from older code, pass
 > `R.mT` (the transpose) to the real-space functions.
 
@@ -130,6 +130,23 @@ reconstruction = backproject_2d_to_3d_multichannel(
 )
 # shape is (5, 30, 30, 30)
 ```
+
+## Changed in 0.7.0
+
+- **Breaking:** the real-space functions (`project_3d_to_2d()`,
+  `backproject_2d_to_3d()`, their multichannel versions, `project_2d_to_1d()` and
+  the experimental real-space functions) take the active rotation of the volume
+  instead of the passive one. Nothing raises, so pass `R.mT` to keep old results.
+  The Fourier-space functions are unchanged. See
+  [Rotation convention](#rotation-convention).
+- rfft inputs must be cubic (volumes) or square (slices), since the real width is
+  taken from the height. A volume with depth != height, or an rfft whose width is
+  not `h // 2 + 1`, raises `ValueError`; earlier versions assumed an even width.
+- Prepare volumes with `ifftshift` before `rfftn` (as in the docstrings), which
+  matters for odd sizes: `fftshift(rfftn(ifftshift(vol)), dim=(-3, -2))`.
+- Slices at the edges of the box are no longer dropped by float32 rounding, and
+  insertion keeps the even-size Nyquist sample.
+- `project_2d_to_1d(..., fftfreq_max=...)` no longer raises.
 
 ## License
 

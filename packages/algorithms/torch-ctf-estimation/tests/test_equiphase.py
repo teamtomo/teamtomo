@@ -1,5 +1,6 @@
 """Tests for equiphase 1D averaging (torch_ctf chi) and 1D spatial + EPA integration."""
 
+import pytest
 import torch
 from torch_fourier_filter.dft_utils import rotational_average_dft_2d
 
@@ -174,3 +175,119 @@ def test_estimate_ctf_whole_image_use_1d_spatial_equiphase_smoke():
     )
     assert r2d.defocus_model_type == "grid"
     assert r2d.defocus_model.data.numel() == 1
+
+
+@pytest.mark.parametrize("image_shape", [(40, 40), (41, 41), (40, 57), (57, 40)])
+def test_equiphase_radial_power_any_shape(image_shape):
+    """With zero astigmatism, sample i of a |k|^2 spectrum is (i / n)^2.
+
+    The profile sits at rfftfreq(n), n = min(h, w), for square and
+    non-square images (bilinear interpolation error is below 1 / n^2).
+    """
+    h, w = image_shape
+    n = min(h, w)
+    ky = torch.fft.fftfreq(h).reshape(-1, 1)
+    kx = torch.fft.rfftfreq(w).reshape(1, -1)
+    ps = ky**2 + kx**2
+    epa = equiphase_average_power_to_1d_rfft(
+        ps,
+        image_shape,
+        1.0,
+        defocus_um=1.5,
+        astigmatism_um=0.0,
+        astigmatism_angle_deg=0.0,
+        phase_shift_deg=0.0,
+        voltage_kev=300.0,
+        spherical_aberration_mm=2.7,
+        amplitude_contrast=0.1,
+        laser_params=None,
+        n_theta=32,
+    )
+    expected = torch.fft.rfftfreq(n) ** 2
+    assert epa.shape == (n // 2 + 1,)
+    torch.testing.assert_close(epa, expected, rtol=0.0, atol=1.0 / n**2)
+
+
+@pytest.mark.parametrize("sidelength", [128, 129])
+@pytest.mark.parametrize("astigmatism_angle_deg", [0.0, 30.0, 90.0])
+def test_equiphase_profile_is_mean_defocus_ctf(sidelength, astigmatism_angle_deg):
+    """An astigmatic CTF^2 averages to the 1D CTF^2 of the mean defocus.
+
+    Referencing chi on the +kx axis with astigmatism would give the defocus along
+    kx instead, mean + astigmatism * cos(2 angle): 1.6, 1.55 and 1.4 um here.
+    """
+    from torch_ctf import calculate_ctf_1d, calculate_ctf_2d
+
+    pixel = 2.0
+    optics = {
+        "voltage": 300.0,
+        "spherical_aberration": 2.7,
+        "amplitude_contrast": 0.07,
+        "phase_shift": 0.0,
+        "pixel_size": pixel,
+    }
+    ctf_2d = calculate_ctf_2d(
+        defocus=1.5,
+        astigmatism=0.1,
+        astigmatism_angle=astigmatism_angle_deg,
+        image_shape=(sidelength, sidelength),
+        rfft=True,
+        fftshift=False,
+        **optics,
+    )
+    ps = (ctf_2d**2).reshape(sidelength, sidelength // 2 + 1)
+    epa = equiphase_average_power_to_1d_rfft(
+        ps,
+        sidelength,
+        pixel,
+        defocus_um=1.5,
+        astigmatism_um=0.1,
+        astigmatism_angle_deg=astigmatism_angle_deg,
+        phase_shift_deg=0.0,
+        voltage_kev=300.0,
+        spherical_aberration_mm=2.7,
+        amplitude_contrast=0.07,
+        n_theta=64,
+    )
+
+    defoci = torch.arange(1.30, 1.70001, 0.005)
+    ctf_1d = calculate_ctf_1d(
+        defocus=defoci,
+        n_samples=sidelength // 2 + 1,
+        oversampling_factor=1,
+        image_sidelength=sidelength,
+        **optics,
+    ).reshape(len(defoci), -1)
+    mse = ((epa[None, 4:] - ctf_1d[:, 4:] ** 2) ** 2).mean(dim=-1)
+    best_defocus = float(defoci[mse.argmin()])
+    assert best_defocus == pytest.approx(1.5, abs=0.02)
+
+
+@pytest.mark.parametrize(
+    ("ps_shape", "stale_sidelength"),
+    [((48, 31), 48), ((48, 31), (60, 60)), ((61, 25), (48, 48))],
+)
+def test_rotational_profile_rejects_mismatched_image_sidelength(
+    ps_shape, stale_sidelength
+):
+    """The rotational path checks image_sidelength against the spectrum too."""
+    from torch_ctf_estimation.estimate_ctf_1d.estimate_ctf_1d_utils import (
+        _average_power_to_1d_rfft,
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        _average_power_to_1d_rfft(
+            torch.ones(ps_shape),
+            stale_sidelength,
+            use_equiphase=False,
+            equiphase_defocus_um=None,
+            equiphase_astigmatism_um=None,
+            equiphase_astigmatism_angle_deg=None,
+            equiphase_phase_shift_deg=None,
+            voltage_kev=300.0,
+            spherical_aberration_mm=2.7,
+            amplitude_contrast=0.07,
+            pixel_spacing_angstroms=1.0,
+            laser_params=None,
+            equiphase_n_theta=8,
+        )

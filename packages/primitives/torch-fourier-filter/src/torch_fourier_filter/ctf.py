@@ -215,7 +215,8 @@ def calculate_ctf_2d(
         Amount of astigmatism in micrometers.
         `(defocus_u - defocus_v) / 2`
     astigmatism_angle : float | torch.Tensor
-        Angle of astigmatism in degrees. 0 places `defocus_u` along the y-axis.
+        Angle of astigmatism in degrees. 0 places `defocus_u` along the x-axis,
+        and positive angles rotate it towards +y (increasing row index).
     voltage : float | torch.Tensor
         Acceleration voltage in kilovolts (kV).
     spherical_aberration : float | torch.Tensor
@@ -236,7 +237,11 @@ def calculate_ctf_2d(
     Returns
     -------
     ctf : torch.Tensor
-        The Contrast Transfer Function for the given parameters.
+        The Contrast Transfer Function for the given parameters, with the sign
+        convention of torch-ctf: positive potential multiplied by the CTF at
+        underfocus gives a dark image (``-amplitude_contrast`` at zero frequency).
+        Since torch-ctf 0.7.0 this is the negative of earlier versions; multiply by
+        -1 to reproduce earlier results.
     """
     warnings.warn(
         "This function is deprecated and will be removed in a future version. "
@@ -293,7 +298,11 @@ def calculate_ctf_1d(
     Returns
     -------
     ctf : torch.Tensor
-        The Contrast Transfer Function for the given parameters.
+        The Contrast Transfer Function for the given parameters, with the sign
+        convention of torch-ctf: positive potential multiplied by the CTF at
+        underfocus gives a dark image (``-amplitude_contrast`` at zero frequency).
+        Since torch-ctf 0.7.0 this is the negative of earlier versions; multiply by
+        -1 to reproduce earlier results.
     """
     warnings.warn(
         "This function is deprecated and will be removed in a future version. "

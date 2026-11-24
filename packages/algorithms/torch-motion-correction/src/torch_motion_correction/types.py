@@ -164,8 +164,10 @@ class XCRefinementConfig:
         Whether to replace outlier patch shifts with the mean of valid patches.
         Default is True.
     outlier_threshold : float
-        Z-score threshold (standard deviations from median) above which a patch
-        shift is considered an outlier. Default is 3.0.
+        Distance from the median, in robust standard deviations (1.4826 times the
+        median absolute deviation), above which a patch shift is considered an
+        outlier. Shifts within one pixel of the median are never outliers.
+        Default is 3.0.
     """
 
     sub_pixel_refinement: bool = True

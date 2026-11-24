@@ -29,6 +29,21 @@ def _view_matrices() -> torch.Tensor:
     return (axes @ tilt).float()
 
 
+def _cross_correlate_2d(
+    reference: torch.Tensor,
+    mobile: torch.Tensor,
+) -> torch.Tensor:
+    """Circular cross-correlation of 2-D images, same shape as the inputs.
+
+    `s=` keeps odd sizes odd; without it irfft2 returns an even last dimension.
+    """
+    ref_rfft = torch.fft.rfft2(reference, dim=(-2, -1))
+    mob_rfft = torch.fft.rfft2(mobile, dim=(-2, -1))
+    return torch.fft.irfft2(
+        ref_rfft * torch.conj(mob_rfft), s=reference.shape[-2:], dim=(-2, -1)
+    )
+
+
 def _find_2d_peak_shift(
     cc_map: torch.Tensor,
 ) -> tuple[torch.Tensor, float]:
@@ -118,7 +133,7 @@ def projection_align(
     ref_projs = project_3d_to_2d(
         ref_float, views, fftfreq_max=config.fftfreq_max, zyx_matrices=True
     )
-    ref_rfft = torch.fft.rfft2(_normalise_projections(ref_projs), dim=(-2, -1))
+    ref_projs = _normalise_projections(ref_projs)
 
     best_score = float("-inf")
     best_R = candidates[0]
@@ -133,9 +148,8 @@ def projection_align(
             fftfreq_max=config.fftfreq_max,
             zyx_matrices=True,
         )
-        mob_rfft = torch.fft.rfft2(_normalise_projections(mob_projs), dim=(-2, -1))
-        cc_2d = torch.fft.irfft2(
-            ref_rfft * torch.conj(mob_rfft), s=(d, d), dim=(-2, -1)
+        cc_2d = _cross_correlate_2d(
+            ref_projs, _normalise_projections(mob_projs)
         )  # (B, V, d, d)
 
         # Score each candidate by its per-view NCC peak, averaged over views

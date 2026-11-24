@@ -1,8 +1,7 @@
 import einops
 import torch
-from torch_grid_utils.fftfreq_grid import rfft_shape
+from torch_grid_utils import fftfreq_to_dft_coordinates, rfft_shape
 
-from .._dft_utils import _fftfreq_to_dft_coordinates
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -70,6 +69,10 @@ def insert_central_slices_rfft_3d(
     x_coords = freq_grid[..., 2]  # (h, w)
     y_coords = freq_grid[..., 1]  # (h, w)
     friedel_redundant = (x_coords == 0) & (y_coords < 0)
+    # for even h, y = -0.5 (row 0) is its own mate (+0.5 aliases to -0.5), so
+    # there is no y > 0 sample to stand in for it
+    if volume_shape[-2] % 2 == 0:
+        friedel_redundant[0] = False
     # Combine with existing frequency mask
     freq_grid_mask = freq_grid_mask & ~friedel_redundant
 
@@ -106,8 +109,8 @@ def insert_central_slices_rfft_3d(
     valid_data[conjugate_mask] = torch.conj(valid_data[conjugate_mask])
 
     # calculate positions to sample in DFT array from fftfreq coordinates
-    rotated_coordinates = _fftfreq_to_dft_coordinates(
-        rotated_coordinates, image_shape=volume_shape, rfft=True
+    rotated_coordinates = fftfreq_to_dft_coordinates(
+        rotated_coordinates, image_shape=volume_shape, rfft=True, fftshift=True
     )
 
     # initialise output volume and volume for keeping track of weights
@@ -196,6 +199,10 @@ def insert_central_slices_rfft_3d_multichannel(
     x_coords = freq_grid[..., 2]  # (h, w)
     y_coords = freq_grid[..., 1]  # (h, w)
     friedel_redundant = (x_coords == 0) & (y_coords < 0)
+    # for even h, y = -0.5 (row 0) is its own mate (+0.5 aliases to -0.5), so
+    # there is no y > 0 sample to stand in for it
+    if volume_shape[-2] % 2 == 0:
+        friedel_redundant[0] = False
     # Combine with existing frequency mask
     freq_grid_mask = freq_grid_mask & ~friedel_redundant
 
@@ -235,8 +242,8 @@ def insert_central_slices_rfft_3d_multichannel(
     valid_data[conjugate_mask] = torch.conj(valid_data[conjugate_mask])
 
     # calculate positions to sample in DFT array from fftfreq coordinates
-    rotated_coordinates = _fftfreq_to_dft_coordinates(
-        rotated_coordinates, image_shape=volume_shape, rfft=True
+    rotated_coordinates = fftfreq_to_dft_coordinates(
+        rotated_coordinates, image_shape=volume_shape, rfft=True, fftshift=True
     )
 
     # initialise output volume and volume for keeping track of weights
@@ -406,10 +413,11 @@ def _insert_into_3d_dft_linear(
     x0_mask = idx_x == 0  # (b, 1, 2, 2, 2) boolean mask
 
     if torch.any(x0_mask):
-        # Calculate mirrored indices for Friedel symmetry
-        # Mirror: (z, y, 0) -> ((d - z) % d, (d - y) % d, 0)
-        idx_z_mirror = (d - idx_z) % d
-        idx_y_mirror = (h - idx_y) % h
+        # Calculate mirrored indices for Friedel symmetry about DC at (d//2, h//2)
+        # Mirror: (z, y, 0) -> ((2 * (d//2) - z) % d, (2 * (h//2) - y) % h, 0)
+        # For even sizes this is (d - z) % d, for odd sizes d - 1 - z
+        idx_z_mirror = (2 * (d // 2) - idx_z) % d
+        idx_y_mirror = (2 * (h // 2) - idx_y) % h
 
         # Only insert conjugate at mirrored positions when original is at x=0
         # Exclude the origin (d//2, h//2, 0) to avoid double insertion at DC

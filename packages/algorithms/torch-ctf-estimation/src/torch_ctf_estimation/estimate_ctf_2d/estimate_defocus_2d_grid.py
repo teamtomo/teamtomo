@@ -12,6 +12,7 @@ from typing import Literal
 import einops
 import torch
 from torch_cubic_spline_grids import CubicCatmullRomGrid3d
+from torch_grid_utils import image_shape_from_dft_shape
 
 from torch_ctf_estimation.estimate_ctf_2d.ctf_loss_2d import (
     compute_ctf2_t,
@@ -24,6 +25,7 @@ from torch_ctf_estimation.estimate_ctf_2d.estimate_ctf_2d_utils import (
     _clamp_defocus_grid_after_step,
     _clamp_optional_bounds,
     _get_astig_clamped,
+    _principal_defocus,
     _reset_astigmatism,
     _shared_astigmatism_and_env,
 )
@@ -46,14 +48,20 @@ from torch_ctf_estimation.utils.fitting_bounds import (
 def _setup_grid_spectra_and_shape(
     patch_power_spectra: torch.Tensor,
     defocus_grid_resolution: tuple[int, int, int],
+    image_shape: tuple[int, int] | None = None,
 ) -> tuple[torch.Tensor, tuple[int, int], torch.device, int]:
     """
     Derive image shape and optionally collapse time when nt==1.
 
     Returns (patch_power_spectra, image_shape, device, T).
     """
-    ph, pw_rfft = patch_power_spectra.shape[-2], patch_power_spectra.shape[-1]
-    image_shape = (ph, (pw_rfft - 1) * 2)
+    real_h, real_w = image_shape_from_dft_shape(
+        patch_power_spectra.shape[-2:],
+        rfft=True,
+        image_shape=image_shape,
+        assume_square=True,
+    )
+    image_shape = (real_h, real_w)
     device = patch_power_spectra.device
     nt = defocus_grid_resolution[0]
     if nt == 1:
@@ -140,8 +148,9 @@ def _grid_final_scalars(
     final_astigmatism_angle = _astig_angle_to_m90_p90(_fa_deg)
     final_envelope_B = float(envelope_B.detach().cpu().item())
     mean_defocus = float(defocus_model_obj.data.detach().cpu().mean().item())
-    final_defocus_u = mean_defocus + final_astigmatism / 2.0
-    final_defocus_v = mean_defocus - final_astigmatism / 2.0
+    final_defocus_u, final_defocus_v = _principal_defocus(
+        mean_defocus, final_astigmatism
+    )
     return (
         final_astigmatism,
         final_astigmatism_angle,
@@ -183,6 +192,7 @@ def estimate_defocus_2d_grid(
     fixed_phase_shift_deg: float | None = None,
     early_stopper: Callable[[float], bool] | None = None,
     use_amplitude: bool = False,
+    image_shape: tuple[int, int] | None = None,
 ) -> Defocus2DResults:
     """
     Estimate defocus in 2D using a 3D spline grid over (t, x, y).
@@ -197,7 +207,9 @@ def estimate_defocus_2d_grid(
         image_shape,
         device,
         T,
-    ) = _setup_grid_spectra_and_shape(patch_power_spectra, defocus_grid_resolution)
+    ) = _setup_grid_spectra_and_shape(
+        patch_power_spectra, defocus_grid_resolution, image_shape
+    )
     defocus_model_obj, phase_models = _setup_grid_defocus_and_phase(
         defocus_grid_resolution,
         initial_defocus,

@@ -1,9 +1,9 @@
 import einops
 import torch
+from torch_grid_utils import fftfreq_to_dft_coordinates, image_shape_from_dft_shape
 from torch_grid_utils.fftfreq_grid import fftfreq_grid, transform_fftfreq_grid
 from torch_image_interpolation import sample_image_2d, sample_image_3d
 
-from .._dft_utils import _fftfreq_to_dft_coordinates
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
 
@@ -97,7 +97,7 @@ def extract_central_slices_rfft_3d(
     """Extract central slice from an fftshifted rfft volume.
 
     NOTE: The proper pre-processing for a RFFT volume for this function is as follows:
-    >>> volume = torch.fft.fftshift(volume, dim=(-3, -2, -1))  # move center to corners
+    >>> volume = torch.fft.ifftshift(volume, dim=(-3, -2, -1))  # move center to corners
     >>> volume_rfft = torch.fft.rfftn(volume, dim=(-3, -2, -1))  # take RFFT
     >>> volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))  # center yz plane
 
@@ -152,11 +152,14 @@ def extract_central_slices_rfft_3d(
     assert volume_rfft.ndim == 3, "Input volume_rfft must be 3D tensor."
 
     # Get the shape of the original volume from the actual rfft tensor
-    volume_shape = (
-        volume_rfft.shape[-3],
-        volume_rfft.shape[-2],
-        (volume_rfft.shape[-1] - 1) * 2,
-    )
+    d, h, w_rfft = volume_rfft.shape[-3:]
+    # cubic volume: real space width from the height (rfft widths are ambiguous)
+    if d != h:
+        raise ValueError(
+            f"Expected a cubic volume, but the rfft has depth {d} and height {h}."
+        )
+    _, _, w = image_shape_from_dft_shape((d, h, w_rfft), rfft=True, assume_square=True)
+    volume_shape = (d, h, w)
 
     # rotation matrices rotate xyz coordinates, make them rotate zyx coordinates
     # xyz:
@@ -241,9 +244,17 @@ def extract_central_slices_rfft_3d(
 
     rotated_coords[conjugate_mask, ...] *= -1
 
+    # Points within x_tolerance of the x=0 plane which weren't flipped can still sit
+    # just below it, e.g. every point of a view along x from a float32 matrix, where
+    # cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp them onto it.
+    # (out of place: clamp needs its input to compute gradients)
+    rotated_coords = torch.cat(
+        [rotated_coords[..., :2], torch.clamp(rotated_coords[..., 2:], min=0)], dim=-1
+    )
+
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=volume_shape, rfft=True
+    rotated_coords = fftfreq_to_dft_coordinates(
+        frequencies=rotated_coords, image_shape=volume_shape, rfft=True, fftshift=True
     )
     samples = sample_image_3d(
         image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
@@ -276,7 +287,7 @@ def extract_central_slices_rfft_3d_multichannel(
     """Extract central slices from multichannel fftshifted rfft volume.
 
     NOTE: The proper pre-processing for a RFFT volume for this function is as follows:
-    >>> volume = torch.fft.fftshift(volume, dim=(-3, -2, -1))  # move center to corners
+    >>> volume = torch.fft.ifftshift(volume, dim=(-3, -2, -1))  # move center to corners
     >>> volume_rfft = torch.fft.rfftn(volume, dim=(-3, -2, -1))  # take RFFT
     >>> volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))  # center yz plane
 
@@ -332,11 +343,14 @@ def extract_central_slices_rfft_3d_multichannel(
     assert volume_rfft.ndim == 4, "Input volume_rfft must be 4D tensor."
 
     # Get the shape of the original volume from the actual rfft tensor
-    volume_shape = (
-        volume_rfft.shape[-3],
-        volume_rfft.shape[-2],
-        (volume_rfft.shape[-1] - 1) * 2,
-    )
+    d, h, w_rfft = volume_rfft.shape[-3:]
+    # cubic volume: real space width from the height (rfft widths are ambiguous)
+    if d != h:
+        raise ValueError(
+            f"Expected a cubic volume, but the rfft has depth {d} and height {h}."
+        )
+    _, _, w = image_shape_from_dft_shape((d, h, w_rfft), rfft=True, assume_square=True)
+    volume_shape = (d, h, w)
 
     # rotation matrices rotate xyz coordinates, make them rotate zyx coordinates
     # xyz:
@@ -422,9 +436,17 @@ def extract_central_slices_rfft_3d_multichannel(
 
     rotated_coords[conjugate_mask, ...] *= -1
 
+    # Points within x_tolerance of the x=0 plane which weren't flipped can still sit
+    # just below it, e.g. every point of a view along x from a float32 matrix, where
+    # cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp them onto it.
+    # (out of place: clamp needs its input to compute gradients)
+    rotated_coords = torch.cat(
+        [rotated_coords[..., :2], torch.clamp(rotated_coords[..., 2:], min=0)], dim=-1
+    )
+
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = _fftfreq_to_dft_coordinates(
-        frequencies=rotated_coords, image_shape=volume_shape, rfft=True
+    rotated_coords = fftfreq_to_dft_coordinates(
+        frequencies=rotated_coords, image_shape=volume_shape, rfft=True, fftshift=True
     )
     samples = sample_image_3d(
         image=volume_rfft, coordinates=rotated_coords, interpolation="trilinear"
@@ -472,10 +494,8 @@ def transform_slice_2d(
     """
     # Calculate full 2D image shape from rfft shape
     # rfft_shape is (h, w_rfft) where w_rfft = n//2 + 1
-    # Full width is w_full = 2 * (w_rfft - 1) = n
-    h_full = rfft_shape[0]
-    w_full = 2 * (rfft_shape[1] - 1)
-    image_shape_2d = (h_full, w_full)
+    h, w = image_shape_from_dft_shape(rfft_shape, rfft=True, assume_square=True)
+    image_shape_2d = (h, w)
 
     # Generate 2D frequency grid
     freq_grid = fftfreq_grid(
@@ -493,8 +513,11 @@ def transform_slice_2d(
     )  # (h, w, 2) yx coords
 
     # Convert transformed frequencies to DFT array coordinates
-    transformed_coords = _fftfreq_to_dft_coordinates(
-        frequencies=transformed_freqs, image_shape=image_shape_2d, rfft=True
+    transformed_coords = fftfreq_to_dft_coordinates(
+        frequencies=transformed_freqs,
+        image_shape=image_shape_2d,
+        rfft=True,
+        fftshift=True,
     )
 
     # Flatten coordinates: (h, w, 2) -> (h*w, 2)
@@ -574,9 +597,8 @@ def transform_slice_2d_multichannel(
         Transformed projection image DFTs with same shape as input.
     """
     # Calculate full 2D image shape from rfft shape
-    h_full = rfft_shape[0]
-    w_full = 2 * (rfft_shape[1] - 1)
-    image_shape_2d = (h_full, w_full)
+    h, w = image_shape_from_dft_shape(rfft_shape, rfft=True, assume_square=True)
+    image_shape_2d = (h, w)
 
     # Generate 2D frequency grid
     freq_grid = fftfreq_grid(
@@ -594,8 +616,11 @@ def transform_slice_2d_multichannel(
     )  # (h, w, 2) yx coords
 
     # Convert transformed frequencies to DFT array coordinates
-    transformed_coords = _fftfreq_to_dft_coordinates(
-        frequencies=transformed_freqs, image_shape=image_shape_2d, rfft=True
+    transformed_coords = fftfreq_to_dft_coordinates(
+        frequencies=transformed_freqs,
+        image_shape=image_shape_2d,
+        rfft=True,
+        fftshift=True,
     )
 
     # Flatten coordinates: (h, w, 2) -> (h*w, 2)
