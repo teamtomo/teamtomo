@@ -605,12 +605,9 @@ def _rfft_pixel(y_in: Int, x_in: Int, n: Int) -> RfftPixel:
 
 @always_inline
 def _is_hermitian_plane(x: Int, n: Int) -> Bool:
-    """Whether rfft column `x` of a grid with edge `n` stores its own mirror.
+    """Whether rfft column `x` stores its own mirror: `x = 0` and, for even `n`, `n/2`.
 
-    The Hermitian mirror of `(z, y, x)` is `(-z, -y, -x)`. For most `x` that is
-    in the half the rfft drops, but `-0 = 0` and, for even `n`, `-n/2` is the same
-    frequency as `+n/2`. On those two planes both voxels of a conjugate pair are
-    stored, so a scatter has to write both to keep the plane Hermitian.
+    See "Hermitian bookkeeping" in `experimental/README.md`.
     """
     return x == 0 or (n % 2 == 0 and x == n // 2)
 

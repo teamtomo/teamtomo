@@ -425,12 +425,24 @@ everywhere, the Nyquist edge included:
 - for even `n` the slice's own Nyquist row samples frequency `-n/2`, as in
   `torch.fft.fftfreq`.
 
-Backprojections (insertions) also share their Hermitian bookkeeping, so both the
-data and the weights agree everywhere:
+### Hermitian bookkeeping
 
-- on the kx = 0 and, for even `n`, kx = n/2 planes both voxels of a conjugate pair
-  are stored (`-n/2` is the same frequency as `+n/2`), so each write there also adds
-  the conjugate at the mirror `(-z, -y)`. A voxel that is its own mirror gets
+A real volume's DFT is Hermitian, `V(-k) = conj V(k)`, and the rfft stores only the
+kx >= 0 half. For a voxel with `0 < kx < n/2` the mirror `(-kz, -ky, -kx)` has
+`-n/2 < -kx < 0`, and its periodic copy `n - kx` lies between `n/2` and `n`: neither
+is stored, so the mirror is implied and nothing has to be kept consistent. That
+fails on exactly two planes. `-0 = 0`, so the mirror of a kx = 0 voxel is on the
+same plane. And because the DFT repeats every `n`, for even `n` the frequency
+`-n/2` is the same as `+n/2`, so the mirror of a kx = n/2 voxel is on that plane
+too. On these two planes both voxels of a conjugate pair are stored and must stay
+conjugates. Odd `n` has no n/2 plane. The same holds for the kx = 0 and kx = n/2
+columns of a 2D image, and for the DC and Nyquist samples of a line.
+
+Backprojections (insertions) also share this bookkeeping, so both the data and the
+weights agree everywhere:
+
+- on the kx = 0 and, for even `n`, kx = n/2 planes each write also adds the
+  conjugate at the mirror `(-z, -y)`. A voxel that is its own mirror gets
   `v + conj(v)`, which keeps the planes Hermitian;
 - each conjugate pair of the input counts once. Of the input's kx = 0 column only
   the `ky >= 0` half is inserted. On its kx = n/2 column both copies of a pair are

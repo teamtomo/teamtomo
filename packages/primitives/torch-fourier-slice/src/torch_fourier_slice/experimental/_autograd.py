@@ -63,19 +63,13 @@ def _reduce_to(grad: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 def _hermitian_planes(n: int) -> tuple[int, ...]:
     """Rfft x indices whose plane stores its own Hermitian mirror, for edge `n`.
 
-    `-0 = 0`, and for even `n` `-n/2` is the same frequency as `+n/2`, so on these
-    planes both voxels of a conjugate pair are stored (`_is_hermitian_plane`).
+    See "Hermitian bookkeeping" in `experimental/README.md`.
     """
     return (0, n // 2) if n % 2 == 0 else (0,)
 
 
 def _symmetrise_hermitian_planes(grad_volume: torch.Tensor) -> torch.Tensor:
-    """Adjoint of the Hermitian double-insert on a volume's kx = 0 and n/2 planes.
-
-    The insertion writes each sample on these planes and its conjugate at the
-    (-z, -y) mirror, which for a self-mirror voxel is the voxel itself. The
-    transpose adds the mirror's conjugate cotangent back onto each sample.
-    """
+    """Adjoint of the Hermitian double-insert on a volume's kx = 0 and n/2 planes."""
     out = grad_volume.contiguous().clone()
     for x in _hermitian_planes(grad_volume.shape[-3]):
         plane = grad_volume[..., x]
@@ -85,11 +79,7 @@ def _symmetrise_hermitian_planes(grad_volume: torch.Tensor) -> torch.Tensor:
 
 
 def _symmetrise_hermitian_columns(grad_image: torch.Tensor) -> torch.Tensor:
-    """Adjoint of the Hermitian double-insert on an image's kx = 0 and n/2 columns.
-
-    The 2D analogue of :func:`_symmetrise_hermitian_planes`: add the conjugate
-    ky -> (h - ky) mirror.
-    """
+    """Adjoint of the Hermitian double-insert on an image's kx = 0 and n/2 columns."""
     out = grad_image.contiguous().clone()
     for x in _hermitian_planes(grad_image.shape[-2]):
         column = grad_image[..., x]
