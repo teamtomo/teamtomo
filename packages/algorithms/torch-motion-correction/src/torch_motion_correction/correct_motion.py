@@ -477,8 +477,11 @@ def correct_motion_fast(
 
     # Evaluate the field at each frame's time, as correct_motion does. The control
     # points are the per-frame shifts only for a Catmull-Rom field with nt == t.
-    frame_shifts = deformation_field.resample((t, 1, 1)).data  # (2, t, 1, 1), Å
-    shifts = -einops.rearrange(frame_shifts, "c t 1 1 -> t c") / pixel_spacing
+    frame_t = torch.linspace(0, 1, steps=t, device=device)
+    tyx = F.pad(frame_t[:, None], (0, 2))  # (t, 3)
+    with torch.no_grad():
+        frame_shifts = deformation_field(tyx)  # (t, 2), Å
+    shifts = -frame_shifts / pixel_spacing
 
     if verbose:
         print(f"Single patch correction: applying shifts to {t} frames")
