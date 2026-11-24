@@ -8,7 +8,6 @@ from .center_molecule import (
 from .rotate_molecule import (
     apply_rotation,
     apply_rotation_to_coords,
-    create_rotation_matrix_from_euler,
 )
 from .select_atoms import (
     ball_query_atoms,
@@ -36,7 +35,6 @@ __all__ = [
     "calculate_center_from_tensors",
     "center_structure",
     "center_structure_from_coords",
-    "create_rotation_matrix_from_euler",
     "df_to_atomxyz",
     "df_to_atomzyx",
     "find_atoms_in_ball",

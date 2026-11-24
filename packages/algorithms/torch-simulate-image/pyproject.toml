@@ -78,6 +78,7 @@ examples = [
     "matplotlib",
     "mmdf",
     "mrcfile",
+    "roma",
     "torch-structure-manipulation",
     "torch-calculate-electrostatic-potential",
     "torch-scattering",
