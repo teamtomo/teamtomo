@@ -30,6 +30,8 @@ from _common import (
     _rotated_coord,
     _shift_phase,
     _load_c2,
+    _in_nyquist_cube,
+    _rfft_voxel,
 )
 from _gather_grad import _interp3d_with_grad
 
@@ -351,23 +353,10 @@ def _gather_weight_grad(
     Transpose of `_accumulate_weight`: same index/Friedel logic, summing reads.
     """
     var sidelength_half = _rfft_half(sidelength)
-    var z = z_in
-    var y = y_in
-    var x = x_in
-    if x < 0:
-        x = -x
-        y = -y
-        z = -z
-    if x >= sidelength_half:
-        return 0.0
-    var hi = sidelength // 2
-    var lo = -sidelength // 2 + 1
-    if y > hi or y < lo or z > hi or z < lo:
-        return 0.0
-    var y_eff = sidelength + y if y < 0 else y
-    var z_eff = sidelength + z if z < 0 else z
-    if y_eff >= sidelength or z_eff >= sidelength:
-        return 0.0
+    var v = _rfft_voxel(z_in, y_in, x_in, sidelength)
+    var z_eff = v.z
+    var y_eff = v.y
+    var x = v.x
     var off = ((i_bv * sidelength + z_eff) * sidelength + y_eff) * sidelength_half + x
     var acc = gwvol[off]
     if friedel_double != 0 and x == 0:
@@ -416,6 +405,9 @@ def _weight_grad_pixel[
     var kz = k[0]
     var ky = k[1]
     var kx = k[2]
+    # outside the Nyquist cube the splat dropped the weight, so its grad is 0
+    if not _in_nyquist_cube(kz, ky, kx, p.sidelength):
+        return
     var kz_floor = floor(kz)
     var ky_floor = floor(ky)
     var kx_floor = floor(kx)

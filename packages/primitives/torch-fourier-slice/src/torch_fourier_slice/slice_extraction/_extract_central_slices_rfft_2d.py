@@ -3,6 +3,7 @@ import torch
 from torch_grid_utils import fftfreq_to_dft_coordinates
 from torch_image_interpolation import sample_image_2d
 
+from .._dft_utils import _resample_rfft_edge
 from .._grids import _central_line_fftfreq_grid
 
 
@@ -72,11 +73,18 @@ def extract_central_slices_rfft_2d(
     rotated_coords[conjugate_mask, ...] *= -1
 
     # convert frequencies to array coordinates in fftshifted DFT
-    rotated_coords = fftfreq_to_dft_coordinates(
+    dft_coords = fftfreq_to_dft_coordinates(
         frequencies=rotated_coords, image_shape=image_shape, rfft=True, fftshift=True
     )  # (...) rfft
     samples = sample_image_2d(
-        image=image_rfft, coordinates=rotated_coords, interpolation="bilinear"
+        image=image_rfft, coordinates=dft_coords, interpolation="bilinear"
+    )
+
+    # the interpolator zeroes points whose stencil leaves the stored array, read
+    # those periodically instead (e.g. next to the Nyquist plane, which an
+    # fftshifted DFT stores only at -n/2)
+    samples = _resample_rfft_edge(
+        samples, image_rfft, rotated_coords, dft_coords, image_shape
     )
 
     # take complex conjugate of values from redundant half transform

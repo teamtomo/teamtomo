@@ -27,6 +27,7 @@ from _common import (
     _line_shift_phase,
     _rfft_half,
     _load_c2_line,
+    _in_nyquist_cube,
 )
 from _gather_grad import _interp3d_with_grad
 from _pose_grad import _couple_shift3d, _gather_weight_grad, _redot
@@ -259,6 +260,9 @@ def _weight_line_grad_pixel[
     var kz = k[0]
     var ky = k[1]
     var kx = k[2]
+    # outside the Nyquist cube the splat dropped the weight, so its grad is 0
+    if not _in_nyquist_cube(kz, ky, kx, p.sidelength):
+        return
     var kz_floor = floor(kz)
     var ky_floor = floor(ky)
     var kx_floor = floor(kx)

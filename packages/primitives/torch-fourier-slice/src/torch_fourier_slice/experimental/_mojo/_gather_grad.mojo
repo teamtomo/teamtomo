@@ -12,7 +12,16 @@ from std.math import floor
 
 from layout import TensorLayout, TileTensor
 
-from _common import C2, C6, C8, CUBIC, _cubic_kernel, _cubic_kernel_derivative
+from _common import (
+    C2,
+    C6,
+    C8,
+    CUBIC,
+    _cubic_kernel,
+    _cubic_kernel_derivative,
+    _in_nyquist_cube,
+    _in_nyquist_square,
+)
 from _gather import (
     _sample_rfft_2d,
     _sample_rfft_3d,
@@ -122,7 +131,10 @@ def _interp3d_with_grad[
 ) -> C8:
     """Interpolate + spatial gradients (comptime interp: LINEAR = trilinear, CUBIC = tricubic).
 
+    Points outside the Nyquist cube read as 0, with zero gradient.
     """
+    if not _in_nyquist_cube(kz, ky, kx, Int(rec.dim[0]())):
+        return C8(0.0)
     comptime if interp == CUBIC:
         return _interp3d_cubic_with_grad(rec, kz, ky, kx)
     return _interp3d_linear_with_grad(rec, kz, ky, kx)
@@ -207,7 +219,10 @@ def _interp2d_with_grad[
 ) -> C6:
     """Interpolate + spatial gradients (comptime interp: LINEAR = bilinear, CUBIC = bicubic).
 
+    Points outside the Nyquist square read as 0, with zero gradient.
     """
+    if not _in_nyquist_square(ky, kx, Int(img.dim[0]())):
+        return C6(0.0)
     comptime if interp == CUBIC:
         return _interp2d_cubic_with_grad(img, ky, kx)
     return _interp2d_linear_with_grad(img, ky, kx)

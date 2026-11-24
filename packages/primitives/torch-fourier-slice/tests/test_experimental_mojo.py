@@ -81,9 +81,7 @@ def _radius_mask(boxsize: int, fftfreq_max: float) -> torch.Tensor:
 def test_identity_exact_in_band():
     """Identity rotation needs no interpolation -> in-band agreement is exact.
 
-    (Only the even-box Nyquist edge can differ, where the canonical kernel
-    zero-pads out-of-bounds samples while the Mojo kernel clamps to the edge
-    voxel.)
+    (The Nyquist edge is covered in ``test_nyquist_edge.py``.)
     """
     torch.manual_seed(0)
     d = 32
