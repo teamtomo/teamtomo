@@ -12,20 +12,10 @@ from ._preprocess import _normalise_volume
 from ._result import AlignmentResult
 
 # Three orthogonal views of the reference as ZYZ Euler angles (degrees): looking
-# along z, x and y, each tilted by the same generic rotation.  The tilt worked
-# around torch-fourier-slice sampling views along a box axis incorrectly, which
-# has since been fixed (teamtomo/teamtomo#172); it does no harm, so it stays.
-_AXIS_VIEW_EULER_ANGLES = torch.tensor(
+# along z, x and y.
+_VIEW_EULER_ANGLES = torch.tensor(
     [[0.0, 0.0, 0.0], [0.0, 90.0, 0.0], [0.0, 90.0, 90.0]], dtype=torch.float64
 )
-_VIEW_TILT_EULER_ANGLES = torch.tensor([[20.0, 50.0, 10.0]], dtype=torch.float64)
-
-
-def _view_matrices() -> torch.Tensor:
-    """Return the ``(3, 3, 3)`` zyx active rotations of the fixed views."""
-    axes = _euler_zyz_to_4x4_zyx(_AXIS_VIEW_EULER_ANGLES)[:, :3, :3]
-    tilt = _euler_zyz_to_4x4_zyx(_VIEW_TILT_EULER_ANGLES)[:, :3, :3]
-    return (axes @ tilt).float()
 
 
 def _cross_correlate_2d(
@@ -56,7 +46,7 @@ def _find_2d_peak_shift(
     return torch.tensor([dy, dx], dtype=torch.float32, device=cc_map.device), score
 
 
-def _normalise_projections(projections: torch.Tensor) -> torch.Tensor:
+def _normalize_projections(projections: torch.Tensor) -> torch.Tensor:
     """Zero-mean, unit-norm images, so their cross-correlation is an NCC."""
     centred = projections - projections.mean(dim=(-2, -1), keepdim=True)
     norm = centred.square().sum(dim=(-2, -1), keepdim=True).sqrt()
@@ -126,13 +116,13 @@ def projection_align(
         theta_step=config.angular_step_degrees,
     )
     candidates = _euler_zyz_to_4x4_zyx(euler_angles)[:, :3, :3].float().to(device)
-    views = _view_matrices().to(device)
+    views = _euler_zyz_to_4x4_zyx(_VIEW_EULER_ANGLES)[:, :3, :3].float().to(device)
 
     # project_3d_to_2d takes active rotations; views S_j: (V, d, d)
     ref_projs = project_3d_to_2d(
         ref_float, views, fftfreq_max=config.fftfreq_max, zyx_matrices=True
     )
-    ref_projs = _normalise_projections(ref_projs)
+    ref_projs = _normalize_projections(ref_projs)
 
     best_score = float("-inf")
     best_R = candidates[0]
@@ -148,7 +138,7 @@ def projection_align(
             zyx_matrices=True,
         )
         cc_2d = _cross_correlate_2d(
-            ref_projs, _normalise_projections(mob_projs)
+            ref_projs, _normalize_projections(mob_projs)
         )  # (B, V, d, d)
 
         # Score each candidate by its per-view NCC peak, averaged over views

@@ -132,8 +132,7 @@ class ProjectionAlignmentConfig(BaseModelTeamTomo):
         High-frequency cutoff (cycles/pixel) applied to the projections.
         Passed to ``project_3d_to_2d``.
     rotation_batch_size : int
-        Number of candidate rotations projected per batch.  Reduce if you run
-        out of memory; increase for faster throughput.
+        Number of candidate rotations projected per batch.
     pixel_size_angstroms : float or None
         If provided, ``AlignmentResult.translation_angstroms`` is populated.
     """
