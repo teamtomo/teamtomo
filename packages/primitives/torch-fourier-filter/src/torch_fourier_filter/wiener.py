@@ -27,7 +27,8 @@ def wiener_filter(
     snr: float | torch.Tensor
         Signal-to-noise ratio, broadcastable against ``transfer_function``:
         a number, one value per batch item (shape ``(b, 1, 1)``), or a grid.
-        Must be non-negative.
+        A tensor must be on the same device as ``transfer_function``. Must be
+        non-negative.
 
     Returns
     -------
@@ -35,7 +36,6 @@ def wiener_filter(
         The Wiener filter, real if ``transfer_function`` is real.
     """
     h = transfer_function
-    snr = torch.as_tensor(snr, dtype=h.real.dtype, device=h.device)
     return h.conj() * snr / (h.abs() ** 2 * snr + 1)
 
 
@@ -72,26 +72,33 @@ def _deconvolution_snr(
     return 10 ** (3 * strength) * decay * highpass
 
 
-def _infer_device(*values: float | torch.Tensor) -> torch.device:
-    """Device of the first tensor in ``values``, or the CPU."""
-    for value in values:
-        if isinstance(value, torch.Tensor):
-            return value.device
-    return torch.device("cpu")
+def _check_device(name: str, value: torch.Tensor, device: torch.device) -> None:
+    """Raise if tensor parameter ``name`` is not on ``device``."""
+    if value.device != device:
+        raise ValueError(
+            f"{name} is on {value.device} but the filter is built on {device}; "
+            "all tensor parameters must be on the same device"
+        )
 
 
-def _as_float_tensor(value: float | torch.Tensor, device: torch.device) -> torch.Tensor:
-    """Tensor on ``device``, floating point, keeping autograd history."""
-    tensor = torch.as_tensor(value, device=device)
-    if not tensor.is_floating_point():
-        tensor = tensor.to(torch.get_default_dtype())
-    return tensor
+def _as_float_tensor(
+    name: str, value: float | torch.Tensor, device: torch.device
+) -> torch.Tensor:
+    """``value`` as a floating point tensor on ``device``, keeping autograd history.
+
+    Numbers are converted; tensors must already be on ``device``.
+    """
+    if not isinstance(value, torch.Tensor):
+        return torch.tensor(value, dtype=torch.get_default_dtype(), device=device)
+    _check_device(name, value, device)
+    return value if value.is_floating_point() else value.to(torch.get_default_dtype())
 
 
 def ctf_deconvolution_filter(
     image_shape: tuple[int, int] | tuple[int, int, int],
     pixel_size: float,
     defocus: float | torch.Tensor,
+    *,
     voltage: float | torch.Tensor = 300.0,
     spherical_aberration: float | torch.Tensor = 2.7,
     amplitude_contrast: float | torch.Tensor = 0.07,
@@ -124,11 +131,13 @@ def ctf_deconvolution_filter(
     contrast: features that are dark in the input stay dark. Negate the filter
     to recover the projected potential instead.
 
-    Every CTF and SNR parameter can be a tensor of shape ``(b,)`` (or any
-    batch shape; they are broadcast together), giving a filter of shape
-    ``(b, *dft_shape)``, so each image or volume in a batch gets its own
+    Every CTF and SNR parameter can be a number or a tensor of shape ``(b,)``
+    (or any batch shape; they are broadcast together), giving a filter of
+    shape ``(b, *dft_shape)``, so each image or volume in a batch gets its own
     values. The filter is differentiable with respect to all of them, so they
-    can be tuned by gradient descent as well as by hand.
+    can be tuned by gradient descent as well as by hand. The filter is built
+    on the device of ``defocus`` (or ``device``), and every tensor parameter
+    must be on that device.
 
     Parameters
     ----------
@@ -168,8 +177,8 @@ def ctf_deconvolution_filter(
     fftshift: bool
         Whether the filter is fftshifted.
     device: torch.device | None
-        Device for the filter. Defaults to the device of the first tensor
-        parameter, or the CPU.
+        Device for the filter. Defaults to the device of ``defocus`` if it is
+        a tensor, otherwise the CPU.
 
     Returns
     -------
@@ -181,17 +190,7 @@ def ctf_deconvolution_filter(
     if ndim not in (2, 3):
         raise ValueError(f"image_shape must be 2D or 3D, got {image_shape}")
     if device is None:
-        device = _infer_device(
-            defocus,
-            voltage,
-            spherical_aberration,
-            amplitude_contrast,
-            phase_shift,
-            strength,
-            snr_falloff,
-            highpass_nyquist,
-            *([snr] if snr is not None else []),
-        )
+        device = defocus.device if isinstance(defocus, torch.Tensor) else "cpu"
 
     frequency = fftfreq_grid(
         image_shape=image_shape,
@@ -200,23 +199,24 @@ def ctf_deconvolution_filter(
         norm=True,
         device=device,
     )
+    device = frequency.device  # resolved, e.g. "cuda" -> "cuda:0"
     fraction_of_nyquist = torch.clamp(2 * frequency, max=1.0)
+    if isinstance(snr, torch.Tensor):
+        _check_device("snr", snr, device)
 
     # every parameter -> (*batch, 1, ..., 1) so it broadcasts against the grid
+    named_params = {
+        "defocus": defocus,
+        "voltage": voltage,
+        "spherical_aberration": spherical_aberration,
+        "amplitude_contrast": amplitude_contrast,
+        "phase_shift": phase_shift,
+        "strength": strength,
+        "snr_falloff": snr_falloff,
+        "highpass_nyquist": highpass_nyquist,
+    }
     params = torch.broadcast_tensors(
-        *(
-            _as_float_tensor(p, device)
-            for p in (
-                defocus,
-                voltage,
-                spherical_aberration,
-                amplitude_contrast,
-                phase_shift,
-                strength,
-                snr_falloff,
-                highpass_nyquist,
-            )
-        )
+        *(_as_float_tensor(name, p, device) for name, p in named_params.items())
     )
     (
         defocus,
@@ -260,7 +260,8 @@ def _mirror_pad(images: torch.Tensor, pads: list[int]) -> torch.Tensor:
         return images
     ndim = len(pads)
     batch, spatial = images.shape[:-ndim], images.shape[-ndim:]
-    # reflect mode needs a single leading (channel) dimension
+    # F.pad's reflect mode only takes inputs with one or two dimensions before
+    # the padded ones, so flatten any batch dimensions into one
     widths = [width for pad in reversed(pads) for width in (pad, pad)]
     padded = F.pad(images.reshape(-1, *spatial), widths, mode="reflect")
     return padded.reshape(*batch, *padded.shape[-ndim:])
@@ -299,7 +300,8 @@ def ctf_deconvolve(
         Real images ``(..., h, w)`` with ``ndim=2``, or volumes
         ``(..., d, h, w)`` with ``ndim=3``. The leading dimensions must
         broadcast against the batch shape of the parameters, e.g. ``(b, h, w)``
-        images with ``(b,)`` defocus values.
+        images with ``(b,)`` defocus values. Tensor parameters must be on the
+        same device as ``images``.
     pixel_size: float
         Pixel size in Å.
     defocus: float | torch.Tensor

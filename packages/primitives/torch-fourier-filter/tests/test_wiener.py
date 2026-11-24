@@ -137,6 +137,16 @@ def test_ctf_deconvolution_filter_rejects_bad_input():
         ctf_deconvolution_filter((32,), 4.0, 3.0)
     with pytest.raises(ValueError, match="highpass_nyquist"):
         ctf_deconvolution_filter((32, 32), 4.0, 3.0, highpass_nyquist=0.0)
+    with pytest.raises(TypeError):
+        ctf_deconvolution_filter((32, 32), 4.0, 3.0, 300.0)  # keyword-only
+
+
+@pytest.mark.parametrize("name", ["strength", "snr_falloff", "snr"])
+def test_ctf_deconvolution_filter_rejects_tensors_on_another_device(name):
+    """Tensor parameters must be on the device of defocus, not moved silently."""
+    elsewhere = torch.tensor(1.0, device="meta")
+    with pytest.raises(ValueError, match=f"{name} is on meta"):
+        ctf_deconvolution_filter((32, 32), 4.0, torch.tensor(3.0), **{name: elsewhere})
 
 
 def test_wiener_filter_zero_snr_gives_zero():
