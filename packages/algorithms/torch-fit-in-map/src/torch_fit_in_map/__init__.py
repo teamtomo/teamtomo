@@ -24,7 +24,7 @@ from ._config import (
 )
 from ._exhaustive import _exhaustive_topk, exhaustive_search
 from ._gradient import gradient_refine
-from ._preprocess import crop_or_pad_to_shape, normalise_voxel_sizes
+from ._preprocess import crop_or_pad_to_shape, normalize_voxel_sizes
 from ._projection import projection_align
 from ._result import AlignmentResult
 from ._simulate import (
@@ -53,7 +53,7 @@ def fit_map_in_map(
     """Fit *mobile_map* into *reference_map* via exhaustive SO(3) search + refinement.
 
     Both volumes must share the same voxel size.  Call
-    :func:`normalise_voxel_sizes` first if they differ (the
+    :func:`normalize_voxel_sizes` first if they differ (the
     ``torch-fit-in-map-cli`` file wrappers handle this automatically).
 
     Parameters
@@ -329,7 +329,7 @@ def fit_map_in_structure(
         device=mobile_map.device,
     )
 
-    mobile_map, simulated, common_px = normalise_voxel_sizes(
+    mobile_map, simulated, common_px = normalize_voxel_sizes(
         simulated, mobile_map, pixel_size_angstroms, pixel_size_angstroms
     )
 
@@ -413,7 +413,7 @@ def fit_structure_in_map(
         device=reference_map.device,
     )
 
-    reference_map, simulated, common_px = normalise_voxel_sizes(
+    reference_map, simulated, common_px = normalize_voxel_sizes(
         reference_map, simulated, pixel_size_angstroms, pixel_size_angstroms
     )
     simulated = crop_or_pad_to_shape(simulated, tuple(reference_map.shape[-3:]))  # type: ignore[arg-type]
@@ -454,6 +454,6 @@ __all__ = [
     "fit_map_in_structure",
     "fit_structure_in_map",
     "gradient_refine",
-    "normalise_voxel_sizes",
+    "normalize_voxel_sizes",
     "projection_align",
 ]
