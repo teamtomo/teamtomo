@@ -84,3 +84,72 @@ jobs:
       # in the workspace, so no need to specify paths here.
       - name: Run all tests
         run: uv run pytest --cov=packages/ --cov-report=xml
+
+  # The `test` job installs no Mojo, so torch-fourier-slice's Mojo kernel tests
+  # (including the Mojo-vs-reference parity tests) skip there. This job installs
+  # the `mojo` extra and runs those tests on the CPU; GPU tests skip (no GPU).
+  test-mojo:
+    name: Test torch-fourier-slice | Mojo kernels (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MOJO_DIR: packages/primitives/torch-fourier-slice/src/torch_fourier_slice/experimental/_backend/_mojo
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            uv.lock
+
+      - name: Install workspace dependencies with the mojo extra
+        run: uv sync --all-packages --group test --extra mojo --locked
+
+      # `mojo build` compiles for the host CPU (and GPU, if any), and the
+      # importer names the compiled module by a hash of the sources only. Key
+      # the cache on the Mojo/MAX versions and the effective build target too,
+      # so a runner with a different CPU never loads an incompatible build.
+      - name: Identify the Mojo toolchain and build target
+        id: mojo
+        run: |
+          uv run --no-sync mojo --version
+          uv run --no-sync mojo build --print-effective-target | tee "$RUNNER_TEMP/mojo-target.txt"
+          versions=$(uv run --no-sync python -c "import importlib.metadata as m; print(f\"mojo{m.version('mojo')}-max{m.version('max')}\")")
+          echo "versions=$versions" >> "$GITHUB_OUTPUT"
+          echo "target=$(sha256sum "$RUNNER_TEMP/mojo-target.txt" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore compiled Mojo kernels
+        id: mojo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.MOJO_DIR }}/__mojocache__
+          key: tfs-mojo-${{ steps.mojo.outputs.versions }}-${{ steps.mojo.outputs.target }}-${{ hashFiles(format('{0}/**/*.mojo', env.MOJO_DIR)) }}
+
+      # Fails the job if the kernels don't build or load: otherwise every Mojo
+      # test would skip and the job would pass without testing them.
+      - name: Build and load the Mojo kernels
+        run: |
+          uv run --no-sync python - <<'EOF'
+          from torch_fourier_slice import experimental
+
+          if not experimental.mojo_kernels_available():
+              experimental.kernels()  # re-raises the build/load error
+          print("Mojo kernels loaded")
+          EOF
+
+      # Saved before the tests run, so a test failure doesn't discard the build.
+      - name: Save compiled Mojo kernels
+        if: steps.mojo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.MOJO_DIR }}/__mojocache__
+          key: ${{ steps.mojo-cache.outputs.cache-primary-key }}
+
+      # -rs lists each skip reason, so the log shows only the GPU tests skip.
+      - name: Run torch-fourier-slice tests
+        run: uv run --no-sync pytest packages/primitives/torch-fourier-slice/tests -rs
