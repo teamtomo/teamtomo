@@ -27,7 +27,7 @@ Shared parameters (both forms):
   rotation), xyz unless ``zyx_shifts=True``; ``shifts_2d``: optional
   ``(..., bp, 2)`` shifts in the projection plane (after rotation), xy unless
   ``yx_shifts=True``.
-- ``output_shape``: ``(H_out, W_out)`` square/even, default ``(h, h)``. The
+- ``output_shape``: ``(H_out, W_out)`` square, of any side, default ``(h, h)``. The
   volume and the slices share a pixel size, so slice frequency index ``k``
   samples the volume at ``k * h / H_out``, so a volume padded to twice the
   output's side is oversampled twofold.
@@ -143,7 +143,7 @@ def extract_central_slices_rfft_3d(
     """Extract 2D central slices from one 3D rfft volume (Mojo kernel).
 
     ``volume_rfft`` is a complex rfft volume ``(d, h, w)`` with DC at the origin
-    (``w = h//2+1``, cubic, even); its device selects the CPU/GPU backend. See the
+    (``w = h//2+1``, cubic, any side); its device selects the CPU/GPU backend. See the
     module docstring for the shared pose / sampling parameters.
 
     Returns complex ``(bp, h, w)`` central slices (rfft, DC at origin) on the
@@ -255,7 +255,7 @@ def extract_central_lines_rfft_3d(
     Parameters
     ----------
     volume_rfft : torch.Tensor
-        Complex rfft volume ``(d, h, w)`` (DC at origin, cubic, even). Its device
+        Complex rfft volume ``(d, h, w)`` (DC at origin, cubic). Its device
         selects the CPU/GPU backend.
     directions : torch.Tensor
         Real ``(3,)`` / ``(bp, 3)`` **unit** direction vectors on the sphere;
@@ -265,7 +265,7 @@ def extract_central_lines_rfft_3d(
         Optional ``(..., bp, 3)`` shift in the volume frame; applied as the
         per-node ``s * (u . t)`` phase ramp (the design's translation model).
     output_length : int | None
-        Even box length ``L`` of the line; the node is the rfft half-line of
+        Box length ``L`` of the line, even or odd; the node is the rfft half-line of
         length ``L//2+1``. Defaults to the volume side ``h``. Line frequency
         index ``k`` samples the volume at ``k * h / L`` along the direction.
     fftfreq_max, interpolation
@@ -361,10 +361,10 @@ def extract_central_lines_rfft_2d(
 ) -> torch.Tensor:
     """Extract 1D central lines from one 2D rfft image (Mojo kernel).
 
-    ``image_rfft`` is complex ``(h, w)`` (DC at origin, ``w = h//2+1``, even).
+    ``image_rfft`` is complex ``(h, w)`` (DC at origin, ``w = h//2+1``).
     ``directions`` are ``(2,)`` / ``(bp, 2)`` unit vectors; ``shifts_2d`` are
     optional ``(..., bp, 2)`` image translations (phase ramp). Both are xy unless
-    ``yx_directions`` / ``yx_shifts`` is True. ``output_length`` is the even line
+    ``yx_directions`` / ``yx_shifts`` is True. ``output_length`` is the line
     length ``L`` (the image side ``h`` by default); line frequency index ``k``
     samples the image at ``k * h / L`` along the direction. Returns complex
     ``(bp, L // 2 + 1)`` half-lines on the input device.

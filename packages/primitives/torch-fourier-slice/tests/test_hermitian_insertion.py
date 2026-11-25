@@ -13,6 +13,7 @@ and that the autograd backward passes are exact transposes. They run on torch, t
 experimental Mojo kernels and the experimental torch reference.
 """
 
+import itertools
 from types import SimpleNamespace
 
 import numpy as np
@@ -180,7 +181,14 @@ def _experimental_lines(
     }
 
     def insert(lines, weights=None):
-        return insert_fn(lines, output_shape, directions, weights=weights, **options)
+        return insert_fn(
+            lines,
+            output_shape,
+            directions,
+            weights=weights,
+            line_length=sidelength,
+            **options,
+        )
 
     def extract(array):
         return extract_fn(
@@ -202,33 +210,34 @@ CASES = [
     pytest.param(lambda: _torch_slices(16, _rotations()), id="torch-slices-even"),
     pytest.param(lambda: _torch_slices(15, _rotations()), id="torch-slices-odd"),
 ]
-for _interpolation in ("linear", "cubic"):
+for _interpolation, _n in itertools.product(("linear", "cubic"), (16, 15)):
+    _parity = "even" if _n % 2 == 0 else "odd"
     CASES += [
         pytest.param(
-            lambda i=_interpolation: _reference_slices(16, _rotations(), i),
-            id=f"reference-slices-{_interpolation}",
+            lambda i=_interpolation, n=_n: _reference_slices(n, _rotations(), i),
+            id=f"reference-slices-{_parity}-{_interpolation}",
         ),
         pytest.param(
-            lambda i=_interpolation: _mojo_slices(16, _rotations(), i),
-            id=f"mojo-slices-{_interpolation}",
+            lambda i=_interpolation, n=_n: _mojo_slices(n, _rotations(), i),
+            id=f"mojo-slices-{_parity}-{_interpolation}",
             marks=requires_mojo,
         ),
         pytest.param(
-            lambda i=_interpolation: _reference_lines(16, _directions(3), i),
-            id=f"reference-lines-3d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _reference_lines(n, _directions(3), i),
+            id=f"reference-lines-3d-{_parity}-{_interpolation}",
         ),
         pytest.param(
-            lambda i=_interpolation: _reference_lines(16, _directions(2), i),
-            id=f"reference-lines-2d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _reference_lines(n, _directions(2), i),
+            id=f"reference-lines-2d-{_parity}-{_interpolation}",
         ),
         pytest.param(
-            lambda i=_interpolation: _mojo_lines(16, _directions(3), i),
-            id=f"mojo-lines-3d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _mojo_lines(n, _directions(3), i),
+            id=f"mojo-lines-3d-{_parity}-{_interpolation}",
             marks=requires_mojo,
         ),
         pytest.param(
-            lambda i=_interpolation: _mojo_lines(16, _directions(2), i),
-            id=f"mojo-lines-2d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _mojo_lines(n, _directions(2), i),
+            id=f"mojo-lines-2d-{_parity}-{_interpolation}",
             marks=requires_mojo,
         ),
     ]
@@ -265,6 +274,18 @@ OPTION_CASES = [
         id="reference-slices-oversampling-2-nyquist",
     ),
     pytest.param(
+        lambda: _reference_slices(15, _rotations(), oversampling=16 / 15),
+        id="reference-slices-odd-into-even",
+    ),
+    pytest.param(
+        lambda: _reference_lines(15, _directions(3), oversampling=16 / 15),
+        id="reference-lines-3d-odd-into-even",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(2), oversampling=15 / 16),
+        id="reference-lines-2d-even-into-odd",
+    ),
+    pytest.param(
         lambda: _reference_lines(16, _directions(3), cutoff=None, oversampling=2.0),
         id="reference-lines-3d-oversampling-2-nyquist",
     ),
@@ -291,6 +312,21 @@ OPTION_CASES = [
     pytest.param(
         lambda: _mojo_slices(16, _rotations(), cutoff=None, oversampling=2.0),
         id="mojo-slices-oversampling-2-nyquist",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(15, _rotations(), oversampling=16 / 15),
+        id="mojo-slices-odd-into-even",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(15, _directions(3), oversampling=16 / 15),
+        id="mojo-lines-3d-odd-into-even",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(2), oversampling=15 / 16),
+        id="mojo-lines-2d-even-into-odd",
         marks=requires_mojo,
     ),
     pytest.param(
@@ -507,16 +543,16 @@ def _finite_difference_error(loss_fn, param, eps):
     ],
 )
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("n", [16, 15])
 def test_insertion_pose_gradient_includes_self_mirror_samples(
-    make_slices, interpolation
+    make_slices, interpolation, n
 ):
     """Pose gradients of the insertion with the cutoff at the Nyquist radius n/2.
 
     The sphere |k| <= n/2 keeps every sample inside the Nyquist box, where the
     insertion is smooth in the pose, and it still includes the self-mirror samples
-    at |k| = 0 and n/2 that the insertion scales by 0.5.
+    at |k| = 0 and (even n) n/2 that the insertion scales by 0.5.
     """
-    n = 16
     target = _rfft(_random_real((n, n, n), seed=3), 3)
     slices = _rfft(_random_real((N_POSES, n, n), seed=0), 2)
 
@@ -536,11 +572,11 @@ def test_insertion_pose_gradient_includes_self_mirror_samples(
     ],
 )
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("n", [16, 15])
 def test_line_insertion_pose_gradient_includes_self_mirror_samples(
-    make_lines, interpolation
+    make_lines, interpolation, n
 ):
     """The line analogue of the test above."""
-    n = 16
     target = _rfft(_random_real((n, n, n), seed=3), 3)
     lines = _rfft(_random_real((N_POSES, n), seed=0), 1)
 

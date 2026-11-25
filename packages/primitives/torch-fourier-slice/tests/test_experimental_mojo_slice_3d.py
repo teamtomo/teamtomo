@@ -169,13 +169,13 @@ def _gpu_usable() -> bool:
 
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
-def test_gpu_matches_cpu():
+@pytest.mark.parametrize("d", [48, 47])
+def test_gpu_matches_cpu(d):
     """A GPU-device input reproduces the CPU result and returns on that device."""
     from scipy.spatial.transform import Rotation
 
     dev = _gpu_device()
     torch.manual_seed(0)
-    d = 48
     volume = torch.randn(d, d, d, dtype=torch.float32)
     rfft, _ = _rfft_layouts(volume)
     rot = torch.tensor(
@@ -415,7 +415,8 @@ def test_rfft_layer_rank_single_and_multichannel():
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
 @pytest.mark.parametrize("interp", ["linear", "cubic"])
-def test_gpu_scatter_matches_cpu(interp):
+@pytest.mark.parametrize("d", [24, 23])
+def test_gpu_scatter_matches_cpu(interp, d):
     """The GPU scatter (backprojection) reproduces the CPU kernel + grad on device.
 
     Parametrized over interpolation since the GPU scatter kernels use different
@@ -426,7 +427,6 @@ def test_gpu_scatter_matches_cpu(interp):
 
     dev = _gpu_device()
     torch.manual_seed(0)
-    d = 24
     P = 8
     dh = d // 2 + 1
     rot = torch.tensor(
@@ -874,11 +874,12 @@ def test_shifts_3d_gradients(interp):
 
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
-def test_gpu_pose_weight_gradients_match_cpu():
+@pytest.mark.parametrize("d", [24, 23])
+def test_gpu_pose_weight_gradients_match_cpu(d):
     """The GPU rotation/shift/weight backward kernels reproduce the CPU grads."""
     dev = _gpu_device()
     torch.manual_seed(0)
-    d, P = 24, 4
+    P = 4
     dh = d // 2 + 1
     vol = torch.randn(d, d, dh, dtype=torch.complex64)
     rot0 = _rand_rot(P, 1).unsqueeze(0)

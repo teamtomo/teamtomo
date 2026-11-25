@@ -57,8 +57,9 @@ def _project(
     # de-apodize *before* the transform so the interpolation puts it back
     volume = volume / gridding_correction(box, interpolation, volume.device)
 
+    # the centre voxel (n // 2) to the origin; for odd n only ifftshift does that
     volume_rfft = torch.fft.rfftn(
-        torch.fft.fftshift(volume, dim=(-3, -2, -1)), dim=(-3, -2, -1)
+        torch.fft.ifftshift(volume, dim=(-3, -2, -1)), dim=(-3, -2, -1)
     )
     # the rfft layer takes the inverse (image -> volume) rotation of the active
     # rotation the real-space layer accepts
@@ -106,8 +107,8 @@ def project_3d_to_2d(
     Parameters
     ----------
     volume : torch.Tensor
-        Real cubic volume ``(d, d, d)`` with an even side length. Its device
-        selects the CPU/GPU backend.
+        Real cubic volume ``(d, d, d)``, centred on voxel ``d // 2``, of any
+        side. Its device selects the CPU/GPU backend.
     rotation_matrices : torch.Tensor
         Real ``(3, 3)`` or ``(bp, 3, 3)`` rotation matrices (see ``zyx_matrices``).
         Each image is a projection along z of the volume rotated by its matrix

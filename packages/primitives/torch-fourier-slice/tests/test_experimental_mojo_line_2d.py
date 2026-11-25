@@ -375,10 +375,11 @@ def test_2d_line_rank_single_and_multichannel():
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
 @pytest.mark.parametrize("interp", ["linear", "cubic"])
-def test_gpu_2d_line_matches_cpu(interp):
+@pytest.mark.parametrize("H", [96, 95])
+def test_gpu_2d_line_matches_cpu(interp, H):
     dev = _gpu_device()
     torch.manual_seed(0)
-    H, P = 96, 8
+    P = 8
     Hh = H // 2 + 1
     rfft = _img_rfft(torch.randn(H, H))
     u = _rand_dirs(P, 3)
@@ -395,7 +396,13 @@ def test_gpu_2d_line_matches_cpu(interp):
     lines = torch.randn(P, Hh, dtype=torch.complex64)
     w = torch.rand(P, Hh)
     cv, cw = insert_central_lines_rfft_2d(
-        lines, (H,) * 2, u, weights=w, interpolation=interp, yx_directions=True
+        lines,
+        (H,) * 2,
+        u,
+        weights=w,
+        interpolation=interp,
+        yx_directions=True,
+        line_length=H,
     )
     gv, gw = insert_central_lines_rfft_2d(
         lines.to(dev),
@@ -404,6 +411,7 @@ def test_gpu_2d_line_matches_cpu(interp):
         weights=w.to(dev),
         interpolation=interp,
         yx_directions=True,
+        line_length=H,
     )
     assert gv.device.type == dev
     assert torch.allclose(gv.cpu(), cv, atol=1e-4)
@@ -411,11 +419,12 @@ def test_gpu_2d_line_matches_cpu(interp):
 
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
-def test_gpu_2d_line_grads_match_cpu():
+@pytest.mark.parametrize("H", [48, 47])
+def test_gpu_2d_line_grads_match_cpu(H):
     """GPU direction / weight backward kernels reproduce the CPU grads."""
     dev = _gpu_device()
     torch.manual_seed(0)
-    H, P = 48, 4
+    P = 4
     Hh = H // 2 + 1
     img = torch.randn(H, Hh, dtype=torch.complex64)
     u0 = _rand_dirs(P, 1)
@@ -435,7 +444,12 @@ def test_gpu_2d_line_grads_match_cpu():
         u = u0.clone().to(device).requires_grad_(True)
         w = wts0.clone().to(device).requires_grad_(True)
         dv, _ = insert_central_lines_rfft_2d(
-            lines.to(device), (H,) * 2, directions=u, weights=w, yx_directions=True
+            lines.to(device),
+            (H,) * 2,
+            directions=u,
+            weights=w,
+            yx_directions=True,
+            line_length=H,
         )
         (dv.abs() ** 2).sum().backward()
         return u.grad.cpu(), w.grad.cpu()
@@ -450,6 +464,7 @@ def test_gpu_2d_line_grads_match_cpu():
             directions=u,
             weights=wts0.to(device),
             yx_directions=True,
+            line_length=H,
         )
         (wimg * weight_cotangent.to(device)).sum().backward()
         return u.grad.cpu()

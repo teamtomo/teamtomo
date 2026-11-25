@@ -57,7 +57,7 @@ from torch_fourier_slice.experimental import (
 
 assert mojo_kernels_available()          # False if the `mojo` package is missing
 
-volume = ...                             # real (d, d, d), even side
+volume = ...                             # real (d, d, d), any side
 rotations = ...                          # (bp, 3, 3) xyz rotations of the volume
 
 images = project_3d_to_2d(volume, rotations)               # CPU  -> CPU kernel
@@ -77,7 +77,7 @@ Fourier space and don't want a round trip per call:
 ```python
 from torch_fourier_slice.experimental import extract_central_slices_rfft_3d
 
-volume_rfft = torch.fft.rfftn(torch.fft.fftshift(volume, dim=(-3, -2, -1)),
+volume_rfft = torch.fft.rfftn(torch.fft.ifftshift(volume, dim=(-3, -2, -1)),
                               dim=(-3, -2, -1))
 # the rfft layer takes the passive rotation: transpose to match project_3d_to_2d
 slices = extract_central_slices_rfft_3d(volume_rfft.contiguous(), rotations.mT)
@@ -98,6 +98,11 @@ from torch_fourier_slice.experimental import insert_central_slices_rfft_3d
 
 volume_rfft, density = insert_central_slices_rfft_3d(slices, (d, d, d), rotations.mT)
 ```
+
+Sides can be even or odd, as in the canonical layer; the real-space functions
+take arrays centred on index `n // 2` either way. A line of length `2m` and one of
+`2m + 1` have the same rfft width, so a line insertion takes the lines' length as
+`line_length` (even by default, as `torch.fft.irfft` assumes).
 
 Interpolation: `interpolation="linear"` (trilinear, default) or `"cubic"`
 (tricubic Catmull-Rom) — selected at **compile time** per call (§6). The

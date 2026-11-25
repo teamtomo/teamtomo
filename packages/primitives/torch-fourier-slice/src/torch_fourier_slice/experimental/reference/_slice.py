@@ -123,8 +123,6 @@ def extract_slices_3d(
     else:
         if len(output_shape) != 2 or output_shape[0] != output_shape[1]:
             raise ValueError(f"output_shape {output_shape} must be square")
-        if output_shape[0] % 2 != 0:
-            raise ValueError(f"output side length {output_shape[0]} must be even")
         proj_sidelength = int(output_shape[0])
     radius = (
         proj_sidelength / 2.0
@@ -183,8 +181,8 @@ def insert_slices_3d(
     if projections.dim() != 4 or not projections.is_complex():
         raise ValueError("projections must be complex (bv, bp, h, w)")
     bv, bp, h, w = projections.shape
-    if h % 2 != 0 or h != (w - 1) * 2:
-        raise ValueError("projections must be square with even box (h == 2*(w-1))")
+    if w != h // 2 + 1:
+        raise ValueError("projections must be square rfft images (w == h // 2 + 1)")
     if weights is None:  # unit weights: the weight volume is the density
         weights = torch.ones(
             projections.shape, dtype=torch.float32, device=projections.device
