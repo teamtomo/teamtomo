@@ -14,6 +14,8 @@ and check the experimental backends agree with torch everywhere, edge included.
 """
 
 import itertools
+import re
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -26,6 +28,7 @@ from torch_fourier_slice import (
     extract_central_slices_rfft_3d_multichannel,
     insert_central_slices_rfft_3d,
 )
+from torch_fourier_slice._dft_utils import NYQUIST_TOLERANCE
 from torch_fourier_slice.experimental import (
     extraction,
     insertion,
@@ -322,3 +325,13 @@ def test_backends_agree_on_backprojection(backend, sidelength):
         canonical_volume,
         atol=1e-5 * canonical_volume.abs().max().item(),
     )
+
+
+def test_backends_share_the_nyquist_tolerance():
+    """The Mojo kernels mirror the one edge tolerance that Python defines."""
+    common = Path(reference.__file__).parents[1] / "_backend" / "_mojo" / "_common.mojo"
+    match = re.search(
+        r"comptime NYQUIST_TOLERANCE: Float32 = (\S+)", common.read_text()
+    )
+    assert match is not None
+    assert float(match.group(1)) == NYQUIST_TOLERANCE
