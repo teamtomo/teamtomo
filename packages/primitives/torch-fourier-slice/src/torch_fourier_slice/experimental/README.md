@@ -47,7 +47,10 @@ A CPU tensor runs the CPU kernel; an `mps`/`cuda` tensor runs the GPU
 kernel; the output comes back on the input's device.
 
 There are two layers. Reach for the **real-space** one unless you have a reason
-not to — it handles padding, the FFTs and the gridding correction (§7) for you:
+not to — it handles padding, the FFTs and the gridding correction (§7) for you.
+Like the canonical `project_3d_to_2d`, it subtracts the volume's edge mean before
+padding and adds that constant's projection back afterwards, so a non-zero
+background doesn't ring against the padding:
 
 ```python
 import torch
@@ -57,7 +60,7 @@ from torch_fourier_slice.experimental import (
 
 assert mojo_kernels_available()          # False if the `mojo` package is missing
 
-volume = ...                             # real (d, d, d), even side
+volume = ...                             # real (d, d, d), any side
 rotations = ...                          # (bp, 3, 3) xyz rotations of the volume
 
 images = project_3d_to_2d(volume, rotations)               # CPU  -> CPU kernel
@@ -77,11 +80,44 @@ Fourier space and don't want a round trip per call:
 ```python
 from torch_fourier_slice.experimental import extract_central_slices_rfft_3d
 
-volume_rfft = torch.fft.rfftn(torch.fft.fftshift(volume, dim=(-3, -2, -1)),
+volume_rfft = torch.fft.rfftn(torch.fft.ifftshift(volume, dim=(-3, -2, -1)),
                               dim=(-3, -2, -1))
 # the rfft layer takes the passive rotation: transpose to match project_3d_to_2d
 slices = extract_central_slices_rfft_3d(volume_rfft.contiguous(), rotations.mT)
 ```
+
+The array sizes set the sampling. A slice or line and the volume or image it is
+cut from or inserted into share a pixel size, so frequency index `k` of a side-`m`
+slice sits at `k * n / m` in a side-`n` volume: a volume padded to twice the
+slices' side is sampled twofold oversampled. Extraction takes the size of what it
+cuts as `output_shape` (`output_length` for lines; the array's side by default).
+Insertion takes the real-space shape of what it builds as `volume_shape`
+(`image_shape` for 2D lines), as `torch_fourier_slice.insert_central_slices_rfft_3d`
+does, and always returns `(data, weights)`. Without `weights` every input sample
+weighs one, so the weights are the sampling density:
+
+```python
+from torch_fourier_slice.experimental import insert_central_slices_rfft_3d
+
+volume_rfft, density = insert_central_slices_rfft_3d(slices, (d, d, d), rotations.mT)
+```
+
+Sides can be even or odd, as in the canonical layer; the real-space functions
+take arrays centred on index `n // 2` either way. A line of length `2m` and one of
+`2m + 1` have the same rfft width, so a line insertion takes the lines' length as
+`line_length` (even by default, as `torch.fft.irfft` assumes).
+
+Every function's frequency cutoff `fftfreq_max` (cycles/pixel of the slice or
+line) defaults to `0.5`, the Nyquist circle. `None` keeps every frequency, a
+slice's corners included, as the canonical functions do by default. A line has
+no corners, so `None` and `0.5` give the same lines.
+
+An anisotropic magnification `A` (real space, 2 x 2, yx), passed as
+`transform_matrix` to the slice functions and the real-space ones, is applied
+inside the kernels: each slice pixel at frequency `k` samples `(A^-1)^T k` before
+the Ewald offset and the rotation, its value scaled by `1 / |det A|`. That costs
+no second interpolation, and the insertion and every gradient kernel apply the
+same map (the matrix itself gets no gradient).
 
 Interpolation: `interpolation="linear"` (trilinear, default) or `"cubic"`
 (tricubic Catmull-Rom) — selected at **compile time** per call (§6). The
@@ -121,7 +157,7 @@ Python side (`experimental/`):
 
 | file | role |
 |------|------|
-| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` (+ `_multichannel`) — padding, FFTs, gridding correction |
+| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` and `project_2d_to_1d` (+ `_multichannel`) — edge mean, padding, FFTs, gridding correction |
 | `extraction.py`, `insertion.py` | **Fourier API**: 3D volume ↔ 2D central slices (posed by a rotation matrix), 3D volume ↔ 1D central lines (posed by a direction), 2D image ↔ 1D central lines |
 | `_gridding.py` | the de-apodization correction for each interpolation kernel (§7) |
 | `_conventions.py` | translates the canonical pose / Ewald arguments into kernel conventions |

@@ -16,18 +16,21 @@ import torch
 
 from ._common import (
     input_line_scale,
-    reconstruction_volume_shape,
+    radius_cutoff,
     reduce_to,
+    sampling_scale,
     symmetrise_hermitian_planes,
+    zero_unused_grads,
 )
 from ._device import prepare_launch
 from ._loader import device_session, kernels
 from ._validation import (
     KernelParams,
-    even_line_sidelength,
     interp_code,
     prep_directions_3d,
     prep_shifts_3d,
+    resolve_line_length,
+    rfft_volume_shape,
     validate_reconstruction,
 )
 
@@ -36,7 +39,6 @@ def run_extract_lines_3d(
     reconstruction: torch.Tensor,
     directions: torch.Tensor,
     output_length: int | None,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     shifts_3d: torch.Tensor | None = None,
@@ -58,17 +60,11 @@ def run_extract_lines_3d(
         line_sidelength = sidelength
     else:
         line_sidelength = int(output_length)
-        if line_sidelength % 2 != 0:
-            raise ValueError(f"output_length {line_sidelength} must be even")
     line_half = line_sidelength // 2 + 1
 
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(sidelength, line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=0,
         has_weights=0,
@@ -77,6 +73,7 @@ def run_extract_lines_3d(
         interp=interp_code(interpolation),
         ewald_curvature=0.0,
         has_shifts_3d=int(has_shifts_3d),
+        line_length=line_sidelength,
     )
     line_r = torch.zeros(bv, bp, line_half, 2, dtype=torch.float32, device=tgt)
     rec_r = torch.view_as_real(
@@ -99,11 +96,11 @@ def run_insert_lines_3d(
     volume_shape: tuple[int, int, int],
     *,
     weights: torch.Tensor | None = None,
-    oversampling: float = 1.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     interpolation: str = "linear",
     friedel_double: bool = False,
     shifts_3d: torch.Tensor | None = None,
+    line_length: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Insert complex ``lines`` ``(bv, bp, w)`` into a 3D rfft volume.
 
@@ -141,14 +138,10 @@ def run_insert_lines_3d(
     else:
         w_in = torch.zeros(bv, bp, w, dtype=torch.float32, device=tgt)  # unused
 
-    line_sidelength = even_line_sidelength(w)
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    line_sidelength = resolve_line_length(w, line_length)
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(sidelength, line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=0,
         has_weights=int(weights is not None),
@@ -157,6 +150,7 @@ def run_insert_lines_3d(
         interp=interp_code(interpolation),
         ewald_curvature=0.0,
         has_shifts_3d=int(has_shifts_3d),
+        line_length=line_sidelength,
     )
     bufs = (lines_r, w_in, dir_t, shifts_3d_t, vol_r, wvol)
     if use_gpu:
@@ -177,11 +171,11 @@ def run_line_3d_pose_grad(
     directions: torch.Tensor,
     line_pixels: torch.Tensor,
     *,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     insert: bool,
     shifts_3d: torch.Tensor | None = None,
+    line_length: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Gradients w.r.t. line directions and 3D shifts (pose backward kernel).
 
@@ -201,7 +195,7 @@ def run_line_3d_pose_grad(
     bv_shift_3d = shifts_3d_t.shape[0]
     if line_pixels.dim() == 2:
         line_pixels = line_pixels.unsqueeze(0)
-    line_sidelength = even_line_sidelength(line_pixels.shape[2])
+    line_sidelength = resolve_line_length(line_pixels.shape[2], line_length)
 
     vol_r = torch.view_as_real(
         volume.to(device=tgt, dtype=torch.complex64).contiguous()
@@ -212,13 +206,9 @@ def run_line_3d_pose_grad(
     grad_dir = torch.zeros(bv_dir, bp, 3, dtype=torch.float32, device=tgt)
     grad_shift_3d = torch.zeros(bv_shift_3d, bp, 3, dtype=torch.float32, device=tgt)
 
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(volume.shape[-2], line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=0,
         has_weights=0,
@@ -227,6 +217,7 @@ def run_line_3d_pose_grad(
         interp=interp_code(interpolation),
         ewald_curvature=0.0,
         has_shifts_3d=int(has_shifts_3d),
+        line_length=line_sidelength,
     )
     bufs = (vol_r, dir_t, shifts_3d_t, pix_r, grad_dir, grad_shift_3d)
     if insert:
@@ -254,7 +245,6 @@ def run_line_3d_weight_grad(
     directions: torch.Tensor,
     line_sidelength: int,
     *,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
 ) -> torch.Tensor:
@@ -274,13 +264,9 @@ def run_line_3d_weight_grad(
 
     gwvol = grad_weight_vol.to(device=tgt, dtype=torch.float32).contiguous()
     grad_weight = torch.zeros(bv, bp, line_half, dtype=torch.float32, device=tgt)
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(grad_weight_vol.shape[-2], line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=0,
         has_weights=0,
@@ -289,6 +275,7 @@ def run_line_3d_weight_grad(
         interp=interp_code(interpolation),
         ewald_curvature=0.0,
         has_shifts_3d=0,
+        line_length=line_sidelength,
     )
     bufs = (gwvol, dir_t, grad_weight)
     fn = (
@@ -319,7 +306,6 @@ class ExtractLines3D(torch.autograd.Function):
         directions: torch.Tensor,
         shifts_3d: torch.Tensor | None,
         output_length: int | None,
-        oversampling: float,
         fftfreq_max: float | None,
         interpolation: str,
     ) -> torch.Tensor:
@@ -327,7 +313,6 @@ class ExtractLines3D(torch.autograd.Function):
             reconstruction,
             directions,
             output_length,
-            oversampling,
             fftfreq_max,
             interpolation,
             shifts_3d,
@@ -336,10 +321,12 @@ class ExtractLines3D(torch.autograd.Function):
         if reconstruction.dim() == 3:
             rec4d = reconstruction.unsqueeze(0)
         ctx.vol_shape = (rec4d.shape[1], rec4d.shape[2], rec4d.shape[3])
+        ctx.line_length = (
+            rec4d.shape[2] if output_length is None else int(output_length)
+        )
         ctx.reconstruction = reconstruction
         ctx.directions = directions
         ctx.shifts_3d = shifts_3d
-        ctx.oversampling = oversampling
         ctx.fftfreq_max = fftfreq_max
         ctx.interpolation = interpolation
         ctx.input_dim = reconstruction.dim()
@@ -357,11 +344,11 @@ class ExtractLines3D(torch.autograd.Function):
                 grad_line,
                 ctx.directions,
                 ctx.vol_shape,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 friedel_double=False,
                 shifts_3d=ctx.shifts_3d,
+                line_length=ctx.line_length,
             )
             if ctx.input_dim == 3:
                 grad_rec = grad_rec[0]
@@ -373,17 +360,17 @@ class ExtractLines3D(torch.autograd.Function):
                 ctx.reconstruction,
                 ctx.directions,
                 grad_line,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 insert=False,
                 shifts_3d=ctx.shifts_3d,
+                line_length=ctx.line_length,
             )
             if needs[1]:
                 grad_dir = reduce_to(gd, ctx.directions)
             if needs[2] and ctx.shifts_3d is not None and gs3 is not None:
                 grad_shift_3d = reduce_to(gs3, ctx.shifts_3d)
-        return (grad_rec, grad_dir, grad_shift_3d, None, None, None, None)
+        return (grad_rec, grad_dir, grad_shift_3d, None, None, None)
 
 
 class InsertLines3D(torch.autograd.Function):
@@ -393,6 +380,10 @@ class InsertLines3D(torch.autograd.Function):
     w.r.t. the input ``lines`` (adjoint line extraction of the symmetrised volume
     gradient, scaled by each sample's weight), ``weights`` (weight-splat adjoint),
     ``directions`` and ``shifts_3d`` (line pose-gradient kernel).
+
+    ``weights=None`` splats unit weights, so the weight volume is the sampling
+    density. An unused output's gradient arrives as ``None`` and its part of the
+    backward is skipped (``zero_unused_grads``).
 
     The weight volume depends on the directions too (the weights are splatted at
     the sample positions), so the direction gradient also gets the pose kernel
@@ -407,21 +398,24 @@ class InsertLines3D(torch.autograd.Function):
         weights: torch.Tensor | None,
         directions: torch.Tensor,
         shifts_3d: torch.Tensor | None,
-        oversampling: float,
+        volume_shape: tuple[int, int, int],
         fftfreq_max: float | None,
         interpolation: str,
+        line_length: int | None = None,
     ):
         lines4 = lines.unsqueeze(0) if lines.dim() == 2 else lines
-        line_sidelength = even_line_sidelength(lines4.shape[2])
+        line_sidelength = resolve_line_length(lines4.shape[2], line_length)
+        if weights is None:  # unit weights: the weight volume is the density
+            weights = torch.ones(lines.shape, dtype=torch.float32, device=lines.device)
         data_vol, weight_vol = run_insert_lines_3d(
             lines,
             directions,
-            reconstruction_volume_shape(line_sidelength, oversampling),
+            rfft_volume_shape(volume_shape),
             weights=weights,
-            oversampling=oversampling,
             fftfreq_max=fftfreq_max,
             interpolation=interpolation,
             friedel_double=True,
+            line_length=line_sidelength,
             shifts_3d=shifts_3d,
         )
         ctx.line_sidelength = line_sidelength
@@ -429,29 +423,26 @@ class InsertLines3D(torch.autograd.Function):
         ctx.weights = weights
         ctx.directions = directions
         ctx.shifts_3d = shifts_3d
-        ctx.oversampling = oversampling
         ctx.fftfreq_max = fftfreq_max
         ctx.interpolation = interpolation
         ctx.input_dim = lines.dim()
-        if weight_vol is None:
-            weight_vol = torch.empty(0, device=data_vol.device)
+        ctx.set_materialize_grads(False)  # unused outputs give None
         return data_vol, weight_vol
 
     @staticmethod
-    def backward(ctx, grad_data: torch.Tensor, grad_weight: torch.Tensor):
+    def backward(ctx, grad_data: torch.Tensor | None, grad_weight: torch.Tensor | None):
         needs = ctx.needs_input_grad
 
         g = None
-        if needs[0] or needs[2] or needs[3]:
+        if grad_data is not None and (needs[0] or needs[2] or needs[3]):
             g = symmetrise_hermitian_planes(grad_data)
 
         grad_lines = None
-        if needs[0]:
+        if needs[0] and g is not None:
             grad_lines = run_extract_lines_3d(
                 g,
                 ctx.directions,
                 ctx.line_sidelength,
-                ctx.oversampling,
                 ctx.fftfreq_max,
                 ctx.interpolation,
                 ctx.shifts_3d,
@@ -464,12 +455,11 @@ class InsertLines3D(torch.autograd.Function):
                 grad_lines = grad_lines[0]
 
         grad_weights = None
-        if needs[1] and ctx.weights is not None and grad_weight is not None:
+        if needs[1] and grad_weight is not None:
             gw = run_line_3d_weight_grad(
                 grad_weight,
                 ctx.directions,
                 ctx.line_sidelength,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
             )
@@ -480,19 +470,19 @@ class InsertLines3D(torch.autograd.Function):
         grad_dir = None
         grad_shift_3d = None
         pose_kwargs = {
-            "oversampling": ctx.oversampling,
             "fftfreq_max": ctx.fftfreq_max,
             "interpolation": ctx.interpolation,
             "insert": True,
+            "line_length": ctx.line_sidelength,
         }
         gd = None
-        if needs[2] or needs[3]:
+        if g is not None and (needs[2] or needs[3]):
             gd, gs3 = run_line_3d_pose_grad(
                 g, ctx.directions, ctx.lines, shifts_3d=ctx.shifts_3d, **pose_kwargs
             )
             if needs[3] and ctx.shifts_3d is not None and gs3 is not None:
                 grad_shift_3d = reduce_to(gs3, ctx.shifts_3d)
-        if needs[2] and ctx.weights is not None and grad_weight is not None:
+        if needs[2] and grad_weight is not None:
             # the weight volume's direction dependence: a real field (zero
             # imaginary part) and real line values make the kernel's
             # Re[a conj(b)] pairing the plain product weight * spatial gradient
@@ -505,4 +495,6 @@ class InsertLines3D(torch.autograd.Function):
             gd = gd_weight if gd is None else gd + gd_weight
         if needs[2] and gd is not None:
             grad_dir = reduce_to(gd, ctx.directions)
-        return (grad_lines, grad_weights, grad_dir, grad_shift_3d, None, None, None)
+        grads = (grad_lines, grad_weights, grad_dir, grad_shift_3d)
+        inputs = (ctx.lines, ctx.weights, ctx.directions, ctx.shifts_3d)
+        return (*zero_unused_grads(grads, inputs, needs[:4]), None, None, None, None)

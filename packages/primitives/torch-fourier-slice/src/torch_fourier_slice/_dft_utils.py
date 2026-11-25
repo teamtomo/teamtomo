@@ -6,6 +6,9 @@ import torch
 # Sample points further than this past the Nyquist box read as 0 / are dropped. A
 # small tolerance (in voxels) so rounding in the rotation doesn't drop points that
 # lie exactly on the Nyquist plane, e.g. under a float32 90 degree rotation.
+# The one edge tolerance of every backend: the Mojo kernels' `NYQUIST_TOLERANCE`
+# (experimental/_backend/_mojo/_common.mojo) mirrors it, and
+# tests/test_nyquist_edge.py checks they match.
 NYQUIST_TOLERANCE = 1e-3
 
 

@@ -1543,6 +1543,11 @@ def _extract_slice_3d_params(
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[3].shape[0]),
+        mag_yy=Float32(py=params_obj.mag_yy),
+        mag_yx=Float32(py=params_obj.mag_yx),
+        mag_xy=Float32(py=params_obj.mag_xy),
+        mag_xx=Float32(py=params_obj.mag_xx),
+        mag_scale=Float32(py=params_obj.mag_scale),
     )
 
 
@@ -1572,6 +1577,11 @@ def _slice_3d_grad_params(
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[3].shape[0]),
+        mag_yy=Float32(py=params_obj.mag_yy),
+        mag_yx=Float32(py=params_obj.mag_yx),
+        mag_xy=Float32(py=params_obj.mag_xy),
+        mag_xx=Float32(py=params_obj.mag_xx),
+        mag_scale=Float32(py=params_obj.mag_scale),
     )
 
 
@@ -1587,11 +1597,10 @@ def _line_2d_grad_params(
     friedel_double=1, no shift.
     """
     if weight_grad != 0:
-        var line_half_w = Int(py=bufs[2].shape[2])
         return FourierSliceParams(
             bp=Int(py=bufs[1].shape[1]),
             sidelength=Int(py=bufs[0].shape[1]),
-            proj_sidelength=2 * (line_half_w - 1),
+            proj_sidelength=Int(py=params_obj.line_length),
             bv_rot=Int(py=bufs[1].shape[0]),
             bv_shift_2d=1,
             oversampling=Float32(py=params_obj.oversampling),
@@ -1604,12 +1613,16 @@ def _line_2d_grad_params(
             ewald_curvature=0.0,
             has_shifts_3d=0,
             bv_shift_3d=1,
+            mag_yy=1.0,
+            mag_yx=0.0,
+            mag_xy=0.0,
+            mag_xx=1.0,
+            mag_scale=1.0,
         )
-    var line_half = Int(py=bufs[3].shape[2])
     return FourierSliceParams(
         bp=Int(py=bufs[1].shape[1]),
         sidelength=Int(py=bufs[0].shape[1]),
-        proj_sidelength=2 * (line_half - 1),
+        proj_sidelength=Int(py=params_obj.line_length),
         bv_rot=Int(py=bufs[1].shape[0]),
         bv_shift_2d=Int(py=bufs[2].shape[0]),
         oversampling=Float32(py=params_obj.oversampling),
@@ -1622,6 +1635,11 @@ def _line_2d_grad_params(
         ewald_curvature=0.0,
         has_shifts_3d=0,
         bv_shift_3d=1,
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1631,11 +1649,10 @@ def _extract_line_2d_params(
 ) raises -> FourierSliceParams:
     """Params for the 2D line extraction kernel; bufs = (img, direction, shifts_2d, line).
     """
-    var line_half = Int(py=bufs[3].shape[2])
     return FourierSliceParams(
         bp=Int(py=bufs[1].shape[1]),
         sidelength=Int(py=bufs[0].shape[1]),
-        proj_sidelength=2 * (line_half - 1),
+        proj_sidelength=Int(py=params_obj.line_length),
         bv_rot=Int(py=bufs[1].shape[0]),
         bv_shift_2d=Int(py=bufs[2].shape[0]),
         oversampling=Float32(py=params_obj.oversampling),
@@ -1648,6 +1665,11 @@ def _extract_line_2d_params(
         ewald_curvature=0.0,
         has_shifts_3d=0,
         bv_shift_3d=1,
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1657,11 +1679,10 @@ def _insert_line_2d_params(
 ) raises -> FourierSliceParams:
     """Params for the 2D line scatter; bufs = (lines, weights, direction, shifts_2d, vol, wvol).
     """
-    var line_half = Int(py=bufs[0].shape[2])
     return FourierSliceParams(
         bp=Int(py=bufs[0].shape[1]),
         sidelength=Int(py=bufs[4].shape[1]),
-        proj_sidelength=2 * (line_half - 1),
+        proj_sidelength=Int(py=params_obj.line_length),
         bv_rot=Int(py=bufs[2].shape[0]),
         bv_shift_2d=Int(py=bufs[3].shape[0]),
         oversampling=Float32(py=params_obj.oversampling),
@@ -1674,6 +1695,11 @@ def _insert_line_2d_params(
         ewald_curvature=0.0,
         has_shifts_3d=0,
         bv_shift_3d=1,
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1686,12 +1712,10 @@ def _extract_line_3d_params(
     Directions are `(bv_dir, bp, 3)`; `bv_rot` carries the direction broadcast
     batch `bv_dir`.
     """
-    var line_half = Int(py=bufs[3].shape[2])
     return FourierSliceParams(
         bp=Int(py=bufs[1].shape[1]),
         sidelength=Int(py=bufs[0].shape[2]),
-        proj_sidelength=2
-        * (line_half - 1),  # even box whose rfft half-width is line_half
+        proj_sidelength=Int(py=params_obj.line_length),
         bv_rot=Int(py=bufs[1].shape[0]),
         bv_shift_2d=1,  # unused (a line has no image plane)
         oversampling=Float32(py=params_obj.oversampling),
@@ -1704,6 +1728,11 @@ def _extract_line_3d_params(
         ewald_curvature=0.0,  # unused for a 1D line
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[2].shape[0]),
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1713,11 +1742,10 @@ def _insert_line_3d_params(
 ) raises -> FourierSliceParams:
     """Params for the line scatter kernel; bufs = (lines, weights, direction, shifts_3d, vol, wvol).
     """
-    var line_half = Int(py=bufs[0].shape[2])
     return FourierSliceParams(
         bp=Int(py=bufs[0].shape[1]),
         sidelength=Int(py=bufs[4].shape[2]),
-        proj_sidelength=2 * (line_half - 1),
+        proj_sidelength=Int(py=params_obj.line_length),
         bv_rot=Int(py=bufs[2].shape[0]),
         bv_shift_2d=1,  # unused
         oversampling=Float32(py=params_obj.oversampling),
@@ -1730,6 +1758,11 @@ def _insert_line_3d_params(
         ewald_curvature=0.0,
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[3].shape[0]),
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1745,11 +1778,10 @@ def _line_3d_grad_params(
     grad_weight); friedel_double=1 (adjoint of the reconstruction weight splat).
     """
     if weight_grad != 0:
-        var line_half_w = Int(py=bufs[2].shape[2])
         return FourierSliceParams(
             bp=Int(py=bufs[1].shape[1]),
             sidelength=Int(py=bufs[0].shape[2]),
-            proj_sidelength=2 * (line_half_w - 1),
+            proj_sidelength=Int(py=params_obj.line_length),
             bv_rot=Int(py=bufs[1].shape[0]),
             bv_shift_2d=1,
             oversampling=Float32(py=params_obj.oversampling),
@@ -1762,12 +1794,16 @@ def _line_3d_grad_params(
             ewald_curvature=0.0,
             has_shifts_3d=0,
             bv_shift_3d=1,
+            mag_yy=1.0,
+            mag_yx=0.0,
+            mag_xy=0.0,
+            mag_xx=1.0,
+            mag_scale=1.0,
         )
-    var line_half = Int(py=bufs[3].shape[2])
     return FourierSliceParams(
         bp=Int(py=bufs[1].shape[1]),
         sidelength=Int(py=bufs[0].shape[2]),
-        proj_sidelength=2 * (line_half - 1),
+        proj_sidelength=Int(py=params_obj.line_length),
         bv_rot=Int(py=bufs[1].shape[0]),
         bv_shift_2d=1,
         oversampling=Float32(py=params_obj.oversampling),
@@ -1780,6 +1816,11 @@ def _line_3d_grad_params(
         ewald_curvature=0.0,
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[2].shape[0]),
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1803,4 +1844,9 @@ def _insert_slice_3d_params(
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[4].shape[0]),
+        mag_yy=Float32(py=params_obj.mag_yy),
+        mag_yx=Float32(py=params_obj.mag_yx),
+        mag_xy=Float32(py=params_obj.mag_xy),
+        mag_xx=Float32(py=params_obj.mag_xx),
+        mag_scale=Float32(py=params_obj.mag_scale),
     )

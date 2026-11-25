@@ -8,7 +8,8 @@ is in ``._rfft``), written as differentiable tensor ops, so autograd supplies th
 gradients the Mojo backend computes with dedicated kernels.
 
 A line is posed by a direction ``u`` (zyx in 3D, yx in 2D): line pixel ``x``
-samples ``k = x * oversampling * u``. Only the shift of the array the line is cut
+samples ``k = x * (n / L) * u`` in an array of side ``n``, for lines of length
+``L`` (``sampling_scale``). Only the shift of the array the line is cut
 from applies (3D for a volume, 2D for an image), as the phase ramp ``k . t``.
 """
 
@@ -18,14 +19,16 @@ import math
 
 import torch
 
-from .._backend._common import input_line_scale, reconstruction_volume_shape
+from .._backend._common import input_line_scale, radius_cutoff, sampling_scale
 from .._backend._validation import (
-    even_line_sidelength,
     interp_code,
     prep_directions_2d,
     prep_directions_3d,
     prep_shifts_2d,
     prep_shifts_3d,
+    resolve_line_length,
+    rfft_image_shape,
+    rfft_volume_shape,
     validate_image_2d,
     validate_reconstruction,
 )
@@ -36,10 +39,7 @@ def _output_length(output_length: int | None, sidelength: int) -> int:
     """Real-space length of the extracted lines (the array's side by default)."""
     if output_length is None:
         return sidelength
-    line_sidelength = int(output_length)
-    if line_sidelength % 2 != 0:
-        raise ValueError(f"output_length {line_sidelength} must be even")
-    return line_sidelength
+    return int(output_length)
 
 
 def _line_samples(
@@ -47,23 +47,19 @@ def _line_samples(
     bv: int,
     line_sidelength: int,
     fftfreq_max: float | None,
-    oversampling: float,
+    scale: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Sample coordinates ``k (bv, bp, w, ndim)`` of each line pixel.
 
     Also returns the ``(w,)`` mask of pixels inside the radius cutoff, which is
-    ``fftfreq_max`` of the line length (Nyquist by default).
+    ``fftfreq_max`` of the line length (none for ``None``).
     """
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     coord_x = torch.arange(
         line_sidelength // 2 + 1, device=directions.device, dtype=torch.float32
     )
     inside = coord_x * coord_x <= torch.tensor(radius * radius, dtype=torch.float32)
-    sx = coord_x * float(oversampling)
+    sx = coord_x * float(scale)
     k = sx[:, None] * directions.expand(bv, -1, -1)[:, :, None, :]
     return k, inside
 
@@ -102,18 +98,20 @@ def _insert(
     line_sidelength: int,
     sidelength: int,
     interpolation: str,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Scatter lines into Hermitian rfft arrays of side ``sidelength``.
 
     Each sample's value and weight are scaled so that every Hermitian pair of the
     line counts once (``input_line_scale``), and shifts apply the conjugate phase.
+    Without ``weights`` every sample weighs one, so the weights give the density.
     """
     keep = inside * input_line_scale(line_sidelength, lines.device)
     values = lines.to(torch.complex64) * keep
     if shifts is not None:
         values = values * _phase_factor(shifts, k, sidelength, conjugate=True)
-    if weights is not None:
-        weights = weights.to(torch.float32) * keep
+    if weights is None:
+        weights = torch.ones(lines.shape, device=lines.device)
+    weights = weights.to(torch.float32) * keep
     return scatter(values, weights, k, sidelength, interpolation)
 
 
@@ -122,7 +120,6 @@ def extract_lines_3d(
     directions: torch.Tensor,
     shifts_3d: torch.Tensor | None,
     output_length: int | None,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
 ) -> torch.Tensor:
@@ -139,7 +136,11 @@ def extract_lines_3d(
     line_sidelength = _output_length(output_length, sidelength)
 
     k, inside = _line_samples(
-        directions, bv, line_sidelength, fftfreq_max, oversampling
+        directions,
+        bv,
+        line_sidelength,
+        fftfreq_max,
+        sampling_scale(sidelength, line_sidelength),
     )
     lines = gather(reconstruction.to(torch.complex64), k, interpolation)
     if has_shifts_3d:
@@ -152,15 +153,17 @@ def insert_lines_3d(
     weights: torch.Tensor | None,
     directions: torch.Tensor,
     shifts_3d: torch.Tensor | None,
-    oversampling: float,
+    volume_shape: tuple[int, int, int],
     fftfreq_max: float | None,
     interpolation: str,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+    line_length: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert complex central lines into Hermitian rfft volumes (+ weights).
 
     Same arguments as ``InsertLines3D.apply``: ``lines`` is ``(bp, w)`` or
-    ``(bv, bp, w)``. Returns the ``(bv, d, h, w)`` data volume and, if ``weights``
-    were given, the matching weight volume (else ``None``).
+    ``(bv, bp, w)``, ``volume_shape`` the real-space ``(d, d, d)``. Returns the
+    ``(bv, d, d, d // 2 + 1)`` data volume and the matching weight volume (of
+    unit weights if ``weights`` is ``None``).
     """
     lines, weights = _validate_lines(lines, weights)
     bv, bp, w = lines.shape
@@ -169,11 +172,15 @@ def insert_lines_3d(
     if bp_dir != bp:
         raise ValueError("directions pose count must match lines")
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, lines.device)
-    line_sidelength = even_line_sidelength(w)
-    _, sidelength, _ = reconstruction_volume_shape(line_sidelength, oversampling)
+    line_sidelength = resolve_line_length(w, line_length)
+    _, sidelength, _ = rfft_volume_shape(volume_shape)
 
     k, inside = _line_samples(
-        directions, bv, line_sidelength, fftfreq_max, oversampling
+        directions,
+        bv,
+        line_sidelength,
+        fftfreq_max,
+        sampling_scale(sidelength, line_sidelength),
     )
     return _insert(
         lines,
@@ -192,7 +199,6 @@ def extract_lines_2d(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None,
     output_length: int | None,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
 ) -> torch.Tensor:
@@ -209,7 +215,11 @@ def extract_lines_2d(
     line_sidelength = _output_length(output_length, sidelength)
 
     k, inside = _line_samples(
-        directions, bv, line_sidelength, fftfreq_max, oversampling
+        directions,
+        bv,
+        line_sidelength,
+        fftfreq_max,
+        sampling_scale(sidelength, line_sidelength),
     )
     lines = gather(image_rfft.to(torch.complex64), k, interpolation)
     if has_shifts_2d:
@@ -222,16 +232,17 @@ def insert_lines_2d(
     weights: torch.Tensor | None,
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None,
-    oversampling: float,
+    image_shape: tuple[int, int],
     fftfreq_max: float | None,
     interpolation: str,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+    line_length: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert complex central lines into Hermitian 2D rfft images (+ weights).
 
     Same arguments as ``InsertLines2D.apply``: ``lines`` is ``(bp, w)`` or
-    ``(bv, bp, w)``. The image has the lines' length as its side, whatever the
-    oversampling, as in ``InsertLines2D``. Returns the ``(bv, h, w)`` data image
-    and, if ``weights`` were given, the matching weight image (else ``None``).
+    ``(bv, bp, w)``, ``image_shape`` the real-space ``(h, h)``. Returns the
+    ``(bv, h, h // 2 + 1)`` data image and the matching weight image (of unit
+    weights if ``weights`` is ``None``).
     """
     lines, weights = _validate_lines(lines, weights)
     bv, bp, w = lines.shape
@@ -240,10 +251,15 @@ def insert_lines_2d(
     if bp_dir != bp:
         raise ValueError("directions pose count must match lines")
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, lines.device)
-    line_sidelength = even_line_sidelength(w)
+    line_sidelength = resolve_line_length(w, line_length)
+    sidelength, _ = rfft_image_shape(image_shape)
 
     k, inside = _line_samples(
-        directions, bv, line_sidelength, fftfreq_max, oversampling
+        directions,
+        bv,
+        line_sidelength,
+        fftfreq_max,
+        sampling_scale(sidelength, line_sidelength),
     )
     return _insert(
         lines,
@@ -252,6 +268,6 @@ def insert_lines_2d(
         inside,
         shifts_2d_t if has_shifts_2d else None,
         line_sidelength,
-        line_sidelength,
+        sidelength,
         interpolation,
     )

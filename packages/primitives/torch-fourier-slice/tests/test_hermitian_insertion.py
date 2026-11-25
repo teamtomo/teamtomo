@@ -13,6 +13,7 @@ and that the autograd backward passes are exact transposes. They run on torch, t
 experimental Mojo kernels and the experimental torch reference.
 """
 
+import itertools
 from types import SimpleNamespace
 
 import numpy as np
@@ -37,8 +38,8 @@ requires_mojo = pytest.mark.skipif(
 )
 
 N_POSES = 8
-# larger than any frequency, so nothing is cut off
-NO_CUTOFF = 1e3
+# a `cutoff` that leaves `fftfreq_max` at its default, the Nyquist radius
+DEFAULT_CUTOFF = "default"
 
 
 def _rotations(seed: int = 3) -> torch.Tensor:
@@ -93,29 +94,33 @@ def _experimental_slices(
     sidelength: int,
     rotations: torch.Tensor,
     interpolation: str = "linear",
-    cutoff: float = NO_CUTOFF,
+    cutoff: float | str | None = None,
     oversampling: float = 1.0,
     **shifts,
 ) -> _Insertion:
     """`module` provides the slice functions; `cutoff` is in input pixels.
 
-    `shifts` are `shifts_2d` / `shifts_3d`, passed to both operations. Poses and
-    shifts are in the kernels' zyx / yx order.
+    A `cutoff` of None keeps every frequency (`fftfreq_max=None`), and
+    `DEFAULT_CUTOFF` leaves `fftfreq_max` at its default (the Nyquist radius).
+
+    `shifts` holds the further options both operations take (`shifts_2d`,
+    `shifts_3d`, `transform_matrix`). Poses and shifts are in the kernels' zyx /
+    yx order.
     """
-    volume_sidelength = round(sidelength * oversampling)
+    volume_shape = (round(sidelength * oversampling),) * 3
     options = {
-        "oversampling": oversampling,
-        "fftfreq_max": cutoff / sidelength,
         "zyx_matrices": True,
         "zyx_shifts": True,
         "yx_shifts": True,
         "interpolation": interpolation,
         **shifts,
     }
+    if cutoff != DEFAULT_CUTOFF:
+        options["fftfreq_max"] = None if cutoff is None else cutoff / sidelength
 
     def insert(slices, weights=None):
         return module.insert_central_slices_rfft_3d(
-            slices, rotations, weights=weights, **options
+            slices, volume_shape, rotations, weights=weights, **options
         )
 
     def extract(volume):
@@ -126,7 +131,7 @@ def _experimental_slices(
             **options,
         )
 
-    return _Insertion(insert, extract, (sidelength,) * 2, (volume_sidelength,) * 3)
+    return _Insertion(insert, extract, (sidelength,) * 2, volume_shape)
 
 
 # the Mojo rfft-layer functions, by the names `reference` gives them
@@ -152,11 +157,14 @@ def _experimental_lines(
     sidelength: int,
     directions: torch.Tensor,
     interpolation: str = "linear",
-    cutoff: float = NO_CUTOFF,
+    cutoff: float | str | None = None,
     oversampling: float = 1.0,
     **shifts,
 ) -> _Insertion:
     """`module` provides the line functions; `cutoff` is in input pixels.
+
+    A `cutoff` of None keeps every frequency (`fftfreq_max=None`), and
+    `DEFAULT_CUTOFF` leaves `fftfreq_max` at its default (the Nyquist radius).
 
     `shifts` are `shifts_3d` (3D lines) / `shifts_2d` (2D lines). Directions and
     shifts are in zyx / yx order.
@@ -168,24 +176,31 @@ def _experimental_lines(
         order = {"zyx_directions": True, "zyx_shifts": True}
     else:
         order = {"yx_directions": True, "yx_shifts": True}
+    output_shape = (round(sidelength * oversampling),) * ndim
     options = {
-        "oversampling": oversampling,
-        "fftfreq_max": cutoff / sidelength,
         "interpolation": interpolation,
         **order,
         **shifts,
     }
+    if cutoff != DEFAULT_CUTOFF:
+        options["fftfreq_max"] = None if cutoff is None else cutoff / sidelength
 
     def insert(lines, weights=None):
-        return insert_fn(lines, directions, weights=weights, **options)
+        return insert_fn(
+            lines,
+            output_shape,
+            directions,
+            weights=weights,
+            line_length=sidelength,
+            **options,
+        )
 
     def extract(array):
         return extract_fn(
             array.contiguous(), directions, output_length=sidelength, **options
         )
 
-    output_sidelength = round(sidelength * oversampling)
-    return _Insertion(insert, extract, (sidelength,), (output_sidelength,) * ndim)
+    return _Insertion(insert, extract, (sidelength,), output_shape)
 
 
 def _mojo_lines(*args, **kwargs) -> _Insertion:
@@ -200,36 +215,41 @@ CASES = [
     pytest.param(lambda: _torch_slices(16, _rotations()), id="torch-slices-even"),
     pytest.param(lambda: _torch_slices(15, _rotations()), id="torch-slices-odd"),
 ]
-for _interpolation in ("linear", "cubic"):
+for _interpolation, _n in itertools.product(("linear", "cubic"), (16, 15)):
+    _parity = "even" if _n % 2 == 0 else "odd"
     CASES += [
         pytest.param(
-            lambda i=_interpolation: _reference_slices(16, _rotations(), i),
-            id=f"reference-slices-{_interpolation}",
+            lambda i=_interpolation, n=_n: _reference_slices(n, _rotations(), i),
+            id=f"reference-slices-{_parity}-{_interpolation}",
         ),
         pytest.param(
-            lambda i=_interpolation: _mojo_slices(16, _rotations(), i),
-            id=f"mojo-slices-{_interpolation}",
+            lambda i=_interpolation, n=_n: _mojo_slices(n, _rotations(), i),
+            id=f"mojo-slices-{_parity}-{_interpolation}",
             marks=requires_mojo,
         ),
         pytest.param(
-            lambda i=_interpolation: _reference_lines(16, _directions(3), i),
-            id=f"reference-lines-3d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _reference_lines(n, _directions(3), i),
+            id=f"reference-lines-3d-{_parity}-{_interpolation}",
         ),
         pytest.param(
-            lambda i=_interpolation: _reference_lines(16, _directions(2), i),
-            id=f"reference-lines-2d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _reference_lines(n, _directions(2), i),
+            id=f"reference-lines-2d-{_parity}-{_interpolation}",
         ),
         pytest.param(
-            lambda i=_interpolation: _mojo_lines(16, _directions(3), i),
-            id=f"mojo-lines-3d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _mojo_lines(n, _directions(3), i),
+            id=f"mojo-lines-3d-{_parity}-{_interpolation}",
             marks=requires_mojo,
         ),
         pytest.param(
-            lambda i=_interpolation: _mojo_lines(16, _directions(2), i),
-            id=f"mojo-lines-2d-{_interpolation}",
+            lambda i=_interpolation, n=_n: _mojo_lines(n, _directions(2), i),
+            id=f"mojo-lines-2d-{_parity}-{_interpolation}",
             marks=requires_mojo,
         ),
     ]
+
+
+# an anisotropic magnification with shear, so it mixes y and x
+MAGNIFICATION = torch.tensor([[1.04, 0.03], [-0.02, 0.97]])
 
 
 def _shifts(ndim: int, seed: int = 5) -> torch.Tensor:
@@ -255,6 +275,38 @@ OPTION_CASES = [
         id="reference-slices-oversampling-2",
     ),
     pytest.param(
+        lambda: _reference_slices(16, _rotations(), oversampling=1.5),
+        id="reference-slices-oversampling-1.5",
+    ),
+    pytest.param(
+        lambda: _reference_slices(
+            16, _rotations(), cutoff=DEFAULT_CUTOFF, oversampling=2.0
+        ),
+        id="reference-slices-oversampling-2-nyquist",
+    ),
+    pytest.param(
+        lambda: _reference_slices(15, _rotations(), oversampling=16 / 15),
+        id="reference-slices-odd-into-even",
+    ),
+    pytest.param(
+        lambda: _reference_slices(16, _rotations(), transform_matrix=MAGNIFICATION),
+        id="reference-slices-magnification",
+    ),
+    pytest.param(
+        lambda: _reference_lines(15, _directions(3), oversampling=16 / 15),
+        id="reference-lines-3d-odd-into-even",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(2), oversampling=15 / 16),
+        id="reference-lines-2d-even-into-odd",
+    ),
+    pytest.param(
+        lambda: _reference_lines(
+            16, _directions(3), cutoff=DEFAULT_CUTOFF, oversampling=2.0
+        ),
+        id="reference-lines-3d-oversampling-2-nyquist",
+    ),
+    pytest.param(
         lambda: _mojo_slices(16, _rotations(), shifts_2d=_shifts(2)),
         id="mojo-slices-shifts-2d",
         marks=requires_mojo,
@@ -270,6 +322,43 @@ OPTION_CASES = [
         marks=requires_mojo,
     ),
     pytest.param(
+        lambda: _mojo_slices(16, _rotations(), oversampling=1.5),
+        id="mojo-slices-oversampling-1.5",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), cutoff=DEFAULT_CUTOFF, oversampling=2.0),
+        id="mojo-slices-oversampling-2-nyquist",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(15, _rotations(), oversampling=16 / 15),
+        id="mojo-slices-odd-into-even",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), transform_matrix=MAGNIFICATION),
+        id="mojo-slices-magnification",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(15, _directions(3), oversampling=16 / 15),
+        id="mojo-lines-3d-odd-into-even",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(2), oversampling=15 / 16),
+        id="mojo-lines-2d-even-into-odd",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(
+            16, _directions(3), cutoff=DEFAULT_CUTOFF, oversampling=2.0
+        ),
+        id="mojo-lines-3d-oversampling-2-nyquist",
+        marks=requires_mojo,
+    ),
+    pytest.param(
         lambda: _reference_lines(16, _directions(3), shifts_3d=_shifts(3)),
         id="reference-lines-3d-shifts",
     ),
@@ -280,6 +369,10 @@ OPTION_CASES = [
     pytest.param(
         lambda: _reference_lines(16, _directions(3), oversampling=2.0),
         id="reference-lines-3d-oversampling-2",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(2), oversampling=2.0),
+        id="reference-lines-2d-oversampling-2",
     ),
     pytest.param(
         lambda: _mojo_lines(16, _directions(3), shifts_3d=_shifts(3)),
@@ -294,6 +387,11 @@ OPTION_CASES = [
     pytest.param(
         lambda: _mojo_lines(16, _directions(3), oversampling=2.0),
         id="mojo-lines-3d-oversampling-2",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(2), oversampling=2.0),
+        id="mojo-lines-2d-oversampling-2",
         marks=requires_mojo,
     ),
 ]
@@ -343,6 +441,23 @@ def test_weights_follow_the_data(make_case):
     data, weights = case.insert(ones, torch.ones(ones.shape))
     scale = weights.abs().max()
     assert torch.allclose(data, weights.to(data.dtype), atol=1e-6 * scale)
+
+
+@pytest.mark.parametrize(
+    "make_case", [case for case in CASES if not case.id.startswith("torch")]
+)
+def test_omitted_weights_are_unit_weights(make_case):
+    """Without ``weights`` the insertion still returns weights: those of ones.
+
+    (Equal up to the order of the Mojo CPU kernel's parallel accumulation.)
+    """
+    case = make_case()
+    ndim = len(case.input_shape)
+    inputs = _rfft(_random_real((N_POSES, *case.input_shape), seed=0), ndim)
+    data, weights = case.insert(inputs)
+    unit_data, unit_weights = case.insert(inputs, torch.ones(inputs.shape))
+    assert torch.allclose(data, unit_data, atol=1e-6 * data.abs().max())
+    assert torch.allclose(weights, unit_weights, atol=1e-6 * weights.max())
 
 
 @pytest.mark.parametrize("make_case", CASES)
@@ -452,16 +567,16 @@ def _finite_difference_error(loss_fn, param, eps):
     ],
 )
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("n", [16, 15])
 def test_insertion_pose_gradient_includes_self_mirror_samples(
-    make_slices, interpolation
+    make_slices, interpolation, n
 ):
     """Pose gradients of the insertion with the cutoff at the Nyquist radius n/2.
 
     The sphere |k| <= n/2 keeps every sample inside the Nyquist box, where the
     insertion is smooth in the pose, and it still includes the self-mirror samples
-    at |k| = 0 and n/2 that the insertion scales by 0.5.
+    at |k| = 0 and (even n) n/2 that the insertion scales by 0.5.
     """
-    n = 16
     target = _rfft(_random_real((n, n, n), seed=3), 3)
     slices = _rfft(_random_real((N_POSES, n, n), seed=0), 2)
 
@@ -481,11 +596,11 @@ def test_insertion_pose_gradient_includes_self_mirror_samples(
     ],
 )
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("n", [16, 15])
 def test_line_insertion_pose_gradient_includes_self_mirror_samples(
-    make_lines, interpolation
+    make_lines, interpolation, n
 ):
     """The line analogue of the test above."""
-    n = 16
     target = _rfft(_random_real((n, n, n), seed=3), 3)
     lines = _rfft(_random_real((N_POSES, n), seed=0), 1)
 

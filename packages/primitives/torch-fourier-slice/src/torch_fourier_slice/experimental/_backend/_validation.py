@@ -7,9 +7,12 @@ cube edge (``= h``) and ``sidelength_half = w`` the rfft width.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import torch
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _INTERP_CODES = {"linear": 0, "cubic": 1}
 
@@ -34,7 +37,7 @@ class KernelParams(NamedTuple):
     params (bp, sidelength, batch sizes) are read from the tensors, not here.
     """
 
-    oversampling: float
+    oversampling: float  # array index per projection index, see sampling_scale
     radius_cutoff_sq: float
     has_shifts_2d: int
     has_weights: int
@@ -43,20 +46,56 @@ class KernelParams(NamedTuple):
     interp: int
     ewald_curvature: float
     has_shifts_3d: int
+    line_length: int = 0  # real-space length of the lines (line kernels only)
+    # anisotropic magnification of the slices (see `Magnification`)
+    mag_yy: float = 1.0
+    mag_yx: float = 0.0
+    mag_xy: float = 0.0
+    mag_xx: float = 1.0
+    mag_scale: float = 1.0
 
 
-def even_line_sidelength(line_rfft_width: int) -> int:
-    """Real-space length of a central line from its rfft width.
+def resolve_line_length(line_rfft_width: int, line_length: int | None = None) -> int:
+    """Real-space length of central lines with ``line_rfft_width`` rfft samples.
 
-    The line projectors here only make even-length lines: volumes and images
-    must have even sides (see :func:`validate_reconstruction` and
-    :func:`validate_image_2d`) and an odd ``output_length`` raises. A line of
-    length ``n`` has ``n // 2 + 1`` rfft samples, which is the same for ``n``
-    and ``n + 1``, so an odd-length line can't be told apart from its rfft.
-    Lines passed to the insertion and gradient ops must come from even-length
-    lines, such as the output of the extractors.
+    A line of length ``n`` has ``n // 2 + 1`` rfft samples, the same for
+    ``n = 2m`` and ``2m + 1``, so the width alone can't tell them apart. As for
+    ``torch.fft.irfft``, the length is the even ``2 * (width - 1)`` unless
+    ``line_length`` says otherwise.
     """
-    return 2 * (int(line_rfft_width) - 1)
+    if line_length is None:
+        return 2 * (int(line_rfft_width) - 1)
+    length = int(line_length)
+    if length <= 0 or length // 2 + 1 != line_rfft_width:
+        raise ValueError(
+            f"line_length {length} needs {length // 2 + 1} rfft samples per line, "
+            f"but the lines have {line_rfft_width}"
+        )
+    return length
+
+
+def _square_side(shape: Sequence[int], ndim: int, name: str) -> int:
+    """The side of a real-space ``shape`` with ``ndim`` equal sides."""
+    sides = tuple(int(s) for s in shape)
+    if len(sides) != ndim or len(set(sides)) != 1:
+        cube = "cubic" if ndim == 3 else "square"
+        raise ValueError(f"{name} {tuple(shape)} must be {cube} ({ndim} equal sides)")
+    side = sides[0]
+    if side <= 0:
+        raise ValueError(f"{name} side length ({side}) must be positive")
+    return side
+
+
+def rfft_volume_shape(volume_shape: Sequence[int]) -> tuple[int, int, int]:
+    """Rfft shape ``(d, d, d // 2 + 1)`` of a real-space ``(d, d, d)`` volume."""
+    side = _square_side(volume_shape, 3, "volume_shape")
+    return (side, side, side // 2 + 1)
+
+
+def rfft_image_shape(image_shape: Sequence[int]) -> tuple[int, int]:
+    """Rfft shape ``(h, h // 2 + 1)`` of a real-space ``(h, h)`` image."""
+    side = _square_side(image_shape, 2, "image_shape")
+    return (side, side // 2 + 1)
 
 
 def validate_reconstruction(
@@ -65,7 +104,7 @@ def validate_reconstruction(
     """Check/normalise rfft volume; return (4d, bv, sidelength, sidelength_half).
 
     Expects an rfft volume with DC at the origin (unshifted), shape
-    ``(d, h, w)`` or ``(bv, d, h, w)``, cubic and even.
+    ``(d, h, w)`` or ``(bv, d, h, w)``, cubic (``w = h // 2 + 1``), of any side.
     """
     if not reconstruction.is_complex():
         raise ValueError("reconstruction must be a complex tensor")
@@ -74,12 +113,10 @@ def validate_reconstruction(
     if reconstruction.dim() != 4:
         raise ValueError("reconstruction must be (d, h, w) or (bv, d, h, w)")
     bv, _d, sidelength, sidelength_half = reconstruction.shape
-    if sidelength % 2 != 0:
-        raise ValueError(f"side length ({sidelength}) must be even")
-    if sidelength != (sidelength_half - 1) * 2:
+    if sidelength_half != sidelength // 2 + 1:
         raise ValueError(
-            f"shape mismatch: h={sidelength} must equal 2*(w - 1)="
-            f"{(sidelength_half - 1) * 2}"
+            f"shape mismatch: rfft width w={sidelength_half} must equal "
+            f"h // 2 + 1 = {sidelength // 2 + 1}"
         )
     return reconstruction, bv, sidelength, sidelength_half
 
@@ -156,7 +193,8 @@ def prep_directions_2d(
 def validate_image_2d(image_rfft: torch.Tensor) -> tuple[torch.Tensor, int, int, int]:
     """Check/normalise a 2D rfft image; return (3d, bv, sidelength, sidelength_half).
 
-    Expects rfft with DC at origin, shape ``(h, w)`` or ``(bv, h, w)``, square/even.
+    Expects rfft with DC at origin, shape ``(h, w)`` or ``(bv, h, w)``, square
+    (``w = h // 2 + 1``), of any side.
     """
     if not image_rfft.is_complex():
         raise ValueError("image_rfft must be a complex tensor")
@@ -165,10 +203,8 @@ def validate_image_2d(image_rfft: torch.Tensor) -> tuple[torch.Tensor, int, int,
     if image_rfft.dim() != 3:
         raise ValueError("image_rfft must be (h, w) or (bv, h, w)")
     bv, h, w = image_rfft.shape
-    if h % 2 != 0 or h != (w - 1) * 2:
-        raise ValueError(
-            f"image must be square/even: h={h} must equal 2*(w-1)={2 * (w - 1)}"
-        )
+    if w != h // 2 + 1:
+        raise ValueError(f"image must be square: w={w} must equal h // 2 + 1")
     return image_rfft, bv, h, w
 
 

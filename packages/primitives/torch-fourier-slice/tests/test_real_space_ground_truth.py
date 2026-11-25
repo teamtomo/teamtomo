@@ -153,8 +153,8 @@ def test_backproject_2d_to_3d_matches_real_space(
 def _float32_rotation(axis: str, degrees: float) -> np.ndarray:
     """Rotation about x, y or z with its trig done in float32, as is common in torch.
 
-    In float32, cos(90°) is -4.4e-8 rather than 0, which is above the extractor's
-    default `rot_tolerance` of 1e-8, so it isn't zeroed.
+    In float32, cos(90°) is -4.4e-8 rather than 0, so points of the x = 0 plane
+    can land just below it.
     """
     theta = torch.deg2rad(torch.tensor(degrees, dtype=torch.float32))
     c, s = torch.cos(theta).item(), torch.sin(theta).item()

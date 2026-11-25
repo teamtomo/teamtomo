@@ -146,7 +146,7 @@ def _insert_experimental(box: int, bp: int, interp: str, device: str) -> torch.T
         bp, h, w, dtype=torch.complex64, device=device, requires_grad=True
     )
     rot = _random_rotations(bp, device).requires_grad_(True)
-    vol, _ = experimental_insert(image_rfft, rot, interpolation=interp)
+    vol, _ = experimental_insert(image_rfft, (box, box, box), rot, interpolation=interp)
     return vol
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from ._backend._common import Magnification
 from ._gridding import gridding_correction
 from .insertion import (
     insert_central_slices_rfft_3d,
@@ -35,6 +36,7 @@ def _backproject(
     zyx_shifts: bool,
     yx_shifts: bool,
     interpolation: str,
+    transform_matrix: torch.Tensor | None,
     apply_ewald_curvature: bool,
     ewald_voltage_kv: float,
     ewald_flip_sign: bool,
@@ -48,28 +50,30 @@ def _backproject(
     box = images.shape[-1]
 
     image_rfft = torch.fft.rfftn(
-        torch.fft.fftshift(images, dim=(-2, -1)), dim=(-2, -1)
+        torch.fft.ifftshift(images, dim=(-2, -1)), dim=(-2, -1)
     ).contiguous()
+    magnification = Magnification.from_matrix(transform_matrix)
+    if not magnification.is_identity:
+        # the insertion scales each sample by 1 / |det A| (the adjoint of the
+        # projection's), and the images' DFTs carry that scale already: undo it
+        image_rfft = image_rfft / magnification.mag_scale
 
-    # unit weights accumulate the sampling density; any caller weights modulate it
-    density = torch.ones(
-        image_rfft.shape, dtype=torch.float32, device=image_rfft.device
-    )
-    if weights is not None:
-        density = density * weights
     # the rfft layer takes the inverse (image -> volume) rotation of the active
-    # rotation the real-space layer accepts
+    # rotation the real-space layer accepts; the weight volume is the sampling
+    # density (unit weights), modulated by any caller weights
     volume_rfft, weight_volume = insert_fn(
         image_rfft,
+        (box, box, box),
         rotation_matrices.transpose(-1, -2),
         shifts_3d=shifts_3d,
         shifts_2d=shifts_2d,
-        weights=density,
+        weights=weights,
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
         zyx_shifts=zyx_shifts,
         yx_shifts=yx_shifts,
         interpolation=interpolation,
+        transform_matrix=transform_matrix,
         apply_ewald_curvature=apply_ewald_curvature,
         ewald_voltage_kv=ewald_voltage_kv,
         ewald_flip_sign=ewald_flip_sign,
@@ -96,11 +100,12 @@ def backproject_2d_to_3d(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -114,8 +119,8 @@ def backproject_2d_to_3d(
     Parameters
     ----------
     images : torch.Tensor
-        Real ``(bp, d, d)`` square projection images with an even side length.
-        Their device selects the CPU/GPU backend.
+        Real ``(bp, d, d)`` square projection images, centred on pixel
+        ``d // 2``, of any side. Their device selects the CPU/GPU backend.
     rotation_matrices : torch.Tensor
         Real ``(3, 3)`` or ``(bp, 3, 3)`` rotation matrices (see ``zyx_matrices``),
         the same convention as :func:`.project_3d_to_2d`: each image is a
@@ -135,7 +140,8 @@ def backproject_2d_to_3d(
         doubles the box. Must be ``>= 1.0``.
     fftfreq_max : float | None
         Maximum frequency (cycles/pixel, Nyquist = 0.5) to include; input
-        pixels beyond it are ignored. Defaults to Nyquist.
+        pixels beyond it are ignored. Defaults to ``0.5``; ``None`` keeps every
+        frequency, the image corners included.
     zyx_matrices : bool
         If True, ``rotation_matrices`` act on zyx vectors. If False (default)
         they act on xyz vectors and are converted by flipping the last two axes.
@@ -146,6 +152,11 @@ def backproject_2d_to_3d(
     interpolation : str
         ``"linear"`` (trilinear, default) or ``"cubic"`` (tricubic Catmull-Rom).
         The gridding correction follows this choice.
+    transform_matrix : torch.Tensor | None
+        Optional ``(2, 2)`` anisotropic magnification ``A`` in real space (yx) of
+        the images, as :func:`.project_3d_to_2d` applies it: each pixel goes back
+        where the unmagnified projection has it, and the ``1 / |det A|`` the
+        images' DFTs carry is undone. Not differentiable.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
         use a flat central slice.
@@ -178,6 +189,7 @@ def backproject_2d_to_3d(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
@@ -193,11 +205,12 @@ def backproject_2d_to_3d_multichannel(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -225,6 +238,7 @@ def backproject_2d_to_3d_multichannel(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,

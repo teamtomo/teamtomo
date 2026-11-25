@@ -13,12 +13,19 @@ import math
 
 import torch
 
-from .._backend._common import input_pixel_scale, reconstruction_volume_shape
+from .._backend._common import (
+    IDENTITY_MAGNIFICATION,
+    Magnification,
+    input_pixel_scale,
+    radius_cutoff,
+    sampling_scale,
+)
 from .._backend._validation import (
     interp_code,
     prep_rotations,
     prep_shifts_2d,
     prep_shifts_3d,
+    rfft_volume_shape,
     validate_reconstruction,
 )
 from ._rfft import gather, scatter
@@ -37,14 +44,15 @@ def _fourier_coord(n: int, device: torch.device) -> torch.Tensor:
 def _slice_coordinates(
     proj_sidelength: int,
     radius: float,
-    oversampling: float,
+    scale: float,
     ewald_curvature: float,
     device: torch.device,
+    magnification: Magnification = IDENTITY_MAGNIFICATION,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """A central slice's own frequencies and its unrotated sample coordinate.
 
     Returns ``(coord_y, coord_x, s, inside)``: the ``(h, w)`` rfft frequencies,
-    the ``(h, w, 3)`` zyx sample coordinate before rotation (oversampled, with the
+    the ``(h, w, 3)`` zyx sample coordinate before rotation (times ``scale``, with the
     Ewald z-offset) and the mask of pixels inside the radius cutoff.
     """
     coord_y = _fourier_coord(proj_sidelength, device)[:, None]
@@ -55,8 +63,10 @@ def _slice_coordinates(
     inside = coord_y * coord_y + coord_x * coord_x <= torch.tensor(
         radius * radius, dtype=torch.float32
     )
-    sy = coord_y * oversampling
-    sx = coord_x * oversampling
+    # the magnification's Fourier-space matrix M, then the oversampling
+    m = magnification
+    sy = (m.mag_yy * coord_y + m.mag_yx * coord_x) * scale
+    sx = (m.mag_xy * coord_y + m.mag_xx * coord_x) * scale
     sz = ewald_curvature * (sx * sx + sy * sy)
     return coord_y, coord_x, torch.stack([sz, sy, sx], dim=-1), inside
 
@@ -101,10 +111,10 @@ def extract_slices_3d(
     shifts_2d: torch.Tensor | None,
     shifts_3d: torch.Tensor | None,
     output_shape: tuple[int, int] | None,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
+    magnification: Magnification = IDENTITY_MAGNIFICATION,
 ) -> torch.Tensor:
     """Extract complex ``(bv, bp, h, w)`` central slices from rfft volumes.
 
@@ -123,17 +133,16 @@ def extract_slices_3d(
     else:
         if len(output_shape) != 2 or output_shape[0] != output_shape[1]:
             raise ValueError(f"output_shape {output_shape} must be square")
-        if output_shape[0] % 2 != 0:
-            raise ValueError(f"output side length {output_shape[0]} must be even")
         proj_sidelength = int(output_shape[0])
-    radius = (
-        proj_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * proj_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, proj_sidelength)
 
     coord_y, coord_x, s, inside = _slice_coordinates(
-        proj_sidelength, radius, float(oversampling), float(ewald_curvature), device
+        proj_sidelength,
+        radius,
+        sampling_scale(sidelength, proj_sidelength),
+        float(ewald_curvature),
+        device,
+        magnification,
     )
     k = _rotate(rotations, s, bv)
     slices = gather(reconstruction.to(torch.complex64), k, interpolation)
@@ -148,7 +157,8 @@ def extract_slices_3d(
     )
     if phase is not None:
         slices = slices * torch.complex(torch.cos(phase), torch.sin(phase))
-    return slices * inside
+    # the DFT of the image at A r carries 1 / |det A|
+    return slices * inside * magnification.mag_scale
 
 
 def insert_slices_3d(
@@ -157,17 +167,19 @@ def insert_slices_3d(
     rotations: torch.Tensor,
     shifts_2d: torch.Tensor | None,
     shifts_3d: torch.Tensor | None,
-    oversampling: float,
+    volume_shape: tuple[int, int, int],
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+    magnification: Magnification = IDENTITY_MAGNIFICATION,
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert complex central slices into Hermitian rfft volumes (+ weights).
 
     Same arguments as ``InsertSlices3D.apply``: ``projections`` is ``(bp, h, w)``
-    or ``(bv, bp, h, w)``. Returns the ``(bv, d, h, w)`` data volume and, if
-    ``weights`` were given, the matching weight volume (else ``None``). Each
-    input pixel's value and weight are scaled so that every Hermitian pair of
+    or ``(bv, bp, h, w)``, ``volume_shape`` the real-space ``(d, d, d)``.
+    Returns the ``(bv, d, d, d // 2 + 1)`` data volume and the matching weight
+    volume (of unit weights if ``weights`` is ``None``). Each input pixel's value
+    and weight are scaled so that every Hermitian pair of
     the input counts once (``input_pixel_scale``, ``_input_pixel_scale`` in
     ``_common.mojo``).
     """
@@ -178,9 +190,13 @@ def insert_slices_3d(
     if projections.dim() != 4 or not projections.is_complex():
         raise ValueError("projections must be complex (bv, bp, h, w)")
     bv, bp, h, w = projections.shape
-    if h % 2 != 0 or h != (w - 1) * 2:
-        raise ValueError("projections must be square with even box (h == 2*(w-1))")
-    if weights is not None and weights.shape != projections.shape:
+    if w != h // 2 + 1:
+        raise ValueError("projections must be square rfft images (w == h // 2 + 1)")
+    if weights is None:  # unit weights: the weight volume is the density
+        weights = torch.ones(
+            projections.shape, dtype=torch.float32, device=projections.device
+        )
+    if weights.shape != projections.shape:
         raise ValueError("weights must match projections shape")
     interp_code(interpolation)
 
@@ -190,13 +206,20 @@ def insert_slices_3d(
         raise ValueError("rotations pose count must match slices")
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, device)
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, device)
-    _, sidelength, _ = reconstruction_volume_shape(h, oversampling)
-    radius = sidelength / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
+    _, sidelength, _ = rfft_volume_shape(volume_shape)
+    # the cutoff is in slice pixels, as the extraction's
+    radius = radius_cutoff(fftfreq_max, h)
 
     coord_y, coord_x, s, inside = _slice_coordinates(
-        h, radius, float(oversampling), float(ewald_curvature), device
+        h,
+        radius,
+        sampling_scale(sidelength, h),
+        float(ewald_curvature),
+        device,
+        magnification,
     )
-    keep = inside * input_pixel_scale(h, device)
+    # each input pixel's Hermitian weight and the magnification's 1 / |det A|
+    keep = inside * input_pixel_scale(h, device) * magnification.mag_scale
     k = _rotate(rotations, s, bv)
 
     values = projections.to(torch.complex64) * keep
@@ -212,6 +235,5 @@ def insert_slices_3d(
     if phase is not None:
         # the conjugate phase: the adjoint of the forward shift
         values = values * torch.complex(torch.cos(phase), -torch.sin(phase))
-    if weights is not None:
-        weights = weights.to(torch.float32) * keep
+    weights = weights.to(torch.float32) * keep
     return scatter(values, weights, k, sidelength, interpolation)

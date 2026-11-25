@@ -20,6 +20,7 @@ from _common import (
     _load_c2,
     _rfft_half,
     _rotated_coord,
+    _slice_sample_yx,
     _slice_3d_shift_phase,
     _store_c2,
 )
@@ -49,8 +50,9 @@ def _extract_slice_3d_pixel[
         return  # outside the cutoff: leave the (pre-zeroed) output at 0
 
     var rb = 0 if p.bv_rot == 1 else i_bv
-    var sx = coord_x * p.oversampling
-    var sy = coord_y * p.oversampling
+    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var sy = s_yx[0]
+    var sx = s_yx[1]
     var k = _rotated_coord(
         rot, (rb * p.bp + i_bp) * 9, sx, sy, _ewald_sz(p, sx, sy)
     )
@@ -60,7 +62,7 @@ def _extract_slice_3d_pixel[
         rec + i_bv * p.sidelength * p.sidelength * half * 2,
         row_major(p.sidelength, p.sidelength, half, 2),
     )
-    var val = _interp_3d[interp](rec_b, k[0], k[1], k[2])
+    var val = _interp_3d[interp](rec_b, k[0], k[1], k[2]) * p.mag_scale
 
     if p.has_shifts_2d != 0 or p.has_shifts_3d != 0:
         var phase = _slice_3d_shift_phase(
@@ -113,13 +115,16 @@ def _insert_slice_3d_pixel[
         row_major(p.bp, p.proj_sidelength, proj_half, 2),
     )
     var vin = _load_c2(inp_b, i_bp, y, x)
+    # the magnification's intensity scale too (the adjoint of the extraction's)
+    scale = scale * p.mag_scale
     var vre = vin[0] * scale
     var vim = vin[1] * scale
 
     # the 3D shift phase needs the rotated coordinate, so compute `k` first
     var rb = 0 if p.bv_rot == 1 else i_bv
-    var sx = coord_x * p.oversampling
-    var sy = coord_y * p.oversampling
+    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var sy = s_yx[0]
+    var sx = s_yx[1]
     var k = _rotated_coord(
         rot, (rb * p.bp + i_bp) * 9, sx, sy, _ewald_sz(p, sx, sy)
     )

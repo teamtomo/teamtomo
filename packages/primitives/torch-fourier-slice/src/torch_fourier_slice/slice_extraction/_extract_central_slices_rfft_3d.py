@@ -7,6 +7,13 @@ from torch_image_interpolation import sample_image_2d, sample_image_3d
 from .._dft_utils import _resample_rfft_edge
 from .._grids import _apply_ewald_curvature, _central_slice_fftfreq_grid
 
+# How close (cycles / pixel) a rotated sample must be to the x = 0 plane for the
+# sign of the rotation, not of its own x, to decide whether it is conjugated. These
+# functions flip a sample past the plane and clamp it onto x = 0, so any sample
+# inside this band loses its offset from the plane: keep it tiny. The experimental
+# backend folds each interpolation tap instead and needs no such threshold.
+_X_PLANE_TOLERANCE = 1e-8
+
 
 def _determine_near_zero_conjugate_mask(
     coordinates: torch.Tensor,  # (..., n_points, 3)
@@ -88,8 +95,6 @@ def extract_central_slices_rfft_3d(
     rotation_matrices: torch.Tensor,  # (..., 3, 3)
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
-    x_tolerance: float = 1e-8,
-    rot_tolerance: float | None = 1e-8,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,  # in kV
     ewald_flip_sign: bool = False,  # if True, flip the sign of the Ewald curvature
@@ -101,11 +106,6 @@ def extract_central_slices_rfft_3d(
     >>> volume = torch.fft.ifftshift(volume, dim=(-3, -2, -1))  # move center to corners
     >>> volume_rfft = torch.fft.rfftn(volume, dim=(-3, -2, -1))  # take RFFT
     >>> volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))  # center yz plane
-
-    NOTE: This function is sensitive to small numerical precision in the rotation
-    matrix for elements that are extremely close to zero. Use the 'rot_tolerance'
-    parameter to zero-out elements whose absolute value is below the tolerance. Setting
-    this to None will skip the zeroing step.
 
     Parameters
     ----------
@@ -125,12 +125,6 @@ def extract_central_slices_rfft_3d(
         If True, the provided rotation matrices are assumed to be in zyx coordinates.
         If False, they are assumed to be in xyz coordinates and will be converted to
         zyx by flipping the last two axes. Default is False.
-    x_tolerance : float
-        Tolerance for determining near-zero x-coordinates for conjugation ambiguity
-        resolution.
-    rot_tolerance : float | None
-        Tolerance for zeroing out near-zero elements in the rotation matrices to
-        mitigate numerical precision issues. If None, no zeroing is performed.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
         use a flat central slice.
@@ -173,16 +167,6 @@ def extract_central_slices_rfft_3d(
     # [f e d] [y]   [dx + ey + fz]   [y']
     # [c b a] [x] = [ax + by + cz] = [x']
     rotation_matrices = rotation_matrices.to(torch.float32)
-
-    if rot_tolerance is not None:
-        # out of place: an in-place write here would modify the caller's array,
-        # and would raise if the caller's matrices require grad
-        near_zero_elements = torch.abs(rotation_matrices) < rot_tolerance
-        rotation_matrices = torch.where(
-            near_zero_elements,
-            torch.zeros_like(rotation_matrices),
-            rotation_matrices,
-        )
 
     if not zyx_matrices:
         rotation_matrices = torch.flip(rotation_matrices, dims=(-2, -1))
@@ -233,21 +217,22 @@ def extract_central_slices_rfft_3d(
     rotation_matrices = einops.rearrange(rotation_matrices, "... 1 i j -> ... i j")
 
     # Flip coordinates which we absolutely know end in the redundant (-x) half
-    conjugate_mask = rotated_coords[..., 2] < -x_tolerance
+    conjugate_mask = rotated_coords[..., 2] < -_X_PLANE_TOLERANCE
 
     # Handle near-zero x-coordinates using the dedicated function
     near_zero_conj_mask = _determine_near_zero_conjugate_mask(
         coordinates=rotated_coords,
         rotation_matrices=rotation_matrices,
-        tol=x_tolerance,
+        tol=_X_PLANE_TOLERANCE,
     )
     conjugate_mask = conjugate_mask | near_zero_conj_mask
 
     rotated_coords[conjugate_mask, ...] *= -1
 
-    # Points within x_tolerance of the x=0 plane which weren't flipped can still sit
-    # just below it, e.g. every point of a view along x from a float32 matrix, where
-    # cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp them onto it.
+    # Points within _X_PLANE_TOLERANCE of the x=0 plane which weren't flipped can
+    # still sit just below it, e.g. every point of a view along x from a float32
+    # matrix, where cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp
+    # them onto it.
     # (out of place: clamp needs its input to compute gradients)
     rotated_coords = torch.cat(
         [rotated_coords[..., :2], torch.clamp(rotated_coords[..., 2:], min=0)], dim=-1
@@ -285,8 +270,6 @@ def extract_central_slices_rfft_3d_multichannel(
     rotation_matrices: torch.Tensor,  # (..., 3, 3)
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
-    x_tolerance: float = 1e-8,
-    rot_tolerance: float | None = 1e-8,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,  # in kV
     ewald_flip_sign: bool = False,  # if True, flip the sign of the Ewald curvature
@@ -298,11 +281,6 @@ def extract_central_slices_rfft_3d_multichannel(
     >>> volume = torch.fft.ifftshift(volume, dim=(-3, -2, -1))  # move center to corners
     >>> volume_rfft = torch.fft.rfftn(volume, dim=(-3, -2, -1))  # take RFFT
     >>> volume_rfft = torch.fft.fftshift(volume_rfft, dim=(-3, -2))  # center yz plane
-
-    NOTE: This function is sensitive to small numerical precision in the rotation
-    matrix for elements that are extremely close to zero. Use the 'rot_tolerance'
-    parameter to zero-out elements whose absolute value is below the tolerance. Setting
-    this to None will skip the zeroing step.
 
     Parameters
     ----------
@@ -322,12 +300,6 @@ def extract_central_slices_rfft_3d_multichannel(
         If True, the provided rotation matrices are assumed to be in zyx coordinates.
         If False, they are assumed to be in xyz coordinates and will be converted to
         zyx by flipping the last two axes. Default is False.
-    x_tolerance : float
-        Tolerance for determining near-zero x-coordinates for conjugation ambiguity
-        resolution.
-    rot_tolerance : float | None
-        Tolerance for zeroing out near-zero elements in the rotation matrices to
-        mitigate numerical precision issues. If None, no zeroing is performed.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
         use a flat central slice.
@@ -371,16 +343,6 @@ def extract_central_slices_rfft_3d_multichannel(
     # [f e d] [y]   [dx + ey + fz]   [y']
     # [c b a] [x] = [ax + by + cz] = [x']
     rotation_matrices = rotation_matrices.to(torch.float32)
-
-    if rot_tolerance is not None:
-        # out of place: an in-place write here would modify the caller's array,
-        # and would raise if the caller's matrices require grad
-        near_zero_elements = torch.abs(rotation_matrices) < rot_tolerance
-        rotation_matrices = torch.where(
-            near_zero_elements,
-            torch.zeros_like(rotation_matrices),
-            rotation_matrices,
-        )
 
     if not zyx_matrices:
         rotation_matrices = torch.flip(rotation_matrices, dims=(-2, -1))
@@ -432,21 +394,22 @@ def extract_central_slices_rfft_3d_multichannel(
     rotation_matrices = einops.rearrange(rotation_matrices, "... 1 i j -> ... i j")
 
     # Flip coordinates which we absolutely know end in the redundant (-x) half
-    conjugate_mask = rotated_coords[..., 2] < -x_tolerance
+    conjugate_mask = rotated_coords[..., 2] < -_X_PLANE_TOLERANCE
 
     # Handle near-zero x-coordinates using the dedicated function
     near_zero_conj_mask = _determine_near_zero_conjugate_mask(
         coordinates=rotated_coords,
         rotation_matrices=rotation_matrices,
-        tol=x_tolerance,
+        tol=_X_PLANE_TOLERANCE,
     )
     conjugate_mask = conjugate_mask | near_zero_conj_mask
 
     rotated_coords[conjugate_mask, ...] *= -1
 
-    # Points within x_tolerance of the x=0 plane which weren't flipped can still sit
-    # just below it, e.g. every point of a view along x from a float32 matrix, where
-    # cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp them onto it.
+    # Points within _X_PLANE_TOLERANCE of the x=0 plane which weren't flipped can
+    # still sit just below it, e.g. every point of a view along x from a float32
+    # matrix, where cos(90°) = -4.4e-8. Samples outside the array are zero, so clamp
+    # them onto it.
     # (out of place: clamp needs its input to compute gradients)
     rotated_coords = torch.cat(
         [rotated_coords[..., :2], torch.clamp(rotated_coords[..., 2:], min=0)], dim=-1

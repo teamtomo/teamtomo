@@ -13,10 +13,13 @@ import pytest
 import torch
 from scipy.spatial.transform import Rotation
 
+from torch_fourier_slice import project_2d_to_1d as canonical_project_2d_to_1d
 from torch_fourier_slice.experimental import (
     backproject_2d_to_3d,
     backproject_2d_to_3d_multichannel,
     mojo_kernels_available,
+    project_2d_to_1d,
+    project_2d_to_1d_multichannel,
     project_3d_to_2d,
     project_3d_to_2d_multichannel,
 )
@@ -96,10 +99,13 @@ def test_gridding_correction_rejects_unknown_interpolation():
         gridding_correction(8, "nope")
 
 
+@pytest.mark.parametrize("d", [64, 63])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_projection_matches_analytic_projection(interpolation):
-    """Projections of an isotropic blob match its exact analytic projection."""
-    d = 64
+def test_projection_matches_analytic_projection(interpolation, d):
+    """Projections of an isotropic blob match its exact analytic projection.
+
+    An odd box too: the blob sits on voxel ``d // 2`` either way.
+    """
     volume = _blob(d)
     truth = volume.sum(dim=0)
     scale = truth.abs().max()
@@ -135,9 +141,9 @@ def test_cubic_projection_beats_linear():
     assert 5 * errors["cubic"] < errors["linear"]
 
 
-def test_project_backproject_round_trip():
+@pytest.mark.parametrize("d", [48, 47])
+def test_project_backproject_round_trip(d):
     """Reconstructing from dense views recovers the volume."""
-    d = 48
     volume = _blob(d, sigma=3.0)
     rotations = _rotations(300, seed=1)
 
@@ -150,6 +156,75 @@ def test_project_backproject_round_trip():
     reconstruction = reconstruction / reconstruction.max() * volume.max()
     error = (reconstruction - volume).pow(2).mean().sqrt() / volume.max()
     assert error < 1e-3
+
+
+def _magnified_projection(d: int, centre, matrix: torch.Tensor) -> torch.Tensor:
+    """Exact projection along z of the ``_blob(d, 2.0)`` at ``centre`` (zyx), read
+    at ``A r``: an image magnified by ``A`` (yx), as ``transform_matrix`` makes it."""
+    axis = torch.arange(d, dtype=torch.float32) - d // 2
+    yy, xx = torch.meshgrid(axis, axis, indexing="ij")
+    r = torch.stack([yy, xx], dim=-1) @ matrix.T
+    sigma = 2.0
+    profile = (r[..., 0] - centre[1]) ** 2 + (r[..., 1] - centre[2]) ** 2
+    return (2 * torch.pi) ** 0.5 * sigma * torch.exp(-profile / (2 * sigma**2))
+
+
+def _offset_blob(d: int, centre, sigma: float = 2.0) -> torch.Tensor:
+    axis = torch.arange(d, dtype=torch.float32) - d // 2
+    zz, yy, xx = torch.meshgrid(axis, axis, axis, indexing="ij")
+    r2 = (zz - centre[0]) ** 2 + (yy - centre[1]) ** 2 + (xx - centre[2]) ** 2
+    return torch.exp(-r2 / (2 * sigma**2))
+
+
+MAGNIFICATIONS = {
+    "stretch": torch.tensor([[1.1, 0.0], [0.0, 0.95]]),
+    "shear": torch.tensor([[1.04, 0.03], [-0.02, 0.97]]),
+}
+
+
+@pytest.mark.parametrize("d", [64, 63])
+@pytest.mark.parametrize("magnification", MAGNIFICATIONS)
+@pytest.mark.parametrize(
+    ("interpolation", "tolerance"), [("linear", 3e-4), ("cubic", 3e-5)]
+)
+def test_magnified_projection_matches_analytic_projection(
+    interpolation, tolerance, magnification, d
+):
+    """With ``transform_matrix`` A the image at r is the projection at A r."""
+    centre = (2.0, -3.0, 1.0)
+    matrix = MAGNIFICATIONS[magnification]
+    images = project_3d_to_2d(
+        _offset_blob(d, centre),
+        torch.eye(3),
+        transform_matrix=matrix,
+        interpolation=interpolation,
+    )
+    truth = _magnified_projection(d, centre, matrix)
+    error = (images[0] - truth).pow(2).mean().sqrt() / truth.abs().max()
+    assert error < tolerance
+
+
+def test_identity_magnification_changes_nothing():
+    volume = _blob(32, sigma=3.0)
+    rotations = _rotations(4)
+    plain = project_3d_to_2d(volume, rotations)
+    identity = project_3d_to_2d(volume, rotations, transform_matrix=torch.eye(2))
+    assert torch.equal(plain, identity)
+
+
+@pytest.mark.parametrize("magnification", MAGNIFICATIONS)
+def test_magnified_round_trip(magnification):
+    """Backprojecting magnified images with the same matrix recovers the volume,
+    scale included: the backprojection undoes the images' 1 / |det A|."""
+    d = 48
+    volume = _offset_blob(d, (2.0, -3.0, 1.0), sigma=3.0)
+    rotations = _rotations(300, seed=1)
+    matrix = MAGNIFICATIONS[magnification]
+
+    images = project_3d_to_2d(volume, rotations, transform_matrix=matrix)
+    reconstruction = backproject_2d_to_3d(images, rotations, transform_matrix=matrix)
+    plain = backproject_2d_to_3d(project_3d_to_2d(volume, rotations), rotations)
+    assert torch.allclose(reconstruction, plain, atol=1e-3 * volume.max())
 
 
 def test_rank_forms_agree():
@@ -180,6 +255,8 @@ def test_rank_errors():
         backproject_2d_to_3d(torch.randn(2, 3, 8, 8), rotations)
     with pytest.raises(ValueError, match="pad_factor"):
         project_3d_to_2d(torch.randn(8, 8, 8), rotations, pad_factor=0.5)
+    with pytest.raises(ValueError, match="project_2d_to_1d_multichannel"):
+        project_2d_to_1d(torch.randn(2, 8, 8), torch.tensor([1.0, 0.0]))
 
 
 def test_real_space_layer_is_differentiable():
@@ -209,10 +286,11 @@ def _gpu_device() -> str | None:
 
 
 @pytest.mark.skipif(_gpu_device() is None, reason="no GPU device")
-def test_gpu_matches_cpu():
+@pytest.mark.parametrize("d", [32, 31])
+def test_gpu_matches_cpu(d):
     """The real-space layer follows the input device and agrees with the CPU."""
     device = _gpu_device()
-    volume = _blob(32, sigma=3.0)
+    volume = _blob(d, sigma=3.0)
     rotations = _rotations(6)
 
     cpu = project_3d_to_2d(volume, rotations)
@@ -224,3 +302,101 @@ def test_gpu_matches_cpu():
     gpu_volume = backproject_2d_to_3d(gpu, rotations)
     assert gpu_volume.device.type == device
     assert torch.allclose(gpu_volume.cpu(), cpu_volume, atol=1e-3)
+
+    matrix = MAGNIFICATIONS["shear"]
+    cpu = project_3d_to_2d(volume, rotations, transform_matrix=matrix)
+    gpu = project_3d_to_2d(volume.to(device), rotations, transform_matrix=matrix)
+    assert torch.allclose(gpu.cpu(), cpu, atol=1e-3)
+    cpu_volume = backproject_2d_to_3d(cpu, rotations, transform_matrix=matrix)
+    gpu_volume = backproject_2d_to_3d(gpu, rotations, transform_matrix=matrix)
+    assert torch.allclose(gpu_volume.cpu(), cpu_volume, atol=1e-3)
+
+    image = _blob_2d(d, sigma=3.0)
+    directions = _directions_2d(6)
+    cpu_lines = project_2d_to_1d(image, directions)
+    gpu_lines = project_2d_to_1d(image.to(device), directions)
+    assert gpu_lines.device.type == device
+    assert torch.allclose(gpu_lines.cpu(), cpu_lines, atol=1e-3)
+
+
+# --- 2D image -> 1D lines -----------------------------------------------------------
+
+
+def _blob_2d(
+    sidelength: int, sigma: float = 4.0, centre: tuple[float, float] = (0.0, 0.0)
+) -> torch.Tensor:
+    """Isotropic 2D Gaussian on pixel ``sidelength // 2``, or ``centre`` (yx) off it."""
+    axis = torch.arange(sidelength, dtype=torch.float32) - sidelength // 2
+    yy, xx = torch.meshgrid(axis, axis, indexing="ij")
+    return torch.exp(-((yy - centre[0]) ** 2 + (xx - centre[1]) ** 2) / (2 * sigma**2))
+
+
+def _angles(n: int, seed: int = 7) -> torch.Tensor:
+    return 2 * torch.pi * torch.rand(n, generator=torch.Generator().manual_seed(seed))
+
+
+def _directions_2d(n: int, seed: int = 7) -> torch.Tensor:
+    """Random xy unit vectors."""
+    angles = _angles(n, seed)
+    return torch.stack([angles.cos(), angles.sin()], dim=-1)
+
+
+@pytest.mark.parametrize("d", [64, 63])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_line_projection_matches_analytic_projection(interpolation, d):
+    """Lines of an isotropic 2D blob match its exact projection, in any direction."""
+    image = _blob_2d(d)
+    truth = image.sum(dim=0)
+
+    lines = project_2d_to_1d(image, _directions_2d(8), interpolation=interpolation)
+    assert lines.shape == (8, d)
+    assert not lines.is_complex()
+
+    error = (lines - truth[None]).pow(2).mean().sqrt() / truth.abs().max()
+    assert error < 1e-3
+
+
+@pytest.mark.parametrize("background", [0.0, 0.3])
+@pytest.mark.parametrize("d", [64, 63])
+def test_line_projection_matches_canonical(d, background):
+    """The canonical function takes an active rotation R; the line is along R's
+    first row. Both subtract the image's edge mean before padding and add its
+    projection back, so a background projects alike too."""
+    image = _blob_2d(d, sigma=3.0, centre=(4.0, -3.0)) + background
+    angles = _angles(8)
+    cos, sin = angles.cos(), angles.sin()
+    rotations = torch.stack(
+        [torch.stack([cos, -sin], dim=-1), torch.stack([sin, cos], dim=-1)], dim=-2
+    )
+
+    canonical = canonical_project_2d_to_1d(image, rotations)
+    lines = project_2d_to_1d(image, rotations[..., 0, :])
+    assert torch.allclose(lines, canonical, atol=1e-5 * canonical.abs().max())
+
+
+def test_line_projection_shift_translates_the_image():
+    """``shifts_2d`` (xy) moves the image by that much before it is projected."""
+    d, n = 64, 6
+    image = _blob_2d(d, sigma=3.0)
+    directions = _directions_2d(n)
+    shifts = torch.tensor([3.0, -2.0]).expand(n, 2)
+
+    shifted = project_2d_to_1d(
+        image, directions, shifts_2d=shifts, interpolation="cubic"
+    )
+    moved = torch.roll(image, shifts=(-2, 3), dims=(-2, -1))  # (y, x)
+    expected = project_2d_to_1d(moved, directions, interpolation="cubic")
+    assert torch.allclose(shifted, expected, atol=1e-3 * expected.abs().max())
+
+
+def test_line_projection_rank_forms_agree():
+    """The multichannel form reproduces the single-image one, image by image."""
+    d, bv, bp = 32, 3, 5
+    images = torch.stack([_blob_2d(d, sigma=2.0 + i) for i in range(bv)])
+    directions = _directions_2d(bp)
+
+    stacked = project_2d_to_1d_multichannel(images, directions)
+    assert stacked.shape == (bp, bv, d)  # pose-major
+    for i in range(bv):
+        single = project_2d_to_1d(images[i], directions)
+        assert torch.allclose(stacked[:, i], single, atol=1e-4)

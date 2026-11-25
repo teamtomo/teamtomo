@@ -16,6 +16,8 @@ import pytest
 import torch
 from scipy.spatial.transform import Rotation
 
+from torch_fourier_slice import project_2d_to_1d as canonical_project_2d_to_1d
+from torch_fourier_slice import project_3d_to_2d as canonical_project_3d_to_2d
 from torch_fourier_slice.experimental import (
     backproject,
     extraction,
@@ -31,6 +33,9 @@ requires_mojo = pytest.mark.skipif(
 )
 
 SIDELENGTH = 16
+VOLUME_SHAPE = (SIDELENGTH,) * 3
+# an anisotropic magnification with shear, so it mixes y and x
+MAGNIFICATION = torch.tensor([[1.04, 0.03], [-0.02, 0.97]])
 N_POSES = 5
 N_CHANNELS = 2
 MOJO_MODULES = (extraction, insertion, project, backproject)
@@ -87,6 +92,22 @@ def test_reference_signatures_match_mojo():
         ), name
 
 
+def test_fftfreq_max_defaults_to_nyquist():
+    """Every cutoff defaults to 0.5; ``None`` keeps every frequency, as in the
+    canonical layer. (The signatures above pin the Mojo functions to these.)"""
+    defaults = {
+        name: parameter.default
+        for name in reference.__all__
+        if (
+            parameter := inspect.signature(getattr(reference, name)).parameters.get(
+                "fftfreq_max"
+            )
+        )
+    }
+    assert defaults
+    assert all(default == 0.5 for default in defaults.values()), defaults
+
+
 def test_falls_back_to_reference_without_mojo():
     code = (
         "import sys\n"
@@ -111,9 +132,17 @@ EXTRACTION_CASES = {
         "yx_shifts": True,
     },
     "output_shape": {"output_shape": (24, 24)},
-    "oversampling": {"oversampling": 1.5},
+    "oversampled": {"output_shape": (10, 10)},
     "fftfreq_max": {"fftfreq_max": 0.3},
+    "every_frequency": {"fftfreq_max": None},
+    "every_frequency_oversampled": {"fftfreq_max": None, "output_shape": (10, 10)},
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
+    "magnification": {"transform_matrix": MAGNIFICATION},
+    "magnification_ewald": {
+        "transform_matrix": MAGNIFICATION,
+        "apply_ewald_curvature": True,
+        "ewald_px_size": 0.1,
+    },
 }
 
 
@@ -145,9 +174,16 @@ INSERTION_CASES = {
     "plain": {},
     "weights": {"weights": torch.rand(N_POSES, SIDELENGTH, SIDELENGTH // 2 + 1)},
     "shifts": {"shifts_2d": _shifts(N_POSES, 2), "shifts_3d": _shifts(N_POSES, 3)},
-    "oversampling": {"oversampling": 2.0},
+    "oversampling_2": {"volume_shape": (2 * SIDELENGTH,) * 3},
+    "oversampling_1.5": {"volume_shape": (24,) * 3},
     "fftfreq_max": {"fftfreq_max": 0.3},
+    "every_frequency": {"fftfreq_max": None},
+    "every_frequency_oversampling_2": {
+        "fftfreq_max": None,
+        "volume_shape": (2 * SIDELENGTH,) * 3,
+    },
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
+    "magnification": {"transform_matrix": MAGNIFICATION},
 }
 
 
@@ -155,20 +191,21 @@ INSERTION_CASES = {
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize("case", INSERTION_CASES)
 def test_insert_slices_matches_mojo(case, interpolation):
-    args = (_image_rfft(N_POSES), _rotations(N_POSES, seed=4))
-    kwargs = {**INSERTION_CASES[case], "interpolation": interpolation}
+    options = dict(INSERTION_CASES[case])
+    volume_shape = options.pop("volume_shape", VOLUME_SHAPE)
+    args = (_image_rfft(N_POSES), volume_shape, _rotations(N_POSES, seed=4))
+    kwargs = {**options, "interpolation": interpolation}
     volume, weights = reference.insert_central_slices_rfft_3d(*args, **kwargs)
     mojo_volume, mojo_weights = insertion.insert_central_slices_rfft_3d(*args, **kwargs)
     _assert_close(volume, mojo_volume, rtol=1e-5)
-    assert (weights is None) == (mojo_weights is None)
-    if weights is not None:
-        _assert_close(weights, mojo_weights, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
 
 
 @requires_mojo
 def test_insert_slices_multichannel_matches_mojo():
     args = (
         _image_rfft(N_POSES, N_CHANNELS),
+        VOLUME_SHAPE,
         _rotations(N_POSES, seed=4, batch=(N_CHANNELS,)),
     )
     kwargs = {
@@ -209,17 +246,20 @@ def _extraction_inputs():
     }
 
 
-def _insertion_inputs():
+def _insertion_inputs(weighted=True):
+    """Differentiable insertion inputs, with ``weights`` unless not ``weighted``."""
     generator = torch.Generator().manual_seed(9)
-    return {
+    inputs = {
         "image_rfft": _image_rfft(N_POSES),
         "rotation_matrices": _rotations(N_POSES, seed=4),
         "shifts_2d": _shifts(N_POSES, 2),
         "shifts_3d": _shifts(N_POSES, 3),
-        "weights": torch.rand(
-            N_POSES, SIDELENGTH, SIDELENGTH // 2 + 1, generator=generator
-        ),
     }
+    if weighted:
+        inputs["weights"] = torch.rand(
+            N_POSES, SIDELENGTH, SIDELENGTH // 2 + 1, generator=generator
+        )
+    return inputs
 
 
 @requires_mojo
@@ -235,9 +275,87 @@ def test_extract_slices_gradients_match_mojo(interpolation):
 
 @requires_mojo
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_insert_slices_gradients_match_mojo(interpolation):
+def test_extract_slices_gradients_match_mojo_with_smaller_output(interpolation):
+    """With slices smaller than the volume, every gradient keeps the forward's
+    Nyquist cutoff (in slice pixels)."""
+    inputs = _extraction_inputs()
+    kwargs = {"output_shape": (10, 10), "interpolation": interpolation}
+    expected = _gradients(extraction.extract_central_slices_rfft_3d, inputs, kwargs)
+    actual = _gradients(reference.extract_central_slices_rfft_3d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("output_index", [0, 1])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_insert_slices_gradients_match_mojo_into_larger_volume(
+    interpolation, output_index
+):
+    """Likewise for an insertion into a volume larger than the slices."""
     inputs = _insertion_inputs()
-    kwargs = {"interpolation": interpolation}
+    kwargs = {"volume_shape": (2 * SIDELENGTH,) * 3, "interpolation": interpolation}
+    function, mojo_function = (
+        reference.insert_central_slices_rfft_3d,
+        insertion.insert_central_slices_rfft_3d,
+    )
+    actual = _gradients(function, inputs, kwargs, output_index)
+    expected = _gradients(mojo_function, inputs, kwargs, output_index)
+    # the data volume depends on all inputs but the weights, the weight volume on
+    # the weights and the rotations
+    names = ["weights", "rotation_matrices"] if output_index else list(inputs)[:-1]
+    for name in names:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_magnified_slices_gradients_match_mojo(interpolation):
+    """The pose, shift, data and weight gradients with a magnification."""
+    kwargs = {
+        "transform_matrix": MAGNIFICATION,
+        "interpolation": interpolation,
+        "apply_ewald_curvature": True,
+        "ewald_px_size": 0.1,
+    }
+    inputs = _extraction_inputs()
+    expected = _gradients(extraction.extract_central_slices_rfft_3d, inputs, kwargs)
+    actual = _gradients(reference.extract_central_slices_rfft_3d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+    inputs = _insertion_inputs()
+    kwargs = {"volume_shape": VOLUME_SHAPE, **kwargs}
+    functions = (
+        reference.insert_central_slices_rfft_3d,
+        insertion.insert_central_slices_rfft_3d,
+    )
+    for output_index, names in (
+        (0, list(inputs)[:-1]),
+        (1, ["weights", "rotation_matrices"]),
+    ):
+        actual = _gradients(functions[0], inputs, kwargs, output_index)
+        expected = _gradients(functions[1], inputs, kwargs, output_index)
+        for name in names:
+            _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@pytest.mark.parametrize(
+    "matrix", [torch.eye(3), torch.zeros(2, 2)], ids=["not-2x2", "singular"]
+)
+def test_transform_matrix_must_be_an_invertible_2x2(matrix):
+    with pytest.raises(ValueError, match="transform_matrix"):
+        reference.extract_central_slices_rfft_3d(
+            _volume_rfft(), _rotations(N_POSES, seed=4), transform_matrix=matrix
+        )
+
+
+@requires_mojo
+@pytest.mark.parametrize("weighted", [True, False])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_insert_slices_gradients_match_mojo(interpolation, weighted):
+    inputs = _insertion_inputs(weighted)
+    kwargs = {"volume_shape": VOLUME_SHAPE, "interpolation": interpolation}
     function, mojo_function = (
         reference.insert_central_slices_rfft_3d,
         insertion.insert_central_slices_rfft_3d,
@@ -248,18 +366,22 @@ def test_insert_slices_gradients_match_mojo(interpolation):
     for name in ("image_rfft", "rotation_matrices", "shifts_2d", "shifts_3d"):
         _assert_close(actual[name], expected[name], rtol=1e-4)
     # the weight volume on the weights (and the rotations: see below)
-    actual = _gradients(function, inputs, kwargs, output_index=1)
-    expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
-    _assert_close(actual["weights"], expected["weights"], rtol=1e-4)
+    if weighted:
+        actual = _gradients(function, inputs, kwargs, output_index=1)
+        expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
+        _assert_close(actual["weights"], expected["weights"], rtol=1e-4)
 
 
 @requires_mojo
+@pytest.mark.parametrize("weighted", [True, False])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_insert_slices_weight_volume_rotation_gradient_matches_mojo(interpolation):
+def test_insert_slices_weight_volume_rotation_gradient_matches_mojo(
+    interpolation, weighted
+):
     """The weights are splatted at the rotated positions, so the weight volume
-    has a rotation gradient too."""
-    inputs = _insertion_inputs()
-    kwargs = {"interpolation": interpolation}
+    has a rotation gradient too, unit weights included."""
+    inputs = _insertion_inputs(weighted)
+    kwargs = {"volume_shape": VOLUME_SHAPE, "interpolation": interpolation}
     actual = _gradients(
         reference.insert_central_slices_rfft_3d, inputs, kwargs, output_index=1
     )
@@ -321,7 +443,7 @@ def test_reference_insertion_gradients_match_finite_differences(name, output_ind
         reference.insert_central_slices_rfft_3d,
         _insertion_inputs(),
         name,
-        {"interpolation": "cubic"},
+        {"volume_shape": VOLUME_SHAPE, "interpolation": "cubic"},
         output_index,
     )
 
@@ -362,6 +484,179 @@ def test_backproject_gradients_match_mojo(interpolation):
         _assert_close(actual[name], expected[name], rtol=1e-4)
 
 
+@requires_mojo
+@pytest.mark.parametrize("sidelength", [SIDELENGTH, SIDELENGTH - 1])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_project_2d_to_1d_matches_mojo(interpolation, sidelength):
+    """Values and gradients w.r.t. the image, the directions and the shifts."""
+    generator = torch.Generator().manual_seed(5)
+    directions = torch.randn(N_POSES, 2, generator=generator)
+    inputs = {
+        "image": torch.randn(sidelength, sidelength, generator=generator),
+        "directions": directions / directions.norm(dim=-1, keepdim=True),
+        "shifts_2d": _shifts(N_POSES, 2),
+    }
+    kwargs = {"interpolation": interpolation}
+    _assert_close(
+        reference.project_2d_to_1d(**inputs, **kwargs),
+        project.project_2d_to_1d(**inputs, **kwargs),
+        rtol=1e-5,
+    )
+    actual = _gradients(reference.project_2d_to_1d, inputs, kwargs)
+    expected = _gradients(project.project_2d_to_1d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+    images = torch.randn(N_CHANNELS, sidelength, sidelength, generator=generator)
+    _assert_close(
+        reference.project_2d_to_1d_multichannel(images, inputs["directions"]),
+        project.project_2d_to_1d_multichannel(images, inputs["directions"]),
+        rtol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("background", [0.0, 0.3])
+@pytest.mark.parametrize("sidelength", [64, 63])
+def test_reference_project_2d_to_1d_matches_canonical(sidelength, background):
+    """Runs without Mojo: an off-centre blob projects as the canonical function
+    does, with u the first row of its active rotation R, on a background too: both
+    subtract the image's edge mean before padding and add its projection back.
+
+    The blob's exact projection is the reference for the centred case (to the
+    linear interpolation's accuracy).
+    """
+    axis = torch.arange(sidelength, dtype=torch.float32) - sidelength // 2
+    yy, xx = torch.meshgrid(axis, axis, indexing="ij")
+    angles = (
+        2 * torch.pi * torch.rand(N_POSES, generator=torch.Generator().manual_seed(7))
+    )
+    cos, sin = angles.cos(), angles.sin()
+    rotations = torch.stack(
+        [torch.stack([cos, -sin], dim=-1), torch.stack([sin, cos], dim=-1)], dim=-2
+    )
+
+    image = torch.exp(-((yy - 4.0) ** 2 + (xx + 3.0) ** 2) / 18.0) + background
+    _assert_close(
+        reference.project_2d_to_1d(image, rotations[..., 0, :]),
+        canonical_project_2d_to_1d(image, rotations),
+        rtol=1e-5,
+    )
+
+    centred = torch.exp(-(yy**2 + xx**2) / 32.0)
+    lines = reference.project_2d_to_1d(centred, rotations[..., 0, :])
+    _assert_close(lines, centred.sum(dim=0).expand_as(lines), rtol=1e-2)
+
+
+# --- the canonical defaults: every frequency, and the edge mean -------------------
+
+# the real-space functions: the torch reference, and the Mojo kernels where present
+PROJECTIONS = [
+    pytest.param(reference, id="reference"),
+    pytest.param(project, id="mojo", marks=requires_mojo),
+]
+
+
+def _blob_on_background(sidelength, background, sigma=3.0):
+    """An off-centre Gaussian blob on a constant background."""
+    axis = torch.arange(sidelength, dtype=torch.float32) - sidelength // 2
+    zz, yy, xx = torch.meshgrid(axis, axis, axis, indexing="ij")
+    r2 = (zz - 2.0) ** 2 + (yy + 3.0) ** 2 + (xx - 1.0) ** 2
+    return torch.exp(-r2 / (2 * sigma**2)) + background
+
+
+@pytest.mark.parametrize("background", [0.0, 0.3])
+@pytest.mark.parametrize("sidelength", [32, 31])
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_projection_matches_canonical_without_a_cutoff(module, sidelength, background):
+    """With ``fftfreq_max=None`` the projection is the canonical function's at its
+    default, values and volume gradients, background and slice corners included.
+
+    Both subtract the volume's edge mean before padding and add its projection
+    back; without that step the background would ring against the padding.
+    """
+    rotations = _rotations(N_POSES, seed=4)
+    inputs = {"volume": _blob_on_background(sidelength, background)}
+
+    def projection(volume):
+        return module.project_3d_to_2d(volume, rotations, fftfreq_max=None)
+
+    def canonical(volume):
+        return canonical_project_3d_to_2d(volume, rotations)
+
+    _assert_close(projection(**inputs), canonical(**inputs), rtol=1e-5)
+    actual = _gradients(projection, inputs, {})["volume"]
+    expected = _gradients(canonical, inputs, {})["volume"]
+    _assert_close(actual, expected, rtol=1e-4)
+
+
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_default_projection_cuts_the_corners(module):
+    """The default cutoff, 0.5, leaves the images' DFT corners at zero; ``None``
+    keeps them."""
+    d = 16
+    volume = torch.randn((d,) * 3, generator=torch.Generator().manual_seed(5))
+    rotations = _rotations(N_POSES, seed=4)
+    ky = torch.fft.fftfreq(d)[:, None]
+    kx = torch.fft.rfftfreq(d)[None, :]
+    corners = ky**2 + kx**2 > 0.25
+
+    def corner_spectrum(**kwargs):
+        images = module.project_3d_to_2d(volume, rotations, pad_factor=1.0, **kwargs)
+        return torch.fft.rfftn(torch.fft.ifftshift(images, dim=(-2, -1)))[..., corners]
+
+    scale = torch.fft.rfftn(volume).abs().max()
+    assert corner_spectrum().abs().max() < 1e-4 * scale
+    assert corner_spectrum(fftfreq_max=None).abs().max() > 1e-2 * scale
+
+
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_multichannel_projection_takes_each_channel_edge_mean(module):
+    """Each channel's own background is subtracted and added back."""
+    d = 24
+    volumes = torch.stack(
+        [_blob_on_background(d, background) for background in (0.0, 0.3, -0.2)]
+    )
+    rotations = _rotations(N_POSES, seed=4)
+    stacked = module.project_3d_to_2d_multichannel(volumes, rotations)
+    for i, volume in enumerate(volumes):
+        _assert_close(
+            stacked[:, i], module.project_3d_to_2d(volume, rotations), rtol=1e-5
+        )
+
+    images = volumes[:, 0]
+    directions = _directions(N_POSES, 2, seed=4)
+    lines = module.project_2d_to_1d_multichannel(images, directions)
+    for i, image in enumerate(images):
+        _assert_close(
+            lines[:, i], module.project_2d_to_1d(image, directions), rtol=1e-5
+        )
+
+
+@pytest.mark.parametrize("sidelength", [3, 5, 8, 9, 16, 17])
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_constant_projects_to_its_path_length(module, sidelength):
+    """A constant volume is all edge mean: every pixel is ``c * d``, at any pose,
+    magnified or not, in boxes too small for the canonical 4-voxel shell too."""
+    c = 0.7
+    rotations = _rotations(N_POSES, seed=4)
+    volume = torch.full((sidelength,) * 3, c)
+    expected = torch.full((N_POSES, sidelength, sidelength), c * sidelength)
+    _assert_close(module.project_3d_to_2d(volume, rotations), expected, rtol=1e-6)
+    _assert_close(
+        module.project_3d_to_2d(volume, rotations, transform_matrix=MAGNIFICATION),
+        expected,
+        rtol=1e-6,
+    )
+
+    image = torch.full((sidelength,) * 2, c)
+    directions = _directions(N_POSES, 2, seed=4)
+    _assert_close(
+        module.project_2d_to_1d(image, directions),
+        torch.full((N_POSES, sidelength), c * sidelength),
+        rtol=1e-6,
+    )
+
+
 # --- central lines ----------------------------------------------------------------
 
 # per line dimension: the array lines are cut from, and the names of the shift and
@@ -380,6 +675,13 @@ LINE_KINDS = {
         "order": {"yx_directions": True, "yx_shifts": True},
     },
 }
+
+
+def _array_shape(kind, sidelength=SIDELENGTH):
+    """The ``volume_shape`` / ``image_shape`` keyword of a line insertion."""
+    if kind == "3d":
+        return {"volume_shape": (sidelength,) * 3}
+    return {"image_shape": (sidelength,) * 2}
 
 
 def _line_function(module, operation, kind, multichannel=False):
@@ -411,16 +713,30 @@ def _line_case(kind, case):
         "shifts": {shifts: _shifts(N_POSES, ndim)},
         "axis_order": {shifts: _shifts(N_POSES, ndim), **LINE_KINDS[kind]["order"]},
         "output_length": {"output_length": 24},
-        "oversampling": {"oversampling": 1.5},
+        "oversampled": {"output_length": 10},
         "fftfreq_max": {"fftfreq_max": 0.3},
     }[case]
+
+
+@pytest.mark.parametrize("line_length", [SIDELENGTH, SIDELENGTH - 1])
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_lines_have_no_corners(kind, line_length):
+    """A line's frequencies stop at its Nyquist, so ``fftfreq_max=None`` and the
+    default 0.5 give the same lines, even and odd."""
+    ndim = LINE_KINDS[kind]["ndim"]
+    args = (LINE_KINDS[kind]["array"](), _directions(N_POSES, ndim, seed=4))
+    extract = _line_function(reference, "extract", kind)
+    default = extract(*args, output_length=line_length)
+    assert torch.equal(
+        default, extract(*args, output_length=line_length, fftfreq_max=None)
+    )
 
 
 @requires_mojo
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize(
     "case",
-    ["plain", "shifts", "axis_order", "output_length", "oversampling", "fftfreq_max"],
+    ["plain", "shifts", "axis_order", "output_length", "oversampled", "fftfreq_max"],
 )
 @pytest.mark.parametrize("kind", LINE_KINDS)
 def test_extract_lines_matches_mojo(kind, case, interpolation):
@@ -453,25 +769,35 @@ def test_extract_lines_multichannel_matches_mojo(kind):
 @requires_mojo
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize(
-    "case", ["plain", "weights", "shifts", "axis_order", "oversampling", "fftfreq_max"]
+    "case",
+    [
+        "plain",
+        "weights",
+        "shifts",
+        "axis_order",
+        "oversampling_2",
+        "oversampling_1.5",
+        "fftfreq_max",
+    ],
 )
 @pytest.mark.parametrize("kind", LINE_KINDS)
 def test_insert_lines_matches_mojo(kind, case, interpolation):
     ndim = LINE_KINDS[kind]["ndim"]
-    args = (_lines_rfft(N_POSES), _directions(N_POSES, ndim, seed=4))
+    sidelength = {"oversampling_2": 2 * SIDELENGTH, "oversampling_1.5": 24}.get(
+        case, SIDELENGTH
+    )
+    args = (_lines_rfft(N_POSES), (sidelength,) * ndim, _directions(N_POSES, ndim, 4))
     if case == "weights":
         options = {"weights": _line_weights(N_POSES)}
-    elif case == "oversampling":
-        options = {"oversampling": 2.0}
+    elif case.startswith("oversampling"):
+        options = {}
     else:
         options = _line_case(kind, case)
     kwargs = {**options, "interpolation": interpolation}
     data, weights = _line_function(reference, "insert", kind)(*args, **kwargs)
     mojo_data, mojo_weights = _line_function(insertion, "insert", kind)(*args, **kwargs)
     _assert_close(data, mojo_data, rtol=1e-5)
-    assert (weights is None) == (mojo_weights is None)
-    if weights is not None:
-        _assert_close(weights, mojo_weights, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
 
 
 @requires_mojo
@@ -480,6 +806,7 @@ def test_insert_lines_multichannel_matches_mojo(kind):
     ndim, shifts = LINE_KINDS[kind]["ndim"], LINE_KINDS[kind]["shifts"]
     args = (
         _lines_rfft(N_POSES, N_CHANNELS),
+        (SIDELENGTH,) * ndim,
         _directions(N_POSES, ndim, seed=4, batch=(N_CHANNELS,)),
     )
     kwargs = {
@@ -505,14 +832,16 @@ def _line_extraction_inputs(kind):
     }
 
 
-def _line_insertion_inputs(kind):
+def _line_insertion_inputs(kind, weighted=True):
     ndim = LINE_KINDS[kind]["ndim"]
-    return {
+    inputs = {
         "lines": _lines_rfft(N_POSES),
         "directions": _directions(N_POSES, ndim, seed=4),
         LINE_KINDS[kind]["shifts"]: _shifts(N_POSES, ndim),
-        "weights": _line_weights(N_POSES),
     }
+    if weighted:
+        inputs["weights"] = _line_weights(N_POSES)
+    return inputs
 
 
 @requires_mojo
@@ -528,11 +857,12 @@ def test_extract_lines_gradients_match_mojo(kind, interpolation):
 
 
 @requires_mojo
+@pytest.mark.parametrize("weighted", [True, False])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize("kind", LINE_KINDS)
-def test_insert_lines_gradients_match_mojo(kind, interpolation):
-    inputs = _line_insertion_inputs(kind)
-    kwargs = {"interpolation": interpolation}
+def test_insert_lines_gradients_match_mojo(kind, interpolation, weighted):
+    inputs = _line_insertion_inputs(kind, weighted)
+    kwargs = {**_array_shape(kind), "interpolation": interpolation}
     function = _line_function(reference, "insert", kind)
     mojo_function = _line_function(insertion, "insert", kind)
     # the data depends on the lines, the directions and the shifts
@@ -540,10 +870,10 @@ def test_insert_lines_gradients_match_mojo(kind, interpolation):
     expected = _gradients(mojo_function, inputs, kwargs, output_index=0)
     for name in ("lines", "directions", LINE_KINDS[kind]["shifts"]):
         _assert_close(actual[name], expected[name], rtol=1e-4)
-    # the weights are splatted along the directions too
+    # the weights, unit ones included, are splatted along the directions too
     actual = _gradients(function, inputs, kwargs, output_index=1)
     expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
-    for name in ("weights", "directions"):
+    for name in ("weights", "directions") if weighted else ("directions",):
         _assert_close(actual[name], expected[name], rtol=1e-4)
 
 
@@ -573,9 +903,137 @@ def test_reference_line_insertion_gradients_match_finite_differences(
         _line_function(reference, "insert", kind),
         _line_insertion_inputs(kind),
         name,
-        {"interpolation": "cubic"},
+        {**_array_shape(kind), "interpolation": "cubic"},
         output_index,
     )
+
+
+# --- odd sizes ----------------------------------------------------------------
+
+# (array side, projection side): odd throughout, an odd slice or line of an even
+# array, and an even one of an odd array
+ODD_SIDES = {"odd": (15, 15), "odd_projection": (16, 11), "odd_array": (15, 10)}
+
+
+def _random_rfft(shape, ndim, seed):
+    """The rfft over the last ``ndim`` axes of a random real array."""
+    generator = torch.Generator().manual_seed(seed)
+    real = torch.randn(shape, generator=generator)
+    return torch.fft.rfftn(real, dim=tuple(range(-ndim, 0)))
+
+
+def _assert_gradients_match(function, mojo_function, inputs, kwargs, groups):
+    """Gradients agree for each ``output_index -> input names`` in ``groups``."""
+    for output_index, names in groups.items():
+        actual = _gradients(function, inputs, kwargs, output_index)
+        expected = _gradients(mojo_function, inputs, kwargs, output_index)
+        for name in names:
+            _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("sides", ODD_SIDES.values(), ids=ODD_SIDES.keys())
+def test_odd_slices_match_mojo(sides, interpolation):
+    """Values and gradients of slices cut from and inserted into odd arrays."""
+    side, proj_side = sides
+    poses = {
+        "rotation_matrices": _rotations(N_POSES, seed=4),
+        "shifts_2d": _shifts(N_POSES, 2),
+        "shifts_3d": _shifts(N_POSES, 3),
+    }
+    inputs = {"volume_rfft": _random_rfft((side,) * 3, 3, seed=0), **poses}
+    kwargs = {"output_shape": (proj_side,) * 2, "interpolation": interpolation}
+    functions = (
+        reference.extract_central_slices_rfft_3d,
+        extraction.extract_central_slices_rfft_3d,
+    )
+    _assert_close(*(f(**inputs, **kwargs) for f in functions), rtol=1e-5)
+    _assert_gradients_match(*functions, inputs, kwargs, {None: list(inputs)})
+
+    generator = torch.Generator().manual_seed(9)
+    inputs = {
+        "image_rfft": _random_rfft((N_POSES, proj_side, proj_side), 2, seed=1),
+        **poses,
+        "weights": torch.rand(
+            N_POSES, proj_side, proj_side // 2 + 1, generator=generator
+        ),
+    }
+    kwargs = {"volume_shape": (side,) * 3, "interpolation": interpolation}
+    functions = (
+        reference.insert_central_slices_rfft_3d,
+        insertion.insert_central_slices_rfft_3d,
+    )
+    (data, weights), (mojo_data, mojo_weights) = (
+        f(**inputs, **kwargs) for f in functions
+    )
+    _assert_close(data, mojo_data, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
+    groups = {0: list(inputs)[:-1], 1: ["weights", "rotation_matrices"]}
+    _assert_gradients_match(*functions, inputs, kwargs, groups)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("sides", ODD_SIDES.values(), ids=ODD_SIDES.keys())
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_odd_lines_match_mojo(kind, sides, interpolation):
+    """Values and gradients of lines of odd length, or of odd arrays."""
+    side, line_length = sides
+    ndim, shifts = LINE_KINDS[kind]["ndim"], LINE_KINDS[kind]["shifts"]
+    poses = {
+        "directions": _directions(N_POSES, ndim, seed=4),
+        shifts: _shifts(N_POSES, ndim),
+    }
+    array_name = "volume_rfft" if kind == "3d" else "image_rfft"
+    inputs = {array_name: _random_rfft((side,) * ndim, ndim, seed=0), **poses}
+    kwargs = {"output_length": line_length, "interpolation": interpolation}
+    functions = tuple(
+        _line_function(module, "extract", kind) for module in (reference, extraction)
+    )
+    _assert_close(*(f(**inputs, **kwargs) for f in functions), rtol=1e-5)
+    _assert_gradients_match(*functions, inputs, kwargs, {None: list(inputs)})
+
+    generator = torch.Generator().manual_seed(9)
+    inputs = {
+        "lines": _random_rfft((N_POSES, line_length), 1, seed=1),
+        **poses,
+        "weights": torch.rand(N_POSES, line_length // 2 + 1, generator=generator),
+    }
+    kwargs = {
+        **_array_shape(kind, side),
+        "line_length": line_length,
+        "interpolation": interpolation,
+    }
+    functions = tuple(
+        _line_function(module, "insert", kind) for module in (reference, insertion)
+    )
+    (data, weights), (mojo_data, mojo_weights) = (
+        f(**inputs, **kwargs) for f in functions
+    )
+    _assert_close(data, mojo_data, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
+    groups = {0: list(inputs)[:-1], 1: ["weights", "directions"]}
+    _assert_gradients_match(*functions, inputs, kwargs, groups)
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        pytest.param(insertion, id="mojo", marks=requires_mojo),
+        pytest.param(reference, id="reference"),
+    ],
+)
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_line_length_must_fit_the_lines(module, kind):
+    """A length of 2m or 2m + 1 has m + 1 rfft samples; any other is an error."""
+    ndim = LINE_KINDS[kind]["ndim"]
+    lines = _lines_rfft(N_POSES)  # SIDELENGTH // 2 + 1 samples
+    args = (lines, (SIDELENGTH,) * ndim, _directions(N_POSES, ndim, seed=4))
+    insert = _line_function(module, "insert", kind)
+    insert(*args, line_length=SIDELENGTH + 1)
+    with pytest.raises(ValueError, match="line_length"):
+        insert(*args, line_length=SIDELENGTH + 2)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device")
@@ -596,10 +1054,10 @@ def test_reference_runs_on_gpu():
 
     lines, directions = _lines_rfft(N_POSES), _directions(N_POSES, 3, seed=4)
     on_cpu, _ = reference.insert_central_lines_rfft_3d(
-        lines, directions, interpolation="cubic"
+        lines, VOLUME_SHAPE, directions, interpolation="cubic"
     )
     on_gpu, _ = reference.insert_central_lines_rfft_3d(
-        lines.cuda(), directions.cuda(), interpolation="cubic"
+        lines.cuda(), VOLUME_SHAPE, directions.cuda(), interpolation="cubic"
     )
     assert on_gpu.is_cuda
     _assert_close(on_gpu.cpu(), on_cpu, rtol=1e-5)
