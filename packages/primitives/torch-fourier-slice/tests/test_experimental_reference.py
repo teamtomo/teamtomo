@@ -16,6 +16,7 @@ import pytest
 import torch
 from scipy.spatial.transform import Rotation
 
+from torch_fourier_slice import project_2d_to_1d as canonical_project_2d_to_1d
 from torch_fourier_slice.experimental import (
     backproject,
     extraction,
@@ -406,6 +407,68 @@ def test_backproject_gradients_match_mojo(interpolation):
     expected = _gradients(backproject.backproject_2d_to_3d, inputs, kwargs)
     for name in inputs:
         _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("sidelength", [SIDELENGTH, SIDELENGTH - 1])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_project_2d_to_1d_matches_mojo(interpolation, sidelength):
+    """Values and gradients w.r.t. the image, the directions and the shifts."""
+    generator = torch.Generator().manual_seed(5)
+    directions = torch.randn(N_POSES, 2, generator=generator)
+    inputs = {
+        "image": torch.randn(sidelength, sidelength, generator=generator),
+        "directions": directions / directions.norm(dim=-1, keepdim=True),
+        "shifts_2d": _shifts(N_POSES, 2),
+    }
+    kwargs = {"interpolation": interpolation}
+    _assert_close(
+        reference.project_2d_to_1d(**inputs, **kwargs),
+        project.project_2d_to_1d(**inputs, **kwargs),
+        rtol=1e-5,
+    )
+    actual = _gradients(reference.project_2d_to_1d, inputs, kwargs)
+    expected = _gradients(project.project_2d_to_1d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+    images = torch.randn(N_CHANNELS, sidelength, sidelength, generator=generator)
+    _assert_close(
+        reference.project_2d_to_1d_multichannel(images, inputs["directions"]),
+        project.project_2d_to_1d_multichannel(images, inputs["directions"]),
+        rtol=1e-5,
+    )
+
+
+@pytest.mark.parametrize("sidelength", [64, 63])
+def test_reference_project_2d_to_1d_matches_canonical(sidelength):
+    """Runs without Mojo: an off-centre blob well inside the box projects as the
+    canonical function does, with u the first row of its active rotation R.
+
+    The canonical function also subtracts the image's edge mean before padding, so
+    they only match for edges at ~0. The blob's exact projection is the reference
+    for the centred case (to the linear interpolation's accuracy).
+    """
+    axis = torch.arange(sidelength, dtype=torch.float32) - sidelength // 2
+    yy, xx = torch.meshgrid(axis, axis, indexing="ij")
+    angles = (
+        2 * torch.pi * torch.rand(N_POSES, generator=torch.Generator().manual_seed(7))
+    )
+    cos, sin = angles.cos(), angles.sin()
+    rotations = torch.stack(
+        [torch.stack([cos, -sin], dim=-1), torch.stack([sin, cos], dim=-1)], dim=-2
+    )
+
+    image = torch.exp(-((yy - 4.0) ** 2 + (xx + 3.0) ** 2) / 18.0)
+    _assert_close(
+        reference.project_2d_to_1d(image, rotations[..., 0, :]),
+        canonical_project_2d_to_1d(image, rotations),
+        rtol=1e-5,
+    )
+
+    centred = torch.exp(-(yy**2 + xx**2) / 32.0)
+    lines = reference.project_2d_to_1d(centred, rotations[..., 0, :])
+    _assert_close(lines, centred.sum(dim=0).expand_as(lines), rtol=1e-2)
 
 
 # --- central lines ----------------------------------------------------------------

@@ -18,7 +18,9 @@ mirroring ``torch_fourier_slice``'s own :func:`~torch_fourier_slice.project_3d_t
 / :func:`~torch_fourier_slice.backproject_2d_to_3d`. These handle the padding,
 the FFTs and the gridding correction for you:
 
-- :func:`project_3d_to_2d` / :func:`backproject_2d_to_3d` (+ ``_multichannel``).
+- :func:`project_3d_to_2d` / :func:`backproject_2d_to_3d` (+ ``_multichannel``);
+- :func:`project_2d_to_1d` (+ ``_multichannel``), the 2D image -> 1D projections
+  posed by a direction, as the central lines are.
 
 **Fourier layer** -- rfft in, rfft out, in **rfft layout with DC at the origin**
 (see the layout note in ``README.md`` for the one-``fftshift`` bridge to the
@@ -61,6 +63,8 @@ except ImportError:  # no Mojo kernels on this system: use the torch reference
         insert_central_lines_rfft_3d_multichannel,
         insert_central_slices_rfft_3d,
         insert_central_slices_rfft_3d_multichannel,
+        project_2d_to_1d,
+        project_2d_to_1d_multichannel,
         project_3d_to_2d,
         project_3d_to_2d_multichannel,
     )
@@ -85,7 +89,12 @@ else:
         insert_central_slices_rfft_3d,
         insert_central_slices_rfft_3d_multichannel,
     )
-    from .project import project_3d_to_2d, project_3d_to_2d_multichannel
+    from .project import (
+        project_2d_to_1d,
+        project_2d_to_1d_multichannel,
+        project_3d_to_2d,
+        project_3d_to_2d_multichannel,
+    )
 
 __all__ = [
     "backproject_2d_to_3d",
@@ -103,6 +112,8 @@ __all__ = [
     "insert_central_slices_rfft_3d",
     "insert_central_slices_rfft_3d_multichannel",
     "mojo_kernels_available",
+    "project_2d_to_1d",
+    "project_2d_to_1d_multichannel",
     "project_3d_to_2d",
     "project_3d_to_2d_multichannel",
 ]

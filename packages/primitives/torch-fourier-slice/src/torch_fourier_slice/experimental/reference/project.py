@@ -1,15 +1,17 @@
-"""Torch reference real-space projection: 3D volume -> 2D images.
+"""Torch reference real-space projection: 3D volume -> 2D images, 2D -> 1D.
 
 Same API and pipeline as :mod:`torch_fourier_slice.experimental.project`, over
-the torch reference central-slice extraction.
+the torch reference central-slice and central-line extraction.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..project import _project
+from ..project import _project, _project_2d
 from .extraction import (
+    extract_central_lines_rfft_2d,
+    extract_central_lines_rfft_2d_multichannel,
     extract_central_slices_rfft_3d,
     extract_central_slices_rfft_3d_multichannel,
 )
@@ -100,4 +102,64 @@ def project_3d_to_2d_multichannel(
         ewald_flip_sign,
         ewald_px_size,
         extract_central_slices_rfft_3d_multichannel,
+    )
+
+
+def project_2d_to_1d(
+    image: torch.Tensor,
+    directions: torch.Tensor,
+    shifts_2d: torch.Tensor | None = None,
+    pad_factor: float = 2.0,
+    fftfreq_max: float | None = None,
+    yx_directions: bool = False,
+    yx_shifts: bool = False,
+    interpolation: str = "linear",
+) -> torch.Tensor:
+    """Project a real square image onto lines (torch reference).
+
+    See :func:`torch_fourier_slice.experimental.project_2d_to_1d`.
+    """
+    if image.dim() != 2:
+        raise ValueError(
+            "image must be (d, d); use project_2d_to_1d_multichannel for (bv, d, d)"
+        )
+    return _project_2d(
+        image,
+        directions,
+        shifts_2d,
+        pad_factor,
+        fftfreq_max,
+        yx_directions,
+        yx_shifts,
+        interpolation,
+        extract_central_lines_rfft_2d,
+    )
+
+
+def project_2d_to_1d_multichannel(
+    image: torch.Tensor,
+    directions: torch.Tensor,
+    shifts_2d: torch.Tensor | None = None,
+    pad_factor: float = 2.0,
+    fftfreq_max: float | None = None,
+    yx_directions: bool = False,
+    yx_shifts: bool = False,
+    interpolation: str = "linear",
+) -> torch.Tensor:
+    """Project a batch of real square images onto lines (torch reference).
+
+    See :func:`torch_fourier_slice.experimental.project_2d_to_1d_multichannel`.
+    """
+    if image.dim() != 3:
+        raise ValueError("image must be (bv, d, d) for multi-channel")
+    return _project_2d(
+        image,
+        directions,
+        shifts_2d,
+        pad_factor,
+        fftfreq_max,
+        yx_directions,
+        yx_shifts,
+        interpolation,
+        extract_central_lines_rfft_2d_multichannel,
     )
