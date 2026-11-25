@@ -142,7 +142,7 @@ Python side (`experimental/`):
 
 | file | role |
 |------|------|
-| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` (+ `_multichannel`) — padding, FFTs, gridding correction |
+| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` and `project_2d_to_1d` (+ `_multichannel`) — padding, FFTs, gridding correction |
 | `extraction.py`, `insertion.py` | **Fourier API**: 3D volume ↔ 2D central slices (posed by a rotation matrix), 3D volume ↔ 1D central lines (posed by a direction), 2D image ↔ 1D central lines |
 | `_gridding.py` | the de-apodization correction for each interpolation kernel (§7) |
 | `_conventions.py` | translates the canonical pose / Ewald arguments into kernel conventions |

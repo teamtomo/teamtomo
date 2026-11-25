@@ -29,7 +29,12 @@ from .insertion import (
     insert_central_slices_rfft_3d,
     insert_central_slices_rfft_3d_multichannel,
 )
-from .project import project_3d_to_2d, project_3d_to_2d_multichannel
+from .project import (
+    project_2d_to_1d,
+    project_2d_to_1d_multichannel,
+    project_3d_to_2d,
+    project_3d_to_2d_multichannel,
+)
 
 __all__ = [
     "backproject_2d_to_3d",
@@ -46,6 +51,8 @@ __all__ = [
     "insert_central_lines_rfft_3d_multichannel",
     "insert_central_slices_rfft_3d",
     "insert_central_slices_rfft_3d_multichannel",
+    "project_2d_to_1d",
+    "project_2d_to_1d_multichannel",
     "project_3d_to_2d",
     "project_3d_to_2d_multichannel",
 ]
