@@ -17,6 +17,7 @@ import torch
 from scipy.spatial.transform import Rotation
 
 from torch_fourier_slice import project_2d_to_1d as canonical_project_2d_to_1d
+from torch_fourier_slice import project_3d_to_2d as canonical_project_3d_to_2d
 from torch_fourier_slice.experimental import (
     backproject,
     extraction,
@@ -91,6 +92,22 @@ def test_reference_signatures_match_mojo():
         ), name
 
 
+def test_fftfreq_max_defaults_to_nyquist():
+    """Every cutoff defaults to 0.5; ``None`` keeps every frequency, as in the
+    canonical layer. (The signatures above pin the Mojo functions to these.)"""
+    defaults = {
+        name: parameter.default
+        for name in reference.__all__
+        if (
+            parameter := inspect.signature(getattr(reference, name)).parameters.get(
+                "fftfreq_max"
+            )
+        )
+    }
+    assert defaults
+    assert all(default == 0.5 for default in defaults.values()), defaults
+
+
 def test_falls_back_to_reference_without_mojo():
     code = (
         "import sys\n"
@@ -117,6 +134,8 @@ EXTRACTION_CASES = {
     "output_shape": {"output_shape": (24, 24)},
     "oversampled": {"output_shape": (10, 10)},
     "fftfreq_max": {"fftfreq_max": 0.3},
+    "every_frequency": {"fftfreq_max": None},
+    "every_frequency_oversampled": {"fftfreq_max": None, "output_shape": (10, 10)},
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
     "magnification": {"transform_matrix": MAGNIFICATION},
     "magnification_ewald": {
@@ -158,6 +177,11 @@ INSERTION_CASES = {
     "oversampling_2": {"volume_shape": (2 * SIDELENGTH,) * 3},
     "oversampling_1.5": {"volume_shape": (24,) * 3},
     "fftfreq_max": {"fftfreq_max": 0.3},
+    "every_frequency": {"fftfreq_max": None},
+    "every_frequency_oversampling_2": {
+        "fftfreq_max": None,
+        "volume_shape": (2 * SIDELENGTH,) * 3,
+    },
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
     "magnification": {"transform_matrix": MAGNIFICATION},
 }
@@ -491,14 +515,15 @@ def test_project_2d_to_1d_matches_mojo(interpolation, sidelength):
     )
 
 
+@pytest.mark.parametrize("background", [0.0, 0.3])
 @pytest.mark.parametrize("sidelength", [64, 63])
-def test_reference_project_2d_to_1d_matches_canonical(sidelength):
-    """Runs without Mojo: an off-centre blob well inside the box projects as the
-    canonical function does, with u the first row of its active rotation R.
+def test_reference_project_2d_to_1d_matches_canonical(sidelength, background):
+    """Runs without Mojo: an off-centre blob projects as the canonical function
+    does, with u the first row of its active rotation R, on a background too: both
+    subtract the image's edge mean before padding and add its projection back.
 
-    The canonical function also subtracts the image's edge mean before padding, so
-    they only match for edges at ~0. The blob's exact projection is the reference
-    for the centred case (to the linear interpolation's accuracy).
+    The blob's exact projection is the reference for the centred case (to the
+    linear interpolation's accuracy).
     """
     axis = torch.arange(sidelength, dtype=torch.float32) - sidelength // 2
     yy, xx = torch.meshgrid(axis, axis, indexing="ij")
@@ -510,7 +535,7 @@ def test_reference_project_2d_to_1d_matches_canonical(sidelength):
         [torch.stack([cos, -sin], dim=-1), torch.stack([sin, cos], dim=-1)], dim=-2
     )
 
-    image = torch.exp(-((yy - 4.0) ** 2 + (xx + 3.0) ** 2) / 18.0)
+    image = torch.exp(-((yy - 4.0) ** 2 + (xx + 3.0) ** 2) / 18.0) + background
     _assert_close(
         reference.project_2d_to_1d(image, rotations[..., 0, :]),
         canonical_project_2d_to_1d(image, rotations),
@@ -520,6 +545,116 @@ def test_reference_project_2d_to_1d_matches_canonical(sidelength):
     centred = torch.exp(-(yy**2 + xx**2) / 32.0)
     lines = reference.project_2d_to_1d(centred, rotations[..., 0, :])
     _assert_close(lines, centred.sum(dim=0).expand_as(lines), rtol=1e-2)
+
+
+# --- the canonical defaults: every frequency, and the edge mean -------------------
+
+# the real-space functions: the torch reference, and the Mojo kernels where present
+PROJECTIONS = [
+    pytest.param(reference, id="reference"),
+    pytest.param(project, id="mojo", marks=requires_mojo),
+]
+
+
+def _blob_on_background(sidelength, background, sigma=3.0):
+    """An off-centre Gaussian blob on a constant background."""
+    axis = torch.arange(sidelength, dtype=torch.float32) - sidelength // 2
+    zz, yy, xx = torch.meshgrid(axis, axis, axis, indexing="ij")
+    r2 = (zz - 2.0) ** 2 + (yy + 3.0) ** 2 + (xx - 1.0) ** 2
+    return torch.exp(-r2 / (2 * sigma**2)) + background
+
+
+@pytest.mark.parametrize("background", [0.0, 0.3])
+@pytest.mark.parametrize("sidelength", [32, 31])
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_projection_matches_canonical_without_a_cutoff(module, sidelength, background):
+    """With ``fftfreq_max=None`` the projection is the canonical function's at its
+    default, values and volume gradients, background and slice corners included.
+
+    Both subtract the volume's edge mean before padding and add its projection
+    back; without that step the background would ring against the padding.
+    """
+    rotations = _rotations(N_POSES, seed=4)
+    inputs = {"volume": _blob_on_background(sidelength, background)}
+
+    def projection(volume):
+        return module.project_3d_to_2d(volume, rotations, fftfreq_max=None)
+
+    def canonical(volume):
+        return canonical_project_3d_to_2d(volume, rotations)
+
+    _assert_close(projection(**inputs), canonical(**inputs), rtol=1e-5)
+    actual = _gradients(projection, inputs, {})["volume"]
+    expected = _gradients(canonical, inputs, {})["volume"]
+    _assert_close(actual, expected, rtol=1e-4)
+
+
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_default_projection_cuts_the_corners(module):
+    """The default cutoff, 0.5, leaves the images' DFT corners at zero; ``None``
+    keeps them."""
+    d = 16
+    volume = torch.randn((d,) * 3, generator=torch.Generator().manual_seed(5))
+    rotations = _rotations(N_POSES, seed=4)
+    ky = torch.fft.fftfreq(d)[:, None]
+    kx = torch.fft.rfftfreq(d)[None, :]
+    corners = ky**2 + kx**2 > 0.25
+
+    def corner_spectrum(**kwargs):
+        images = module.project_3d_to_2d(volume, rotations, pad_factor=1.0, **kwargs)
+        return torch.fft.rfftn(torch.fft.ifftshift(images, dim=(-2, -1)))[..., corners]
+
+    scale = torch.fft.rfftn(volume).abs().max()
+    assert corner_spectrum().abs().max() < 1e-4 * scale
+    assert corner_spectrum(fftfreq_max=None).abs().max() > 1e-2 * scale
+
+
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_multichannel_projection_takes_each_channel_edge_mean(module):
+    """Each channel's own background is subtracted and added back."""
+    d = 24
+    volumes = torch.stack(
+        [_blob_on_background(d, background) for background in (0.0, 0.3, -0.2)]
+    )
+    rotations = _rotations(N_POSES, seed=4)
+    stacked = module.project_3d_to_2d_multichannel(volumes, rotations)
+    for i, volume in enumerate(volumes):
+        _assert_close(
+            stacked[:, i], module.project_3d_to_2d(volume, rotations), rtol=1e-5
+        )
+
+    images = volumes[:, 0]
+    directions = _directions(N_POSES, 2, seed=4)
+    lines = module.project_2d_to_1d_multichannel(images, directions)
+    for i, image in enumerate(images):
+        _assert_close(
+            lines[:, i], module.project_2d_to_1d(image, directions), rtol=1e-5
+        )
+
+
+@pytest.mark.parametrize("sidelength", [3, 5, 8, 9, 16, 17])
+@pytest.mark.parametrize("module", PROJECTIONS)
+def test_constant_projects_to_its_path_length(module, sidelength):
+    """A constant volume is all edge mean: every pixel is ``c * d``, at any pose,
+    magnified or not, in boxes too small for the canonical 4-voxel shell too."""
+    c = 0.7
+    rotations = _rotations(N_POSES, seed=4)
+    volume = torch.full((sidelength,) * 3, c)
+    expected = torch.full((N_POSES, sidelength, sidelength), c * sidelength)
+    _assert_close(module.project_3d_to_2d(volume, rotations), expected, rtol=1e-6)
+    _assert_close(
+        module.project_3d_to_2d(volume, rotations, transform_matrix=MAGNIFICATION),
+        expected,
+        rtol=1e-6,
+    )
+
+    image = torch.full((sidelength,) * 2, c)
+    directions = _directions(N_POSES, 2, seed=4)
+    _assert_close(
+        module.project_2d_to_1d(image, directions),
+        torch.full((N_POSES, sidelength), c * sidelength),
+        rtol=1e-6,
+    )
 
 
 # --- central lines ----------------------------------------------------------------
@@ -581,6 +716,20 @@ def _line_case(kind, case):
         "oversampled": {"output_length": 10},
         "fftfreq_max": {"fftfreq_max": 0.3},
     }[case]
+
+
+@pytest.mark.parametrize("line_length", [SIDELENGTH, SIDELENGTH - 1])
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_lines_have_no_corners(kind, line_length):
+    """A line's frequencies stop at its Nyquist, so ``fftfreq_max=None`` and the
+    default 0.5 give the same lines, even and odd."""
+    ndim = LINE_KINDS[kind]["ndim"]
+    args = (LINE_KINDS[kind]["array"](), _directions(N_POSES, ndim, seed=4))
+    extract = _line_function(reference, "extract", kind)
+    default = extract(*args, output_length=line_length)
+    assert torch.equal(
+        default, extract(*args, output_length=line_length, fftfreq_max=None)
+    )
 
 
 @requires_mojo

@@ -17,6 +17,7 @@ from .._backend._common import (
     IDENTITY_MAGNIFICATION,
     Magnification,
     input_pixel_scale,
+    radius_cutoff,
     sampling_scale,
 )
 from .._backend._validation import (
@@ -133,11 +134,7 @@ def extract_slices_3d(
         if len(output_shape) != 2 or output_shape[0] != output_shape[1]:
             raise ValueError(f"output_shape {output_shape} must be square")
         proj_sidelength = int(output_shape[0])
-    radius = (
-        proj_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * proj_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, proj_sidelength)
 
     coord_y, coord_x, s, inside = _slice_coordinates(
         proj_sidelength,
@@ -160,7 +157,7 @@ def extract_slices_3d(
     )
     if phase is not None:
         slices = slices * torch.complex(torch.cos(phase), torch.sin(phase))
-    # the magnified image's intensity scale, 1 / |det A|
+    # the DFT of the image at A r carries 1 / |det A|
     return slices * inside * magnification.mag_scale
 
 
@@ -210,8 +207,8 @@ def insert_slices_3d(
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, device)
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, device)
     _, sidelength, _ = rfft_volume_shape(volume_shape)
-    # the cutoff is in slice pixels, Nyquist by default (as the extraction)
-    radius = h / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
+    # the cutoff is in slice pixels, as the extraction's
+    radius = radius_cutoff(fftfreq_max, h)
 
     coord_y, coord_x, s, inside = _slice_coordinates(
         h,

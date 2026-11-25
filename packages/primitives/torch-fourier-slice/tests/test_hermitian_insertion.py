@@ -38,8 +38,8 @@ requires_mojo = pytest.mark.skipif(
 )
 
 N_POSES = 8
-# larger than any frequency, so nothing is cut off
-NO_CUTOFF = 1e3
+# a `cutoff` that leaves `fftfreq_max` at its default, the Nyquist radius
+DEFAULT_CUTOFF = "default"
 
 
 def _rotations(seed: int = 3) -> torch.Tensor:
@@ -94,13 +94,14 @@ def _experimental_slices(
     sidelength: int,
     rotations: torch.Tensor,
     interpolation: str = "linear",
-    cutoff: float = NO_CUTOFF,
+    cutoff: float | str | None = None,
     oversampling: float = 1.0,
     **shifts,
 ) -> _Insertion:
     """`module` provides the slice functions; `cutoff` is in input pixels.
 
-    A `cutoff` of None leaves `fftfreq_max` at its default (Nyquist).
+    A `cutoff` of None keeps every frequency (`fftfreq_max=None`), and
+    `DEFAULT_CUTOFF` leaves `fftfreq_max` at its default (the Nyquist radius).
 
     `shifts` holds the further options both operations take (`shifts_2d`,
     `shifts_3d`, `transform_matrix`). Poses and shifts are in the kernels' zyx /
@@ -108,13 +109,14 @@ def _experimental_slices(
     """
     volume_shape = (round(sidelength * oversampling),) * 3
     options = {
-        "fftfreq_max": None if cutoff is None else cutoff / sidelength,
         "zyx_matrices": True,
         "zyx_shifts": True,
         "yx_shifts": True,
         "interpolation": interpolation,
         **shifts,
     }
+    if cutoff != DEFAULT_CUTOFF:
+        options["fftfreq_max"] = None if cutoff is None else cutoff / sidelength
 
     def insert(slices, weights=None):
         return module.insert_central_slices_rfft_3d(
@@ -155,13 +157,14 @@ def _experimental_lines(
     sidelength: int,
     directions: torch.Tensor,
     interpolation: str = "linear",
-    cutoff: float = NO_CUTOFF,
+    cutoff: float | str | None = None,
     oversampling: float = 1.0,
     **shifts,
 ) -> _Insertion:
     """`module` provides the line functions; `cutoff` is in input pixels.
 
-    A `cutoff` of None leaves `fftfreq_max` at its default (Nyquist).
+    A `cutoff` of None keeps every frequency (`fftfreq_max=None`), and
+    `DEFAULT_CUTOFF` leaves `fftfreq_max` at its default (the Nyquist radius).
 
     `shifts` are `shifts_3d` (3D lines) / `shifts_2d` (2D lines). Directions and
     shifts are in zyx / yx order.
@@ -175,11 +178,12 @@ def _experimental_lines(
         order = {"yx_directions": True, "yx_shifts": True}
     output_shape = (round(sidelength * oversampling),) * ndim
     options = {
-        "fftfreq_max": None if cutoff is None else cutoff / sidelength,
         "interpolation": interpolation,
         **order,
         **shifts,
     }
+    if cutoff != DEFAULT_CUTOFF:
+        options["fftfreq_max"] = None if cutoff is None else cutoff / sidelength
 
     def insert(lines, weights=None):
         return insert_fn(
@@ -275,7 +279,9 @@ OPTION_CASES = [
         id="reference-slices-oversampling-1.5",
     ),
     pytest.param(
-        lambda: _reference_slices(16, _rotations(), cutoff=None, oversampling=2.0),
+        lambda: _reference_slices(
+            16, _rotations(), cutoff=DEFAULT_CUTOFF, oversampling=2.0
+        ),
         id="reference-slices-oversampling-2-nyquist",
     ),
     pytest.param(
@@ -295,7 +301,9 @@ OPTION_CASES = [
         id="reference-lines-2d-even-into-odd",
     ),
     pytest.param(
-        lambda: _reference_lines(16, _directions(3), cutoff=None, oversampling=2.0),
+        lambda: _reference_lines(
+            16, _directions(3), cutoff=DEFAULT_CUTOFF, oversampling=2.0
+        ),
         id="reference-lines-3d-oversampling-2-nyquist",
     ),
     pytest.param(
@@ -319,7 +327,7 @@ OPTION_CASES = [
         marks=requires_mojo,
     ),
     pytest.param(
-        lambda: _mojo_slices(16, _rotations(), cutoff=None, oversampling=2.0),
+        lambda: _mojo_slices(16, _rotations(), cutoff=DEFAULT_CUTOFF, oversampling=2.0),
         id="mojo-slices-oversampling-2-nyquist",
         marks=requires_mojo,
     ),
@@ -344,7 +352,9 @@ OPTION_CASES = [
         marks=requires_mojo,
     ),
     pytest.param(
-        lambda: _mojo_lines(16, _directions(3), cutoff=None, oversampling=2.0),
+        lambda: _mojo_lines(
+            16, _directions(3), cutoff=DEFAULT_CUTOFF, oversampling=2.0
+        ),
         id="mojo-lines-3d-oversampling-2-nyquist",
         marks=requires_mojo,
     ),

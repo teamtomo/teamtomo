@@ -19,7 +19,7 @@ import math
 
 import torch
 
-from .._backend._common import input_line_scale, sampling_scale
+from .._backend._common import input_line_scale, radius_cutoff, sampling_scale
 from .._backend._validation import (
     interp_code,
     prep_directions_2d,
@@ -52,13 +52,9 @@ def _line_samples(
     """Sample coordinates ``k (bv, bp, w, ndim)`` of each line pixel.
 
     Also returns the ``(w,)`` mask of pixels inside the radius cutoff, which is
-    ``fftfreq_max`` of the line length (Nyquist by default).
+    ``fftfreq_max`` of the line length (none for ``None``).
     """
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     coord_x = torch.arange(
         line_sidelength // 2 + 1, device=directions.device, dtype=torch.float32
     )

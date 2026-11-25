@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import NamedTuple
 
 import torch
@@ -54,6 +55,19 @@ class Magnification(NamedTuple):
 
 
 IDENTITY_MAGNIFICATION = Magnification()
+
+
+def radius_cutoff(fftfreq_max: float | None, proj_sidelength: int) -> float:
+    """The frequency cutoff, in pixels of a projection (slice or line).
+
+    ``fftfreq_max`` is in cycles/pixel of the projection, so the cutoff is
+    ``fftfreq_max * proj_sidelength``. ``None`` keeps every frequency: an
+    infinite radius, which keeps a slice's corners (up to ``sqrt(2) / 2``
+    cycles/pixel) as the canonical layer does.
+    """
+    if fftfreq_max is None:
+        return math.inf
+    return float(fftfreq_max) * proj_sidelength
 
 
 def sampling_scale(sidelength: int, proj_sidelength: int) -> float:

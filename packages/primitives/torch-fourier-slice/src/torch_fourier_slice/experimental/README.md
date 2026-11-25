@@ -47,7 +47,10 @@ A CPU tensor runs the CPU kernel; an `mps`/`cuda` tensor runs the GPU
 kernel; the output comes back on the input's device.
 
 There are two layers. Reach for the **real-space** one unless you have a reason
-not to — it handles padding, the FFTs and the gridding correction (§7) for you:
+not to — it handles padding, the FFTs and the gridding correction (§7) for you.
+Like the canonical `project_3d_to_2d`, it subtracts the volume's edge mean before
+padding and adds that constant's projection back afterwards, so a non-zero
+background doesn't ring against the padding:
 
 ```python
 import torch
@@ -104,6 +107,11 @@ take arrays centred on index `n // 2` either way. A line of length `2m` and one 
 `2m + 1` have the same rfft width, so a line insertion takes the lines' length as
 `line_length` (even by default, as `torch.fft.irfft` assumes).
 
+Every function's frequency cutoff `fftfreq_max` (cycles/pixel of the slice or
+line) defaults to `0.5`, the Nyquist circle. `None` keeps every frequency, a
+slice's corners included, as the canonical functions do by default. A line has
+no corners, so `None` and `0.5` give the same lines.
+
 An anisotropic magnification `A` (real space, 2 x 2, yx), passed as
 `transform_matrix` to the slice functions and the real-space ones, is applied
 inside the kernels: each slice pixel at frequency `k` samples `(A^-1)^T k` before
@@ -149,7 +157,7 @@ Python side (`experimental/`):
 
 | file | role |
 |------|------|
-| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` and `project_2d_to_1d` (+ `_multichannel`) — padding, FFTs, gridding correction |
+| `project.py`, `backproject.py` | **real-space API**: `project_3d_to_2d` / `backproject_2d_to_3d` and `project_2d_to_1d` (+ `_multichannel`) — edge mean, padding, FFTs, gridding correction |
 | `extraction.py`, `insertion.py` | **Fourier API**: 3D volume ↔ 2D central slices (posed by a rotation matrix), 3D volume ↔ 1D central lines (posed by a direction), 2D image ↔ 1D central lines |
 | `_gridding.py` | the de-apodization correction for each interpolation kernel (§7) |
 | `_conventions.py` | translates the canonical pose / Ewald arguments into kernel conventions |

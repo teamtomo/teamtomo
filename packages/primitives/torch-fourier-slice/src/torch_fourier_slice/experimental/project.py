@@ -1,9 +1,17 @@
 """Experimental Mojo-backed real-space projection: 3D volume -> 2D images, 2D -> 1D.
 
-The real-space layer over :mod:`.extraction`: pad, correct for the
-interpolation kernel, ``rfftn`` over the spatial dims, extract central slices
-(or lines) with the Mojo kernel, ``irfftn`` back, unpad. Callers work entirely
-in real space; the rfft layout is an implementation detail.
+The real-space layer over :mod:`.extraction`: subtract the edge mean, pad,
+correct for the interpolation kernel, ``rfftn`` over the spatial dims, extract
+central slices (or lines) with the Mojo kernel, ``irfftn`` back, unpad, add the
+edge mean's projection back. Callers work entirely in real space; the rfft
+layout is an implementation detail.
+
+The edge mean is the canonical layer's step: the mean of the voxels within 4 of
+the box faces (fewer in a box under 10) is subtracted before the zero padding,
+so a volume with a non-zero background doesn't meet the padding at a step, which
+would ring. It comes back afterwards as the projection of that constant through
+the box, ``mean * d``, exact for projections along an axis (and unchanged by a
+magnification).
 
 Mirrors :func:`torch_fourier_slice.project_3d_to_2d` and
 :func:`torch_fourier_slice.project_2d_to_1d`, but the compute backend follows
@@ -16,6 +24,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from ..volume_utils import boundary_shell_average
 from ._gridding import gridding_correction
 from .extraction import (
     extract_central_lines_rfft_2d,
@@ -32,6 +41,22 @@ def _pad_width(sidelength: int, pad_factor: float) -> int:
     if pad_factor == 1.0:
         return 0
     return int((sidelength * (pad_factor - 1.0)) // 2)
+
+
+def _edge_mean(x: torch.Tensor, ndim: int) -> torch.Tensor:
+    """Mean within 4 pixels of the box faces, ``()`` or per channel ``(bv,)``.
+
+    The canonical layer's shell; a box too small for it (side under 10) takes
+    the widest shell that leaves an interior, and one under 4 every pixel.
+    """
+    shape = tuple(x.shape[-ndim:])
+    if len(set(shape)) != 1:
+        kind = "volume must be cubic" if ndim == 3 else "image must be square"
+        raise ValueError(f"{kind}, got {tuple(x.shape)}")
+    n = min(4, shape[0] // 2 - 1)
+    if n < 1:
+        return x.mean(dim=tuple(range(-ndim, 0)))
+    return boundary_shell_average(x, n=n, n_spatial_dims=ndim)
 
 
 def _project(
@@ -53,7 +78,11 @@ def _project(
     extract_fn,
 ) -> torch.Tensor:
     """Shared pipeline; ``extract_fn`` picks the single / multichannel rank form."""
-    pad = _pad_width(volume.shape[-1], pad_factor)
+    sidelength = volume.shape[-1]
+    pad = _pad_width(sidelength, pad_factor)
+    # () or (bv,): the padding continues the volume from its edge mean, not 0
+    edge_mean = _edge_mean(volume, ndim=3)
+    volume = volume - edge_mean[..., None, None, None]
     if pad > 0:
         volume = F.pad(volume, pad=[pad] * 6)
     box = volume.shape[-1]
@@ -88,7 +117,10 @@ def _project(
     )
     if pad > 0:
         images = F.pad(images, pad=[-pad] * 4)
-    return images
+    # the edge mean's projection through the unpadded box, a constant that a
+    # magnification leaves as it is; broadcasts over (bp, d, d) or, per channel,
+    # (bp, bv, d, d)
+    return images + (edge_mean * sidelength)[..., None, None]
 
 
 def project_3d_to_2d(
@@ -97,7 +129,7 @@ def project_3d_to_2d(
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
@@ -132,7 +164,8 @@ def project_3d_to_2d(
         doubles the box. Must be ``>= 1.0``.
     fftfreq_max : float | None
         Maximum frequency (cycles/pixel, Nyquist = 0.5) to include; output
-        pixels beyond it are left at zero. Defaults to Nyquist.
+        pixels beyond it are left at zero. Defaults to ``0.5``; ``None`` keeps
+        every frequency, the image corners included.
     zyx_matrices : bool
         If True, ``rotation_matrices`` act on zyx vectors. If False (default)
         they act on xyz vectors and are converted by flipping the last two axes.
@@ -146,8 +179,8 @@ def project_3d_to_2d(
     transform_matrix : torch.Tensor | None
         Optional ``(2, 2)`` anisotropic magnification ``A`` in real space (yx),
         as in :func:`torch_fourier_slice.project_3d_to_2d`: the image at ``r`` is
-        the projection at ``A r``, scaled by ``1 / |det A|``. The kernel applies
-        it to each pixel's sample position, so it costs no extra interpolation.
+        the projection at ``A r``. The kernel applies it to each pixel's sample
+        position, so it costs no extra interpolation.
         Not differentiable.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
@@ -195,7 +228,7 @@ def project_3d_to_2d_multichannel(
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
@@ -248,7 +281,11 @@ def _project_2d(
     extract_fn,
 ) -> torch.Tensor:
     """Shared 2D -> 1D pipeline; ``extract_fn`` picks the single / multichannel form."""
-    pad = _pad_width(image.shape[-1], pad_factor)
+    sidelength = image.shape[-1]
+    pad = _pad_width(sidelength, pad_factor)
+    # () or (bv,): the padding continues the image from its edge mean, not 0
+    edge_mean = _edge_mean(image, ndim=2)
+    image = image - edge_mean[..., None, None]
     if pad > 0:
         image = F.pad(image, pad=[pad] * 4)
     box = image.shape[-1]
@@ -271,7 +308,9 @@ def _project_2d(
     lines = torch.fft.fftshift(torch.fft.irfft(lines, n=box, dim=-1), dim=-1)
     if pad > 0:
         lines = F.pad(lines, pad=[-pad] * 2)
-    return lines
+    # the edge mean's projection through the unpadded box; broadcasts over
+    # (bp, d) or, per channel, (bp, bv, d)
+    return lines + (edge_mean * sidelength)[..., None]
 
 
 def project_2d_to_1d(
@@ -279,7 +318,7 @@ def project_2d_to_1d(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
@@ -311,7 +350,7 @@ def project_2d_to_1d(
         doubles the box. Must be ``>= 1.0``.
     fftfreq_max : float | None
         Maximum frequency (cycles/pixel, Nyquist = 0.5) to include. Defaults to
-        Nyquist.
+        ``0.5``. A line has no corners, so ``None`` gives the same lines.
     yx_directions : bool
         If True, ``directions`` are in yx order. If False (default) they are xy.
     yx_shifts : bool
@@ -347,7 +386,7 @@ def project_2d_to_1d_multichannel(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",

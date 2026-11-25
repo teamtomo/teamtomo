@@ -16,6 +16,7 @@ import torch
 
 from ._common import (
     input_line_scale,
+    radius_cutoff,
     reduce_to,
     sampling_scale,
     symmetrise_hermitian_planes,
@@ -61,11 +62,7 @@ def run_extract_lines_3d(
         line_sidelength = int(output_length)
     line_half = line_sidelength // 2 + 1
 
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
         oversampling=sampling_scale(sidelength, line_sidelength),
         radius_cutoff_sq=float(radius * radius),
@@ -99,7 +96,7 @@ def run_insert_lines_3d(
     volume_shape: tuple[int, int, int],
     *,
     weights: torch.Tensor | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     interpolation: str = "linear",
     friedel_double: bool = False,
     shifts_3d: torch.Tensor | None = None,
@@ -142,11 +139,7 @@ def run_insert_lines_3d(
         w_in = torch.zeros(bv, bp, w, dtype=torch.float32, device=tgt)  # unused
 
     line_sidelength = resolve_line_length(w, line_length)
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
         oversampling=sampling_scale(sidelength, line_sidelength),
         radius_cutoff_sq=float(radius * radius),
@@ -213,11 +206,7 @@ def run_line_3d_pose_grad(
     grad_dir = torch.zeros(bv_dir, bp, 3, dtype=torch.float32, device=tgt)
     grad_shift_3d = torch.zeros(bv_shift_3d, bp, 3, dtype=torch.float32, device=tgt)
 
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
         oversampling=sampling_scale(volume.shape[-2], line_sidelength),
         radius_cutoff_sq=float(radius * radius),
@@ -275,11 +264,7 @@ def run_line_3d_weight_grad(
 
     gwvol = grad_weight_vol.to(device=tgt, dtype=torch.float32).contiguous()
     grad_weight = torch.zeros(bv, bp, line_half, dtype=torch.float32, device=tgt)
-    radius = (
-        line_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * line_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, line_sidelength)
     params = KernelParams(
         oversampling=sampling_scale(grad_weight_vol.shape[-2], line_sidelength),
         radius_cutoff_sq=float(radius * radius),

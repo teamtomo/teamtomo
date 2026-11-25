@@ -13,6 +13,7 @@ from ._common import (
     IDENTITY_MAGNIFICATION,
     Magnification,
     input_pixel_scale,
+    radius_cutoff,
     reduce_to,
     sampling_scale,
     symmetrise_hermitian_planes,
@@ -59,11 +60,7 @@ def run_extract_slices_3d(
         proj_sidelength = int(output_shape[0])
     proj_sidelength_half = proj_sidelength // 2 + 1
 
-    radius = (
-        proj_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * proj_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, proj_sidelength)
     # pre-zeroed: the kernel leaves radius-cut pixels untouched
     proj_r = torch.zeros(
         bv,
@@ -108,7 +105,7 @@ def run_insert_slices_3d(
     *,
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     interpolation: str = "linear",
     friedel_double: bool = False,
     skip_redundant: bool = False,
@@ -158,8 +155,8 @@ def run_insert_slices_3d(
     else:
         w_in = torch.zeros(bv, bp, h, w, dtype=torch.float32, device=tgt)  # unused
 
-    # the cutoff is in slice pixels, Nyquist by default (as the extraction)
-    radius = h / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
+    # the cutoff is in slice pixels, as the extraction's
+    radius = radius_cutoff(fftfreq_max, h)
     params = KernelParams(
         oversampling=sampling_scale(sidelength, h),
         radius_cutoff_sq=float(radius * radius),
@@ -278,11 +275,7 @@ def run_slice_3d_pose_grad(
     grad_shift = torch.zeros(bv_shift_2d, bp, 2, dtype=torch.float32, device=tgt)
     grad_shift_3d = torch.zeros(bv_shift_3d, bp, 3, dtype=torch.float32, device=tgt)
 
-    radius = (
-        proj_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * proj_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, proj_sidelength)
     params = KernelParams(
         oversampling=sampling_scale(sidelength, proj_sidelength),
         radius_cutoff_sq=float(radius * radius),
@@ -359,11 +352,7 @@ def run_slice_3d_weight_grad(
     )
     shifts_dummy = torch.zeros(1, bp, 2, dtype=torch.float32, device=tgt)
     shifts_3d_dummy = torch.zeros(1, bp, 3, dtype=torch.float32, device=tgt)
-    radius = (
-        proj_sidelength / 2.0
-        if fftfreq_max is None
-        else float(fftfreq_max) * proj_sidelength
-    )
+    radius = radius_cutoff(fftfreq_max, proj_sidelength)
     params = KernelParams(
         oversampling=sampling_scale(grad_weight_vol.shape[-2], proj_sidelength),
         radius_cutoff_sq=float(radius * radius),

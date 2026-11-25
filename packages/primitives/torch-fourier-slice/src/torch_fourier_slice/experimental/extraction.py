@@ -31,13 +31,15 @@ Shared parameters (both forms):
   volume and the slices share a pixel size, so slice frequency index ``k``
   samples the volume at ``k * h / H_out``, so a volume padded to twice the
   output's side is oversampled twofold.
-- ``fftfreq_max``: cutoff in cycles/pixel, default Nyquist (0.5);
+- ``fftfreq_max``: cutoff in cycles/pixel, default ``0.5`` (Nyquist); ``None``
+  keeps every frequency, the slice corners included, as the canonical layer does;
   ``interpolation``: ``"linear"`` / ``"cubic"``.
 - ``transform_matrix``: optional ``(2, 2)`` anisotropic magnification ``A`` in
-  real space (yx), as in the canonical layer: the slice is that of the image
-  whose value at ``r`` is the unmagnified projection's at ``A r``, scaled by
-  ``1 / |det A|``. Each pixel at frequency ``k`` samples ``(A^-1)^T k`` before
-  the Ewald offset and the rotation, inside the kernel. Not differentiable.
+  real space (yx), as in the canonical layer: the slice is the DFT of the image
+  whose value at ``r`` is the unmagnified projection's at ``A r``. Each pixel at
+  frequency ``k`` samples ``(A^-1)^T k`` before the Ewald offset and the
+  rotation, inside the kernel, and its value carries that change of variables'
+  ``1 / |det A|``. Not differentiable.
 - ``apply_ewald_curvature`` / ``ewald_voltage_kv`` / ``ewald_flip_sign`` /
   ``ewald_px_size``: bend the slice onto an Ewald sphere, as in the canonical
   layer (default: flat slice).
@@ -138,7 +140,7 @@ def extract_central_slices_rfft_3d(
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     output_shape: tuple[int, int] | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
@@ -189,7 +191,7 @@ def extract_central_slices_rfft_3d_multichannel(
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     output_shape: tuple[int, int] | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
@@ -257,7 +259,7 @@ def extract_central_lines_rfft_3d(
     directions: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     output_length: int | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
     interpolation: str = "linear",
@@ -281,7 +283,7 @@ def extract_central_lines_rfft_3d(
         length ``L//2+1``. Defaults to the volume side ``h``. Line frequency
         index ``k`` samples the volume at ``k * h / L`` along the direction.
     fftfreq_max, interpolation
-        As for the slice extraction (cutoff defaults to Nyquist ``0.5``;
+        As for the slice extraction (cutoff defaults to ``0.5``;
         interpolation ``"linear"`` / ``"cubic"``).
     zyx_directions, zyx_shifts : bool
         If True, ``directions`` / ``shifts_3d`` are in zyx order. If False
@@ -313,7 +315,7 @@ def extract_central_lines_rfft_3d_multichannel(
     directions: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     output_length: int | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
     interpolation: str = "linear",
@@ -366,7 +368,7 @@ def extract_central_lines_rfft_2d(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None = None,
     output_length: int | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
@@ -403,7 +405,7 @@ def extract_central_lines_rfft_2d_multichannel(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None = None,
     output_length: int | None = None,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",

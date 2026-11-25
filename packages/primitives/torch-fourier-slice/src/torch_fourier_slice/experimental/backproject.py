@@ -55,7 +55,7 @@ def _backproject(
     magnification = Magnification.from_matrix(transform_matrix)
     if not magnification.is_identity:
         # the insertion scales each sample by 1 / |det A| (the adjoint of the
-        # projection's), and the images carry that scale already: undo it
+        # projection's), and the images' DFTs carry that scale already: undo it
         image_rfft = image_rfft / magnification.mag_scale
 
     # the rfft layer takes the inverse (image -> volume) rotation of the active
@@ -100,7 +100,7 @@ def backproject_2d_to_3d(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
@@ -140,7 +140,8 @@ def backproject_2d_to_3d(
         doubles the box. Must be ``>= 1.0``.
     fftfreq_max : float | None
         Maximum frequency (cycles/pixel, Nyquist = 0.5) to include; input
-        pixels beyond it are ignored. Defaults to Nyquist.
+        pixels beyond it are ignored. Defaults to ``0.5``; ``None`` keeps every
+        frequency, the image corners included.
     zyx_matrices : bool
         If True, ``rotation_matrices`` act on zyx vectors. If False (default)
         they act on xyz vectors and are converted by flipping the last two axes.
@@ -154,8 +155,8 @@ def backproject_2d_to_3d(
     transform_matrix : torch.Tensor | None
         Optional ``(2, 2)`` anisotropic magnification ``A`` in real space (yx) of
         the images, as :func:`.project_3d_to_2d` applies it: each pixel goes back
-        where the unmagnified projection has it, and the images' ``1 / |det A|``
-        intensity scale is undone. Not differentiable.
+        where the unmagnified projection has it, and the ``1 / |det A|`` the
+        images' DFTs carry is undone. Not differentiable.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
         use a flat central slice.
@@ -204,7 +205,7 @@ def backproject_2d_to_3d_multichannel(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     pad_factor: float = 2.0,
-    fftfreq_max: float | None = None,
+    fftfreq_max: float | None = 0.5,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
     yx_shifts: bool = False,

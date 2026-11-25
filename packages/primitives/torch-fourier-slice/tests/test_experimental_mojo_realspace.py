@@ -356,13 +356,13 @@ def test_line_projection_matches_analytic_projection(interpolation, d):
     assert error < 1e-3
 
 
+@pytest.mark.parametrize("background", [0.0, 0.3])
 @pytest.mark.parametrize("d", [64, 63])
-def test_line_projection_matches_canonical(d):
+def test_line_projection_matches_canonical(d, background):
     """The canonical function takes an active rotation R; the line is along R's
-    first row. (An off-centre blob well inside the box: the canonical function
-    also subtracts the image's edge mean before padding and adds back a constant,
-    which only matches for edges at ~0.)"""
-    image = _blob_2d(d, sigma=3.0, centre=(4.0, -3.0))
+    first row. Both subtract the image's edge mean before padding and add its
+    projection back, so a background projects alike too."""
+    image = _blob_2d(d, sigma=3.0, centre=(4.0, -3.0)) + background
     angles = _angles(8)
     cos, sin = angles.cos(), angles.sin()
     rotations = torch.stack(
