@@ -51,20 +51,16 @@ def _backproject(
         torch.fft.fftshift(images, dim=(-2, -1)), dim=(-2, -1)
     ).contiguous()
 
-    # unit weights accumulate the sampling density; any caller weights modulate it
-    density = torch.ones(
-        image_rfft.shape, dtype=torch.float32, device=image_rfft.device
-    )
-    if weights is not None:
-        density = density * weights
     # the rfft layer takes the inverse (image -> volume) rotation of the active
-    # rotation the real-space layer accepts
+    # rotation the real-space layer accepts; the weight volume is the sampling
+    # density (unit weights), modulated by any caller weights
     volume_rfft, weight_volume = insert_fn(
         image_rfft,
+        (box, box, box),
         rotation_matrices.transpose(-1, -2),
         shifts_3d=shifts_3d,
         shifts_2d=shifts_2d,
-        weights=density,
+        weights=weights,
         fftfreq_max=fftfreq_max,
         zyx_matrices=zyx_matrices,
         zyx_shifts=zyx_shifts,

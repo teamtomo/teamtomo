@@ -31,6 +31,7 @@ requires_mojo = pytest.mark.skipif(
 )
 
 SIDELENGTH = 16
+VOLUME_SHAPE = (SIDELENGTH,) * 3
 N_POSES = 5
 N_CHANNELS = 2
 MOJO_MODULES = (extraction, insertion, project, backproject)
@@ -111,7 +112,7 @@ EXTRACTION_CASES = {
         "yx_shifts": True,
     },
     "output_shape": {"output_shape": (24, 24)},
-    "oversampling": {"oversampling": 1.5},
+    "oversampled": {"output_shape": (10, 10)},
     "fftfreq_max": {"fftfreq_max": 0.3},
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
 }
@@ -145,7 +146,8 @@ INSERTION_CASES = {
     "plain": {},
     "weights": {"weights": torch.rand(N_POSES, SIDELENGTH, SIDELENGTH // 2 + 1)},
     "shifts": {"shifts_2d": _shifts(N_POSES, 2), "shifts_3d": _shifts(N_POSES, 3)},
-    "oversampling": {"oversampling": 2.0},
+    "oversampling_2": {"volume_shape": (2 * SIDELENGTH,) * 3},
+    "oversampling_1.5": {"volume_shape": (24,) * 3},
     "fftfreq_max": {"fftfreq_max": 0.3},
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
 }
@@ -155,20 +157,21 @@ INSERTION_CASES = {
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize("case", INSERTION_CASES)
 def test_insert_slices_matches_mojo(case, interpolation):
-    args = (_image_rfft(N_POSES), _rotations(N_POSES, seed=4))
-    kwargs = {**INSERTION_CASES[case], "interpolation": interpolation}
+    options = dict(INSERTION_CASES[case])
+    volume_shape = options.pop("volume_shape", VOLUME_SHAPE)
+    args = (_image_rfft(N_POSES), volume_shape, _rotations(N_POSES, seed=4))
+    kwargs = {**options, "interpolation": interpolation}
     volume, weights = reference.insert_central_slices_rfft_3d(*args, **kwargs)
     mojo_volume, mojo_weights = insertion.insert_central_slices_rfft_3d(*args, **kwargs)
     _assert_close(volume, mojo_volume, rtol=1e-5)
-    assert (weights is None) == (mojo_weights is None)
-    if weights is not None:
-        _assert_close(weights, mojo_weights, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
 
 
 @requires_mojo
 def test_insert_slices_multichannel_matches_mojo():
     args = (
         _image_rfft(N_POSES, N_CHANNELS),
+        VOLUME_SHAPE,
         _rotations(N_POSES, seed=4, batch=(N_CHANNELS,)),
     )
     kwargs = {
@@ -209,17 +212,20 @@ def _extraction_inputs():
     }
 
 
-def _insertion_inputs():
+def _insertion_inputs(weighted=True):
+    """Differentiable insertion inputs, with ``weights`` unless not ``weighted``."""
     generator = torch.Generator().manual_seed(9)
-    return {
+    inputs = {
         "image_rfft": _image_rfft(N_POSES),
         "rotation_matrices": _rotations(N_POSES, seed=4),
         "shifts_2d": _shifts(N_POSES, 2),
         "shifts_3d": _shifts(N_POSES, 3),
-        "weights": torch.rand(
-            N_POSES, SIDELENGTH, SIDELENGTH // 2 + 1, generator=generator
-        ),
     }
+    if weighted:
+        inputs["weights"] = torch.rand(
+            N_POSES, SIDELENGTH, SIDELENGTH // 2 + 1, generator=generator
+        )
+    return inputs
 
 
 @requires_mojo
@@ -235,9 +241,45 @@ def test_extract_slices_gradients_match_mojo(interpolation):
 
 @requires_mojo
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_insert_slices_gradients_match_mojo(interpolation):
+def test_extract_slices_gradients_match_mojo_with_smaller_output(interpolation):
+    """With slices smaller than the volume, every gradient keeps the forward's
+    Nyquist cutoff (in slice pixels)."""
+    inputs = _extraction_inputs()
+    kwargs = {"output_shape": (10, 10), "interpolation": interpolation}
+    expected = _gradients(extraction.extract_central_slices_rfft_3d, inputs, kwargs)
+    actual = _gradients(reference.extract_central_slices_rfft_3d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("output_index", [0, 1])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_insert_slices_gradients_match_mojo_into_larger_volume(
+    interpolation, output_index
+):
+    """Likewise for an insertion into a volume larger than the slices."""
     inputs = _insertion_inputs()
-    kwargs = {"interpolation": interpolation}
+    kwargs = {"volume_shape": (2 * SIDELENGTH,) * 3, "interpolation": interpolation}
+    function, mojo_function = (
+        reference.insert_central_slices_rfft_3d,
+        insertion.insert_central_slices_rfft_3d,
+    )
+    actual = _gradients(function, inputs, kwargs, output_index)
+    expected = _gradients(mojo_function, inputs, kwargs, output_index)
+    # the data volume depends on all inputs but the weights, the weight volume on
+    # the weights and the rotations
+    names = ["weights", "rotation_matrices"] if output_index else list(inputs)[:-1]
+    for name in names:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("weighted", [True, False])
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_insert_slices_gradients_match_mojo(interpolation, weighted):
+    inputs = _insertion_inputs(weighted)
+    kwargs = {"volume_shape": VOLUME_SHAPE, "interpolation": interpolation}
     function, mojo_function = (
         reference.insert_central_slices_rfft_3d,
         insertion.insert_central_slices_rfft_3d,
@@ -248,18 +290,22 @@ def test_insert_slices_gradients_match_mojo(interpolation):
     for name in ("image_rfft", "rotation_matrices", "shifts_2d", "shifts_3d"):
         _assert_close(actual[name], expected[name], rtol=1e-4)
     # the weight volume on the weights (and the rotations: see below)
-    actual = _gradients(function, inputs, kwargs, output_index=1)
-    expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
-    _assert_close(actual["weights"], expected["weights"], rtol=1e-4)
+    if weighted:
+        actual = _gradients(function, inputs, kwargs, output_index=1)
+        expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
+        _assert_close(actual["weights"], expected["weights"], rtol=1e-4)
 
 
 @requires_mojo
+@pytest.mark.parametrize("weighted", [True, False])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_insert_slices_weight_volume_rotation_gradient_matches_mojo(interpolation):
+def test_insert_slices_weight_volume_rotation_gradient_matches_mojo(
+    interpolation, weighted
+):
     """The weights are splatted at the rotated positions, so the weight volume
-    has a rotation gradient too."""
-    inputs = _insertion_inputs()
-    kwargs = {"interpolation": interpolation}
+    has a rotation gradient too, unit weights included."""
+    inputs = _insertion_inputs(weighted)
+    kwargs = {"volume_shape": VOLUME_SHAPE, "interpolation": interpolation}
     actual = _gradients(
         reference.insert_central_slices_rfft_3d, inputs, kwargs, output_index=1
     )
@@ -321,7 +367,7 @@ def test_reference_insertion_gradients_match_finite_differences(name, output_ind
         reference.insert_central_slices_rfft_3d,
         _insertion_inputs(),
         name,
-        {"interpolation": "cubic"},
+        {"volume_shape": VOLUME_SHAPE, "interpolation": "cubic"},
         output_index,
     )
 
@@ -382,6 +428,13 @@ LINE_KINDS = {
 }
 
 
+def _array_shape(kind, sidelength=SIDELENGTH):
+    """The ``volume_shape`` / ``image_shape`` keyword of a line insertion."""
+    if kind == "3d":
+        return {"volume_shape": (sidelength,) * 3}
+    return {"image_shape": (sidelength,) * 2}
+
+
 def _line_function(module, operation, kind, multichannel=False):
     suffix = "_multichannel" if multichannel else ""
     return getattr(module, f"{operation}_central_lines_rfft_{kind}{suffix}")
@@ -411,7 +464,7 @@ def _line_case(kind, case):
         "shifts": {shifts: _shifts(N_POSES, ndim)},
         "axis_order": {shifts: _shifts(N_POSES, ndim), **LINE_KINDS[kind]["order"]},
         "output_length": {"output_length": 24},
-        "oversampling": {"oversampling": 1.5},
+        "oversampled": {"output_length": 10},
         "fftfreq_max": {"fftfreq_max": 0.3},
     }[case]
 
@@ -420,7 +473,7 @@ def _line_case(kind, case):
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize(
     "case",
-    ["plain", "shifts", "axis_order", "output_length", "oversampling", "fftfreq_max"],
+    ["plain", "shifts", "axis_order", "output_length", "oversampled", "fftfreq_max"],
 )
 @pytest.mark.parametrize("kind", LINE_KINDS)
 def test_extract_lines_matches_mojo(kind, case, interpolation):
@@ -453,25 +506,35 @@ def test_extract_lines_multichannel_matches_mojo(kind):
 @requires_mojo
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize(
-    "case", ["plain", "weights", "shifts", "axis_order", "oversampling", "fftfreq_max"]
+    "case",
+    [
+        "plain",
+        "weights",
+        "shifts",
+        "axis_order",
+        "oversampling_2",
+        "oversampling_1.5",
+        "fftfreq_max",
+    ],
 )
 @pytest.mark.parametrize("kind", LINE_KINDS)
 def test_insert_lines_matches_mojo(kind, case, interpolation):
     ndim = LINE_KINDS[kind]["ndim"]
-    args = (_lines_rfft(N_POSES), _directions(N_POSES, ndim, seed=4))
+    sidelength = {"oversampling_2": 2 * SIDELENGTH, "oversampling_1.5": 24}.get(
+        case, SIDELENGTH
+    )
+    args = (_lines_rfft(N_POSES), (sidelength,) * ndim, _directions(N_POSES, ndim, 4))
     if case == "weights":
         options = {"weights": _line_weights(N_POSES)}
-    elif case == "oversampling":
-        options = {"oversampling": 2.0}
+    elif case.startswith("oversampling"):
+        options = {}
     else:
         options = _line_case(kind, case)
     kwargs = {**options, "interpolation": interpolation}
     data, weights = _line_function(reference, "insert", kind)(*args, **kwargs)
     mojo_data, mojo_weights = _line_function(insertion, "insert", kind)(*args, **kwargs)
     _assert_close(data, mojo_data, rtol=1e-5)
-    assert (weights is None) == (mojo_weights is None)
-    if weights is not None:
-        _assert_close(weights, mojo_weights, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
 
 
 @requires_mojo
@@ -480,6 +543,7 @@ def test_insert_lines_multichannel_matches_mojo(kind):
     ndim, shifts = LINE_KINDS[kind]["ndim"], LINE_KINDS[kind]["shifts"]
     args = (
         _lines_rfft(N_POSES, N_CHANNELS),
+        (SIDELENGTH,) * ndim,
         _directions(N_POSES, ndim, seed=4, batch=(N_CHANNELS,)),
     )
     kwargs = {
@@ -505,14 +569,16 @@ def _line_extraction_inputs(kind):
     }
 
 
-def _line_insertion_inputs(kind):
+def _line_insertion_inputs(kind, weighted=True):
     ndim = LINE_KINDS[kind]["ndim"]
-    return {
+    inputs = {
         "lines": _lines_rfft(N_POSES),
         "directions": _directions(N_POSES, ndim, seed=4),
         LINE_KINDS[kind]["shifts"]: _shifts(N_POSES, ndim),
-        "weights": _line_weights(N_POSES),
     }
+    if weighted:
+        inputs["weights"] = _line_weights(N_POSES)
+    return inputs
 
 
 @requires_mojo
@@ -528,11 +594,12 @@ def test_extract_lines_gradients_match_mojo(kind, interpolation):
 
 
 @requires_mojo
+@pytest.mark.parametrize("weighted", [True, False])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
 @pytest.mark.parametrize("kind", LINE_KINDS)
-def test_insert_lines_gradients_match_mojo(kind, interpolation):
-    inputs = _line_insertion_inputs(kind)
-    kwargs = {"interpolation": interpolation}
+def test_insert_lines_gradients_match_mojo(kind, interpolation, weighted):
+    inputs = _line_insertion_inputs(kind, weighted)
+    kwargs = {**_array_shape(kind), "interpolation": interpolation}
     function = _line_function(reference, "insert", kind)
     mojo_function = _line_function(insertion, "insert", kind)
     # the data depends on the lines, the directions and the shifts
@@ -540,10 +607,10 @@ def test_insert_lines_gradients_match_mojo(kind, interpolation):
     expected = _gradients(mojo_function, inputs, kwargs, output_index=0)
     for name in ("lines", "directions", LINE_KINDS[kind]["shifts"]):
         _assert_close(actual[name], expected[name], rtol=1e-4)
-    # the weights are splatted along the directions too
+    # the weights, unit ones included, are splatted along the directions too
     actual = _gradients(function, inputs, kwargs, output_index=1)
     expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
-    for name in ("weights", "directions"):
+    for name in ("weights", "directions") if weighted else ("directions",):
         _assert_close(actual[name], expected[name], rtol=1e-4)
 
 
@@ -573,7 +640,7 @@ def test_reference_line_insertion_gradients_match_finite_differences(
         _line_function(reference, "insert", kind),
         _line_insertion_inputs(kind),
         name,
-        {"interpolation": "cubic"},
+        {**_array_shape(kind), "interpolation": "cubic"},
         output_index,
     )
 
@@ -596,10 +663,10 @@ def test_reference_runs_on_gpu():
 
     lines, directions = _lines_rfft(N_POSES), _directions(N_POSES, 3, seed=4)
     on_cpu, _ = reference.insert_central_lines_rfft_3d(
-        lines, directions, interpolation="cubic"
+        lines, VOLUME_SHAPE, directions, interpolation="cubic"
     )
     on_gpu, _ = reference.insert_central_lines_rfft_3d(
-        lines.cuda(), directions.cuda(), interpolation="cubic"
+        lines.cuda(), VOLUME_SHAPE, directions.cuda(), interpolation="cubic"
     )
     assert on_gpu.is_cuda
     _assert_close(on_gpu.cpu(), on_cpu, rtol=1e-5)

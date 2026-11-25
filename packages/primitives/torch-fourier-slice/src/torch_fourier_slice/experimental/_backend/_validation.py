@@ -7,9 +7,12 @@ cube edge (``= h``) and ``sidelength_half = w`` the rfft width.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import torch
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _INTERP_CODES = {"linear": 0, "cubic": 1}
 
@@ -34,7 +37,7 @@ class KernelParams(NamedTuple):
     params (bp, sidelength, batch sizes) are read from the tensors, not here.
     """
 
-    oversampling: float
+    oversampling: float  # array index per projection index, see sampling_scale
     radius_cutoff_sq: float
     has_shifts_2d: int
     has_weights: int
@@ -57,6 +60,30 @@ def even_line_sidelength(line_rfft_width: int) -> int:
     lines, such as the output of the extractors.
     """
     return 2 * (int(line_rfft_width) - 1)
+
+
+def _square_side(shape: Sequence[int], ndim: int, name: str) -> int:
+    """The side of a real-space ``shape`` with ``ndim`` equal, even sides."""
+    sides = tuple(int(s) for s in shape)
+    if len(sides) != ndim or len(set(sides)) != 1:
+        cube = "cubic" if ndim == 3 else "square"
+        raise ValueError(f"{name} {tuple(shape)} must be {cube} ({ndim} equal sides)")
+    side = sides[0]
+    if side <= 0 or side % 2 != 0:
+        raise ValueError(f"{name} side length ({side}) must be even and positive")
+    return side
+
+
+def rfft_volume_shape(volume_shape: Sequence[int]) -> tuple[int, int, int]:
+    """Rfft shape ``(d, d, d // 2 + 1)`` of a real-space ``(d, d, d)`` volume."""
+    side = _square_side(volume_shape, 3, "volume_shape")
+    return (side, side, side // 2 + 1)
+
+
+def rfft_image_shape(image_shape: Sequence[int]) -> tuple[int, int]:
+    """Rfft shape ``(h, h // 2 + 1)`` of a real-space ``(h, h)`` image."""
+    side = _square_side(image_shape, 2, "image_shape")
+    return (side, side // 2 + 1)
 
 
 def validate_reconstruction(

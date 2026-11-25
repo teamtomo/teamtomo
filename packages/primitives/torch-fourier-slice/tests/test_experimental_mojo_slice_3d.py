@@ -285,6 +285,7 @@ def test_backprojection_matches_teamtomo_within_nyquist():
 
     mine, mine_w = insert_central_slices_rfft_3d(
         proj,
+        (d,) * 3,
         rotation_matrices=rot,
         weights=torch.ones_like(proj, dtype=torch.float32),
         fftfreq_max=fftfreq_max,
@@ -327,7 +328,7 @@ def test_backprojection_gradient_and_weights():
 
     def loss(p):
         dvol, _ = insert_central_slices_rfft_3d(
-            p, zyx_matrices=True, rotation_matrices=rot, fftfreq_max=cut
+            p, (d,) * 3, zyx_matrices=True, rotation_matrices=rot, fftfreq_max=cut
         )
         return torch.real(torch.sum(torch.conj(w_func) * dvol))
 
@@ -337,16 +338,27 @@ def test_backprojection_gradient_and_weights():
     # weight accumulation returns a matching real volume
     weights = torch.rand(P, d, dh, dtype=torch.float32)
     data_vol, weight_vol = insert_central_slices_rfft_3d(
-        proj.detach(), zyx_matrices=True, rotation_matrices=rot, weights=weights
+        proj.detach(),
+        (d,) * 3,
+        zyx_matrices=True,
+        rotation_matrices=rot,
+        weights=weights,
     )
     assert weight_vol is not None
     assert weight_vol.shape == data_vol.shape
     assert weight_vol.dtype == torch.float32
-    # no weights -> None
-    _, none_w = insert_central_slices_rfft_3d(
-        proj.detach(), zyx_matrices=True, rotation_matrices=rot
+    # no weights -> the weight volume of unit weights
+    _, unit_w = insert_central_slices_rfft_3d(
+        proj.detach(), (d,) * 3, zyx_matrices=True, rotation_matrices=rot
     )
-    assert none_w is None
+    _, ones_w = insert_central_slices_rfft_3d(
+        proj.detach(),
+        (d,) * 3,
+        zyx_matrices=True,
+        rotation_matrices=rot,
+        weights=torch.ones(weights.shape),
+    )
+    assert torch.allclose(unit_w, ones_w)
 
 
 def test_rfft_layer_rank_single_and_multichannel():
@@ -384,15 +396,15 @@ def test_rfft_layer_rank_single_and_multichannel():
 
     # single insert: (P, h, w) -> (d, h, w)
     imgs = torch.randn(P, d, dh, dtype=torch.complex64)
-    v0, w0 = insert_central_slices_rfft_3d(imgs, rot)
-    assert v0.shape == (d, d, dh) and w0 is None
+    v0, w0 = insert_central_slices_rfft_3d(imgs, (d,) * 3, rot)
+    assert v0.shape == w0.shape == (d, d, dh)
 
     # multichannel insert: (P, bv, h, w) -> (bv, d, h, w)
     imgs_m = torch.randn(P, bv, d, dh, dtype=torch.complex64)
-    vm, wm = insert_central_slices_rfft_3d_multichannel(imgs_m, rot)
-    assert vm.shape == (bv, d, d, dh) and wm is None
+    vm, wm = insert_central_slices_rfft_3d_multichannel(imgs_m, (d,) * 3, rot)
+    assert vm.shape == wm.shape == (bv, d, d, dh)
     for i in range(bv):
-        vi, _ = insert_central_slices_rfft_3d(imgs_m[:, i], rot)
+        vi, _ = insert_central_slices_rfft_3d(imgs_m[:, i], (d,) * 3, rot)
         assert torch.allclose(vm[i], vi)
 
     # gradients flow through the rank adaptation (squeeze / transpose)
@@ -424,10 +436,16 @@ def test_gpu_scatter_matches_cpu(interp):
     w = torch.rand(P, d, dh, dtype=torch.float32)
 
     cpu_v, cpu_w = insert_central_slices_rfft_3d(
-        proj, zyx_matrices=True, rotation_matrices=rot, weights=w, interpolation=interp
+        proj,
+        (d,) * 3,
+        zyx_matrices=True,
+        rotation_matrices=rot,
+        weights=w,
+        interpolation=interp,
     )
     gpu_v, gpu_w = insert_central_slices_rfft_3d(
         proj.to(dev),
+        (d,) * 3,
         zyx_matrices=True,
         rotation_matrices=rot,
         weights=w.to(dev),
@@ -541,6 +559,7 @@ def test_cubic_gradients():
     def backproject_loss(proj):
         vol, _ = insert_central_slices_rfft_3d(
             proj,
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=rot,
             fftfreq_max=cut,
@@ -634,6 +653,7 @@ def test_backprojection_pose_and_weight_gradients(interp):
     def data_loss(rot, sh):
         dvol, _ = insert_central_slices_rfft_3d(
             proj,
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=rot,
             shifts_2d=sh,
@@ -646,6 +666,7 @@ def test_backprojection_pose_and_weight_gradients(interp):
     def weight_loss(wts):
         _, wvol = insert_central_slices_rfft_3d(
             proj,
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=rot0,
             weights=wts,
@@ -756,6 +777,7 @@ def test_ewald_curvature_gradients(interp):
     def data_loss(rot):
         dvol, _ = insert_central_slices_rfft_3d(
             proj,
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=rot,
             fftfreq_max=cut,
@@ -835,6 +857,7 @@ def test_shifts_3d_gradients(interp):
     def data_loss(rot, s3d):
         dvol, _ = insert_central_slices_rfft_3d(
             proj,
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=rot,
             shifts_3d=s3d,
@@ -883,6 +906,7 @@ def test_gpu_pose_weight_gradients_match_cpu():
         w = wts0.clone().to(device).requires_grad_(True)
         dvol, _wvol = insert_central_slices_rfft_3d(
             proj.to(device),
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=r,
             weights=w,
@@ -898,6 +922,7 @@ def test_gpu_pose_weight_gradients_match_cpu():
         r = rot0.clone().to(device).requires_grad_(True)
         _, wvol = insert_central_slices_rfft_3d(
             proj.to(device),
+            (d,) * 3,
             zyx_matrices=True,
             rotation_matrices=r,
             weights=wts0.to(device),
@@ -965,7 +990,9 @@ def test_shifts_default_to_xyz_order():
     assert torch.equal(xyz, zyx)
     assert not torch.allclose(xyz, unshifted, atol=1e-4)
 
-    xyz_vol, _ = insert_central_slices_rfft_3d(proj, rot, shifts_3d=s3, shifts_2d=s2)
-    zyx_vol, _ = insert_central_slices_rfft_3d(proj, rot, **flipped)
+    xyz_vol, _ = insert_central_slices_rfft_3d(
+        proj, (d,) * 3, rot, shifts_3d=s3, shifts_2d=s2
+    )
+    zyx_vol, _ = insert_central_slices_rfft_3d(proj, (d,) * 3, rot, **flipped)
     # atomic accumulation order varies between runs: not bit-for-bit
     assert torch.allclose(xyz_vol, zyx_vol, rtol=1e-5, atol=1e-5)

@@ -285,10 +285,11 @@ def test_backends_agree_on_backprojection(backend):
     images = torch.randn((N_ROTATIONS, sidelength, sidelength), generator=generator)
     images_rfft = torch.fft.rfftn(images, dim=(-2, -1))
 
+    # without weights, as the canonical insertion: both weigh every sample one
     experimental, experimental_weights = insert(
         images_rfft,
+        (sidelength,) * 3,
         rotations,
-        weights=torch.ones_like(images_rfft, dtype=torch.float32),
         fftfreq_max=1.0,
         zyx_matrices=True,
     )

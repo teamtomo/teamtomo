@@ -203,6 +203,7 @@ def test_line_insert_gradient_and_weights(interp):
     def loss(lines):
         vol, _ = insert_central_lines_rfft_3d(
             lines,
+            (d,) * 3,
             directions=u,
             fftfreq_max=cut,
             interpolation=interp,
@@ -215,14 +216,22 @@ def test_line_insert_gradient_and_weights(interp):
 
     weights = torch.rand(P, dh)
     data_vol, weight_vol = insert_central_lines_rfft_3d(
-        lines.detach(), directions=u, weights=weights, zyx_directions=True
+        lines.detach(), (d,) * 3, directions=u, weights=weights, zyx_directions=True
     )
     assert weight_vol is not None
     assert weight_vol.shape == data_vol.shape and weight_vol.dtype == torch.float32
-    _, none_w = insert_central_lines_rfft_3d(
-        lines.detach(), directions=u, zyx_directions=True
+    # no weights -> the weight volume of unit weights
+    _, unit_w = insert_central_lines_rfft_3d(
+        lines.detach(), (d,) * 3, directions=u, zyx_directions=True
     )
-    assert none_w is None
+    _, ones_w = insert_central_lines_rfft_3d(
+        lines.detach(),
+        (d,) * 3,
+        directions=u,
+        weights=torch.ones(weights.shape),
+        zyx_directions=True,
+    )
+    assert torch.allclose(unit_w, ones_w)
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +290,7 @@ def test_line_insert_pose_and_weight_gradients(interp):
     def data_loss(u, s):
         dvol, _ = insert_central_lines_rfft_3d(
             lines,
+            (d,) * 3,
             directions=u,
             shifts_3d=s,
             fftfreq_max=cut,
@@ -302,6 +312,7 @@ def test_line_insert_pose_and_weight_gradients(interp):
     def weight_loss(wts):
         _, wvol = insert_central_lines_rfft_3d(
             lines,
+            (d,) * 3,
             directions=u0,
             weights=wts,
             fftfreq_max=cut,
@@ -330,6 +341,7 @@ def test_line_insert_weight_volume_direction_gradient():
     def weight_loss(u):
         _, wvol = insert_central_lines_rfft_3d(
             lines,
+            (d,) * 3,
             directions=u,
             weights=wts,
             interpolation="cubic",
@@ -363,7 +375,7 @@ def test_line_roundtrip_reconstruction():
     lines = extract_central_lines_rfft_3d(rfft, directions=u, zyx_directions=True)
     weights = torch.ones_like(lines.real)
     data_vol, wvol = insert_central_lines_rfft_3d(
-        lines, directions=u, weights=weights, zyx_directions=True
+        lines, (d,) * 3, directions=u, weights=weights, zyx_directions=True
     )
     recon = data_vol / wvol.clamp(min=1.0)
 
@@ -424,14 +436,18 @@ def test_line_rank_single_and_multichannel():
         )
 
     lines = torch.randn(P, dh, dtype=torch.complex64)
-    v0, w0 = insert_central_lines_rfft_3d(lines, u, zyx_directions=True)
-    assert v0.shape == (d, d, dh) and w0 is None
+    v0, w0 = insert_central_lines_rfft_3d(lines, (d,) * 3, u, zyx_directions=True)
+    assert v0.shape == w0.shape == (d, d, dh)
 
     lines_m = torch.randn(P, bv, dh, dtype=torch.complex64)
-    vm, wm = insert_central_lines_rfft_3d_multichannel(lines_m, u, zyx_directions=True)
-    assert vm.shape == (bv, d, d, dh) and wm is None
+    vm, wm = insert_central_lines_rfft_3d_multichannel(
+        lines_m, (d,) * 3, u, zyx_directions=True
+    )
+    assert vm.shape == wm.shape == (bv, d, d, dh)
     for i in range(bv):
-        vi, _ = insert_central_lines_rfft_3d(lines_m[:, i], u, zyx_directions=True)
+        vi, _ = insert_central_lines_rfft_3d(
+            lines_m[:, i], (d,) * 3, u, zyx_directions=True
+        )
         assert torch.allclose(vm[i], vi)
 
     # gradients flow through the rank adaptation (squeeze / transpose)
@@ -488,10 +504,16 @@ def test_gpu_line_matches_cpu(interp):
     lines = torch.randn(P, dh, dtype=torch.complex64)
     w = torch.rand(P, dh)
     cv, cw = insert_central_lines_rfft_3d(
-        lines, directions=u, weights=w, interpolation=interp, zyx_directions=True
+        lines,
+        (d,) * 3,
+        directions=u,
+        weights=w,
+        interpolation=interp,
+        zyx_directions=True,
     )
     gv, gw = insert_central_lines_rfft_3d(
         lines.to(dev),
+        (d,) * 3,
         directions=u,
         weights=w.to(dev),
         interpolation=interp,
@@ -536,6 +558,7 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
         w = wts0.clone().to(device).requires_grad_(True)
         dvol, _ = insert_central_lines_rfft_3d(
             lines.to(device),
+            (d,) * 3,
             directions=u,
             shifts_3d=s,
             weights=w,
@@ -549,6 +572,7 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
         u = u0.clone().to(device).requires_grad_(True)
         _, wvol = insert_central_lines_rfft_3d(
             lines.to(device),
+            (d,) * 3,
             directions=u,
             weights=wts0.to(device),
             zyx_directions=True,
@@ -590,8 +614,8 @@ def test_directions_and_shifts_default_to_xyz_order():
     zyx = extract_central_lines_rfft_3d(rfft, **flipped)
     assert torch.equal(xyz, zyx)
 
-    xyz_vol, _ = insert_central_lines_rfft_3d(lines, u, shifts_3d=s3)
-    zyx_vol, _ = insert_central_lines_rfft_3d(lines, **flipped)
+    xyz_vol, _ = insert_central_lines_rfft_3d(lines, (d,) * 3, u, shifts_3d=s3)
+    zyx_vol, _ = insert_central_lines_rfft_3d(lines, (d,) * 3, **flipped)
     # atomic accumulation order varies between runs: not bit-for-bit
     assert torch.allclose(xyz_vol, zyx_vol, rtol=1e-5, atol=1e-5)
 
