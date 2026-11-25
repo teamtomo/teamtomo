@@ -483,11 +483,12 @@ def test_line_output_length():
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
 @pytest.mark.parametrize("interp", ["linear", "cubic"])
-def test_gpu_line_matches_cpu(interp):
+@pytest.mark.parametrize("d", [48, 47])
+def test_gpu_line_matches_cpu(interp, d):
     """The GPU line kernels reproduce the CPU result and stay on device."""
     dev = _gpu_device()
     torch.manual_seed(0)
-    d, P = 48, 10
+    P = 10
     dh = d // 2 + 1
     rfft = _rfft(torch.randn(d, d, d, dtype=torch.float32))
     u = _rand_dirs(P, 3)
@@ -510,6 +511,7 @@ def test_gpu_line_matches_cpu(interp):
         weights=w,
         interpolation=interp,
         zyx_directions=True,
+        line_length=d,
     )
     gv, gw = insert_central_lines_rfft_3d(
         lines.to(dev),
@@ -518,6 +520,7 @@ def test_gpu_line_matches_cpu(interp):
         weights=w.to(dev),
         interpolation=interp,
         zyx_directions=True,
+        line_length=d,
     )
     assert gv.device.type == dev
     assert torch.allclose(gv.cpu(), cv, atol=1e-4)
@@ -525,11 +528,12 @@ def test_gpu_line_matches_cpu(interp):
 
 
 @pytest.mark.skipif(not _gpu_usable(), reason="no usable Mojo GPU device")
-def test_gpu_line_pose_weight_gradients_match_cpu():
+@pytest.mark.parametrize("d", [24, 23])
+def test_gpu_line_pose_weight_gradients_match_cpu(d):
     """The GPU direction/shift/weight backward kernels reproduce the CPU grads."""
     dev = _gpu_device()
     torch.manual_seed(0)
-    d, P = 24, 4
+    P = 4
     dh = d // 2 + 1
     vol = torch.randn(d, d, dh, dtype=torch.complex64)
     u0 = _rand_dirs(P, 1)
@@ -564,6 +568,7 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
             weights=w,
             zyx_directions=True,
             zyx_shifts=True,
+            line_length=d,
         )
         (dvol.abs() ** 2).sum().backward()
         return u.grad.cpu(), s.grad.cpu(), w.grad.cpu()
@@ -576,6 +581,7 @@ def test_gpu_line_pose_weight_gradients_match_cpu():
             directions=u,
             weights=wts0.to(device),
             zyx_directions=True,
+            line_length=d,
         )
         (wvol * weight_cotangent.to(device)).sum().backward()
         return u.grad.cpu()

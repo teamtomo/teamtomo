@@ -21,12 +21,12 @@ import torch
 
 from .._backend._common import input_line_scale, sampling_scale
 from .._backend._validation import (
-    even_line_sidelength,
     interp_code,
     prep_directions_2d,
     prep_directions_3d,
     prep_shifts_2d,
     prep_shifts_3d,
+    resolve_line_length,
     validate_image_2d,
     validate_image_shape,
     validate_reconstruction,
@@ -39,10 +39,7 @@ def _output_length(output_length: int | None, sidelength: int) -> int:
     """Real-space length of the extracted lines (the array's side by default)."""
     if output_length is None:
         return sidelength
-    line_sidelength = int(output_length)
-    if line_sidelength % 2 != 0:
-        raise ValueError(f"output_length {line_sidelength} must be even")
-    return line_sidelength
+    return int(output_length)
 
 
 def _line_samples(
@@ -163,6 +160,7 @@ def insert_lines_3d(
     volume_shape: tuple[int, int, int],
     fftfreq_max: float | None,
     interpolation: str,
+    line_length: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert complex central lines into Hermitian rfft volumes (+ weights).
 
@@ -178,7 +176,7 @@ def insert_lines_3d(
     if bp_dir != bp:
         raise ValueError("directions pose count must match lines")
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, lines.device)
-    line_sidelength = even_line_sidelength(w)
+    line_sidelength = resolve_line_length(w, line_length)
     sidelength = validate_volume_shape(volume_shape)[0]
 
     k, inside = _line_samples(
@@ -241,6 +239,7 @@ def insert_lines_2d(
     image_shape: tuple[int, int],
     fftfreq_max: float | None,
     interpolation: str,
+    line_length: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert complex central lines into Hermitian 2D rfft images (+ weights).
 
@@ -256,7 +255,7 @@ def insert_lines_2d(
     if bp_dir != bp:
         raise ValueError("directions pose count must match lines")
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, lines.device)
-    line_sidelength = even_line_sidelength(w)
+    line_sidelength = resolve_line_length(w, line_length)
     sidelength = validate_image_shape(image_shape)[0]
 
     k, inside = _line_samples(

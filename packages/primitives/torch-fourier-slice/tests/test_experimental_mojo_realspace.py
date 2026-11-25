@@ -96,10 +96,13 @@ def test_gridding_correction_rejects_unknown_interpolation():
         gridding_correction(8, "nope")
 
 
+@pytest.mark.parametrize("d", [64, 63])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_projection_matches_analytic_projection(interpolation):
-    """Projections of an isotropic blob match its exact analytic projection."""
-    d = 64
+def test_projection_matches_analytic_projection(interpolation, d):
+    """Projections of an isotropic blob match its exact analytic projection.
+
+    An odd box too: the blob sits on voxel ``d // 2`` either way.
+    """
     volume = _blob(d)
     truth = volume.sum(dim=0)
     scale = truth.abs().max()
@@ -135,9 +138,9 @@ def test_cubic_projection_beats_linear():
     assert 5 * errors["cubic"] < errors["linear"]
 
 
-def test_project_backproject_round_trip():
+@pytest.mark.parametrize("d", [48, 47])
+def test_project_backproject_round_trip(d):
     """Reconstructing from dense views recovers the volume."""
-    d = 48
     volume = _blob(d, sigma=3.0)
     rotations = _rotations(300, seed=1)
 
@@ -209,10 +212,11 @@ def _gpu_device() -> str | None:
 
 
 @pytest.mark.skipif(_gpu_device() is None, reason="no GPU device")
-def test_gpu_matches_cpu():
+@pytest.mark.parametrize("d", [32, 31])
+def test_gpu_matches_cpu(d):
     """The real-space layer follows the input device and agrees with the CPU."""
     device = _gpu_device()
-    volume = _blob(32, sigma=3.0)
+    volume = _blob(d, sigma=3.0)
     rotations = _rotations(6)
 
     cpu = project_3d_to_2d(volume, rotations)
