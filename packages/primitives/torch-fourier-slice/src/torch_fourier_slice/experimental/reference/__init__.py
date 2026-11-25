@@ -8,16 +8,24 @@ kernels. Gradients come from autograd rather than the dedicated backward kernels
 Mojo kernels can't be built or loaded. They also serve as the reference the Mojo
 kernels are tested against.
 
-So far this covers the central slices (rfft layer) and the real-space projection
-and backprojection built on them; the central lines still need the Mojo kernels.
+This covers the whole experimental API: the central slices and central lines
+(rfft layer) and the real-space projection and backprojection.
 """
 
 from .backproject import backproject_2d_to_3d, backproject_2d_to_3d_multichannel
 from .extraction import (
+    extract_central_lines_rfft_2d,
+    extract_central_lines_rfft_2d_multichannel,
+    extract_central_lines_rfft_3d,
+    extract_central_lines_rfft_3d_multichannel,
     extract_central_slices_rfft_3d,
     extract_central_slices_rfft_3d_multichannel,
 )
 from .insertion import (
+    insert_central_lines_rfft_2d,
+    insert_central_lines_rfft_2d_multichannel,
+    insert_central_lines_rfft_3d,
+    insert_central_lines_rfft_3d_multichannel,
     insert_central_slices_rfft_3d,
     insert_central_slices_rfft_3d_multichannel,
 )
@@ -26,8 +34,16 @@ from .project import project_3d_to_2d, project_3d_to_2d_multichannel
 __all__ = [
     "backproject_2d_to_3d",
     "backproject_2d_to_3d_multichannel",
+    "extract_central_lines_rfft_2d",
+    "extract_central_lines_rfft_2d_multichannel",
+    "extract_central_lines_rfft_3d",
+    "extract_central_lines_rfft_3d_multichannel",
     "extract_central_slices_rfft_3d",
     "extract_central_slices_rfft_3d_multichannel",
+    "insert_central_lines_rfft_2d",
+    "insert_central_lines_rfft_2d_multichannel",
+    "insert_central_lines_rfft_3d",
+    "insert_central_lines_rfft_3d_multichannel",
     "insert_central_slices_rfft_3d",
     "insert_central_slices_rfft_3d_multichannel",
     "project_3d_to_2d",

@@ -2,24 +2,18 @@
 
 The torch counterparts of ``ExtractSlices3D.apply`` / ``InsertSlices3D.apply`` in
 ``.._backend._slice_3d``: same arguments, same layouts, same results. Every step
-mirrors the Mojo kernels in ``_mojo/_slice_3d.mojo``, ``_gather.mojo`` and
-``_scatter.mojo``, written as differentiable tensor ops, so autograd supplies the
+mirrors the Mojo kernels in ``_mojo/_slice_3d.mojo`` (the sampling itself is in
+``._rfft``), written as differentiable tensor ops, so autograd supplies the
 gradients the Mojo backend computes with dedicated kernels.
 """
 
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
 
 import torch
 
-from ..._dft_utils import NYQUIST_TOLERANCE
-from .._backend._common import (
-    hermitian_planes,
-    input_pixel_scale,
-    reconstruction_volume_shape,
-)
+from .._backend._common import input_pixel_scale, reconstruction_volume_shape
 from .._backend._validation import (
     interp_code,
     prep_rotations,
@@ -27,97 +21,7 @@ from .._backend._validation import (
     prep_shifts_3d,
     validate_reconstruction,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-
-def _cubic_kernel(s: torch.Tensor) -> torch.Tensor:
-    """Catmull-Rom cubic convolution weight (a = -0.5), support ``|s| <= 2``."""
-    s = s.abs()
-    a = -0.5
-    near = (a + 2.0) * s**3 - (a + 3.0) * s**2 + 1.0
-    far = a * s**3 - 5.0 * a * s**2 + 8.0 * a * s - 4.0 * a
-    return torch.where(s <= 1.0, near, torch.where(s <= 2.0, far, 0.0))
-
-
-def _stencil(
-    k: torch.Tensor, interpolation: str
-) -> Iterator[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
-    """Integer voxels ``(z, y, x)`` around each sample ``k (..., 3)`` and their weights.
-
-    Trilinear: the 8 surrounding voxels. Tricubic: the 4x4x4 block from
-    ``floor(k) - 1`` to ``floor(k) + 2``. The weights are differentiable in ``k``.
-    """
-    k_floor = torch.floor(k)
-    base = k_floor.long()
-    frac = k - k_floor
-    offsets: tuple[int, ...]
-    if interpolation == "cubic":
-        offsets = (-1, 0, 1, 2)
-        weights = [_cubic_kernel(frac - o) for o in offsets]
-    else:
-        offsets = (0, 1)
-        weights = [1.0 - frac, frac]
-    for oz, wz in zip(offsets, weights, strict=True):
-        for oy, wy in zip(offsets, weights, strict=True):
-            for ox, wx in zip(offsets, weights, strict=True):
-                yield (
-                    base[..., 0] + oz,
-                    base[..., 1] + oy,
-                    base[..., 2] + ox,
-                    wz[..., 0] * wy[..., 1] * wx[..., 2],
-                )
-
-
-def _wrap_frequency(i: torch.Tensor, sidelength: int) -> torch.Tensor:
-    """Periodic image of DFT frequency ``i`` in the stored range ``[hi - n + 1, hi]``.
-
-    The DFT of a sampled volume repeats every ``n``, so a frequency past the stored
-    grid has the value of the stored one ``n`` away (``_wrap_frequency``).
-    """
-    lo = sidelength // 2 - sidelength + 1
-    return torch.remainder(i - lo, sidelength) + lo
-
-
-def _rfft_voxel(
-    z: torch.Tensor, y: torch.Tensor, x: torch.Tensor, sidelength: int
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Where the DFT value at integer frequency ``(z, y, x)`` is stored.
-
-    As ``_rfft_voxel`` in ``_common.mojo``: a negative ``x`` folds onto the stored
-    half by Hermitian symmetry, then each frequency wraps periodically into the
-    stored range, folding again if ``x`` wrapped negative. Every frequency maps to
-    a stored voxel. Returns the array indices ``(z, y, x)`` and whether the stored
-    value is the conjugate of the requested one.
-    """
-    conj = x < 0
-    z, y, x = (torch.where(conj, -i, i) for i in (z, y, x))
-    x = _wrap_frequency(x, sidelength)
-    refold = x < 0
-    z, y, x = (torch.where(refold, -i, i) for i in (z, y, x))
-    conj = conj ^ refold
-    z = _wrap_frequency(z, sidelength)
-    y = _wrap_frequency(y, sidelength)
-    z = torch.where(z < 0, z + sidelength, z)
-    y = torch.where(y < 0, y + sidelength, y)
-    return z, y, x, conj
-
-
-def _in_nyquist_cube(k: torch.Tensor, sidelength: int) -> torch.Tensor:
-    """Whether each sample ``k (..., 3)`` lies inside ``|k_i| <= n / 2``.
-
-    Points outside it read as 0 (gather) or are dropped (scatter), as
-    ``_in_nyquist_cube`` in ``_common.mojo``.
-    """
-    return (k.abs() <= sidelength / 2 + NYQUIST_TOLERANCE).all(dim=-1)
-
-
-def _flat_index(
-    z: torch.Tensor, y: torch.Tensor, x: torch.Tensor, sidelength: int
-) -> torch.Tensor:
-    """Index into a flattened ``(d, h, w)`` rfft volume."""
-    return (z * sidelength + y) * (sidelength // 2 + 1) + x
+from ._rfft import gather, scatter
 
 
 def _fourier_coord(n: int, device: torch.device) -> torch.Tensor:
@@ -191,85 +95,6 @@ def _shift_phase(
     return phase
 
 
-def _gather(volume: torch.Tensor, k: torch.Tensor, interpolation: str) -> torch.Tensor:
-    """Interpolate the rfft volumes ``(bv, d, h, w)`` at ``k (bv, ...)``.
-
-    The stencil reads the DFT periodically (``_rfft_voxel``); samples outside the
-    Nyquist cube read as 0.
-    """
-    bv, sidelength = volume.shape[0], volume.shape[-2]
-    flat = volume.reshape(bv, -1)
-    batch = torch.arange(bv, device=volume.device).view(-1, *([1] * (k.dim() - 2)))
-    out = torch.zeros(k.shape[:-1], dtype=volume.dtype, device=volume.device)
-    for z, y, x, weight in _stencil(k, interpolation):
-        z, y, x, conj = _rfft_voxel(z, y, x, sidelength)
-        value = flat[batch, _flat_index(z, y, x, sidelength)]
-        value = torch.where(conj, value.conj(), value)
-        out = out + value * weight
-    return out * _in_nyquist_cube(k, sidelength)
-
-
-def _scatter(
-    values: torch.Tensor,
-    weights: torch.Tensor | None,
-    k: torch.Tensor,
-    sidelength: int,
-    interpolation: str,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Splat ``values (bv, ...)`` (and real ``weights``) into rfft volumes at ``k``.
-
-    The adjoint of ``_gather`` (samples outside the Nyquist cube are dropped),
-    plus the reconstruction's Hermitian double-insert: a write to the kx = 0 or
-    kx = n/2 plane also adds its conjugate at the mirrored ``(-z, -y)`` voxel,
-    which for a self-mirror voxel is the voxel itself (``_accumulate_3d`` with
-    ``friedel_double``).
-    """
-    bv = values.shape[0]
-    in_cube = _in_nyquist_cube(k, sidelength)
-    values = values * in_cube
-    if weights is not None:
-        weights = weights * in_cube
-    n_voxels = sidelength * sidelength * (sidelength // 2 + 1)
-    shape = (bv, sidelength, sidelength, sidelength // 2 + 1)
-    offset = (torch.arange(bv, device=values.device) * n_voxels).view(
-        -1, *([1] * (k.dim() - 2))
-    )
-    data = torch.zeros(bv * n_voxels, dtype=values.dtype, device=values.device)
-    weight_volume = None
-    if weights is not None:
-        weight_volume = torch.zeros(
-            bv * n_voxels, dtype=weights.dtype, device=weights.device
-        )
-
-    def add(index, value, weight):
-        data.index_add_(0, (offset + index).reshape(-1), value.reshape(-1))
-        if weight_volume is not None:
-            weight_volume.index_add_(
-                0, (offset + index).reshape(-1), weight.reshape(-1)
-            )
-
-    planes = torch.tensor(hermitian_planes(sidelength), device=values.device)
-    for z, y, x, tap_weight in _stencil(k, interpolation):
-        z, y, x, conj = _rfft_voxel(z, y, x, sidelength)
-        value = torch.where(conj, values.conj(), values) * tap_weight
-        weight = weights * tap_weight if weights is not None else None
-        add(_flat_index(z, y, x, sidelength), value, weight)
-
-        mirror_z = (sidelength - z) % sidelength
-        mirror_y = (sidelength - y) % sidelength
-        mirrored = torch.isin(x, planes)
-        add(
-            _flat_index(mirror_z, mirror_y, x, sidelength),
-            value.conj() * mirrored,
-            weight * mirrored if weight is not None else None,
-        )
-
-    data = data.reshape(shape)
-    if weight_volume is not None:
-        weight_volume = weight_volume.reshape(shape)
-    return data, weight_volume
-
-
 def extract_slices_3d(
     reconstruction: torch.Tensor,
     rotations: torch.Tensor,
@@ -311,7 +136,7 @@ def extract_slices_3d(
         proj_sidelength, radius, float(oversampling), float(ewald_curvature), device
     )
     k = _rotate(rotations, s, bv)
-    slices = _gather(reconstruction.to(torch.complex64), k, interpolation)
+    slices = gather(reconstruction.to(torch.complex64), k, interpolation)
     phase = _shift_phase(
         shifts_2d_t if has_shifts_2d else None,
         shifts_3d_t if has_shifts_3d else None,
@@ -389,4 +214,4 @@ def insert_slices_3d(
         values = values * torch.complex(torch.cos(phase), -torch.sin(phase))
     if weights is not None:
         weights = weights.to(torch.float32) * keep
-    return _scatter(values, weights, k, sidelength, interpolation)
+    return scatter(values, weights, k, sidelength, interpolation)

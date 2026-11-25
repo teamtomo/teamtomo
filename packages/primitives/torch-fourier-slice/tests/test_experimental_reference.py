@@ -3,7 +3,8 @@
 ``torch_fourier_slice.experimental.reference`` implements the experimental API in
 plain torch, and ``torch_fourier_slice.experimental`` falls back to it without the
 Mojo kernels. These pin that the two have the same signatures, give the same
-values and the same gradients, and that the fallback happens.
+values and the same gradients, and that the fallback happens, for the central
+slices, the central lines and the real-space layer.
 """
 
 import inspect
@@ -361,6 +362,222 @@ def test_backproject_gradients_match_mojo(interpolation):
         _assert_close(actual[name], expected[name], rtol=1e-4)
 
 
+# --- central lines ----------------------------------------------------------------
+
+# per line dimension: the array lines are cut from, and the names of the shift and
+# axis-order arguments
+LINE_KINDS = {
+    "3d": {
+        "array": lambda *batch: _volume_rfft(*batch),
+        "ndim": 3,
+        "shifts": "shifts_3d",
+        "order": {"zyx_directions": True, "zyx_shifts": True},
+    },
+    "2d": {
+        "array": lambda *batch: _image_rfft(*batch),
+        "ndim": 2,
+        "shifts": "shifts_2d",
+        "order": {"yx_directions": True, "yx_shifts": True},
+    },
+}
+
+
+def _line_function(module, operation, kind, multichannel=False):
+    suffix = "_multichannel" if multichannel else ""
+    return getattr(module, f"{operation}_central_lines_rfft_{kind}{suffix}")
+
+
+def _directions(n, ndim, seed, batch=()):
+    generator = torch.Generator().manual_seed(seed)
+    directions = torch.randn(*batch, n, ndim, generator=generator)
+    return directions / directions.norm(dim=-1, keepdim=True)
+
+
+def _lines_rfft(*batch, seed=1):
+    generator = torch.Generator().manual_seed(seed)
+    return torch.fft.rfft(torch.randn(*batch, SIDELENGTH, generator=generator))
+
+
+def _line_weights(*batch, seed=9):
+    generator = torch.Generator().manual_seed(seed)
+    return torch.rand(*batch, SIDELENGTH // 2 + 1, generator=generator)
+
+
+def _line_case(kind, case):
+    """Keyword arguments for one of the line cases below."""
+    shifts, ndim = LINE_KINDS[kind]["shifts"], LINE_KINDS[kind]["ndim"]
+    return {
+        "plain": {},
+        "shifts": {shifts: _shifts(N_POSES, ndim)},
+        "axis_order": {shifts: _shifts(N_POSES, ndim), **LINE_KINDS[kind]["order"]},
+        "output_length": {"output_length": 24},
+        "oversampling": {"oversampling": 1.5},
+        "fftfreq_max": {"fftfreq_max": 0.3},
+    }[case]
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize(
+    "case",
+    ["plain", "shifts", "axis_order", "output_length", "oversampling", "fftfreq_max"],
+)
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_extract_lines_matches_mojo(kind, case, interpolation):
+    ndim = LINE_KINDS[kind]["ndim"]
+    args = (LINE_KINDS[kind]["array"](), _directions(N_POSES, ndim, seed=4))
+    kwargs = {**_line_case(kind, case), "interpolation": interpolation}
+    _assert_close(
+        _line_function(reference, "extract", kind)(*args, **kwargs),
+        _line_function(extraction, "extract", kind)(*args, **kwargs),
+        rtol=1e-5,
+    )
+
+
+@requires_mojo
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_extract_lines_multichannel_matches_mojo(kind):
+    ndim, shifts = LINE_KINDS[kind]["ndim"], LINE_KINDS[kind]["shifts"]
+    args = (
+        LINE_KINDS[kind]["array"](N_CHANNELS),
+        _directions(N_POSES, ndim, seed=4, batch=(N_CHANNELS,)),
+    )
+    kwargs = {shifts: _shifts(N_CHANNELS, N_POSES, ndim), "interpolation": "cubic"}
+    _assert_close(
+        _line_function(reference, "extract", kind, True)(*args, **kwargs),
+        _line_function(extraction, "extract", kind, True)(*args, **kwargs),
+        rtol=1e-5,
+    )
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize(
+    "case", ["plain", "weights", "shifts", "axis_order", "oversampling", "fftfreq_max"]
+)
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_insert_lines_matches_mojo(kind, case, interpolation):
+    ndim = LINE_KINDS[kind]["ndim"]
+    args = (_lines_rfft(N_POSES), _directions(N_POSES, ndim, seed=4))
+    if case == "weights":
+        options = {"weights": _line_weights(N_POSES)}
+    elif case == "oversampling":
+        options = {"oversampling": 2.0}
+    else:
+        options = _line_case(kind, case)
+    kwargs = {**options, "interpolation": interpolation}
+    data, weights = _line_function(reference, "insert", kind)(*args, **kwargs)
+    mojo_data, mojo_weights = _line_function(insertion, "insert", kind)(*args, **kwargs)
+    _assert_close(data, mojo_data, rtol=1e-5)
+    assert (weights is None) == (mojo_weights is None)
+    if weights is not None:
+        _assert_close(weights, mojo_weights, rtol=1e-5)
+
+
+@requires_mojo
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_insert_lines_multichannel_matches_mojo(kind):
+    ndim, shifts = LINE_KINDS[kind]["ndim"], LINE_KINDS[kind]["shifts"]
+    args = (
+        _lines_rfft(N_POSES, N_CHANNELS),
+        _directions(N_POSES, ndim, seed=4, batch=(N_CHANNELS,)),
+    )
+    kwargs = {
+        "weights": _line_weights(N_POSES, N_CHANNELS),
+        shifts: _shifts(N_CHANNELS, N_POSES, ndim),
+        "interpolation": "cubic",
+    }
+    data, weights = _line_function(reference, "insert", kind, True)(*args, **kwargs)
+    mojo_data, mojo_weights = _line_function(insertion, "insert", kind, True)(
+        *args, **kwargs
+    )
+    _assert_close(data, mojo_data, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
+
+
+def _line_extraction_inputs(kind):
+    ndim = LINE_KINDS[kind]["ndim"]
+    array_name = "volume_rfft" if kind == "3d" else "image_rfft"
+    return {
+        array_name: LINE_KINDS[kind]["array"](),
+        "directions": _directions(N_POSES, ndim, seed=4),
+        LINE_KINDS[kind]["shifts"]: _shifts(N_POSES, ndim),
+    }
+
+
+def _line_insertion_inputs(kind):
+    ndim = LINE_KINDS[kind]["ndim"]
+    return {
+        "lines": _lines_rfft(N_POSES),
+        "directions": _directions(N_POSES, ndim, seed=4),
+        LINE_KINDS[kind]["shifts"]: _shifts(N_POSES, ndim),
+        "weights": _line_weights(N_POSES),
+    }
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_extract_lines_gradients_match_mojo(kind, interpolation):
+    inputs = _line_extraction_inputs(kind)
+    kwargs = {"interpolation": interpolation}
+    actual = _gradients(_line_function(reference, "extract", kind), inputs, kwargs)
+    expected = _gradients(_line_function(extraction, "extract", kind), inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_insert_lines_gradients_match_mojo(kind, interpolation):
+    inputs = _line_insertion_inputs(kind)
+    kwargs = {"interpolation": interpolation}
+    function = _line_function(reference, "insert", kind)
+    mojo_function = _line_function(insertion, "insert", kind)
+    # the data depends on the lines, the directions and the shifts
+    actual = _gradients(function, inputs, kwargs, output_index=0)
+    expected = _gradients(mojo_function, inputs, kwargs, output_index=0)
+    for name in ("lines", "directions", LINE_KINDS[kind]["shifts"]):
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+    # the weights are splatted along the directions too
+    actual = _gradients(function, inputs, kwargs, output_index=1)
+    expected = _gradients(mojo_function, inputs, kwargs, output_index=1)
+    for name in ("weights", "directions"):
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@pytest.mark.parametrize("name", ["directions", "shifts"])
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_reference_line_extraction_gradients_match_finite_differences(kind, name):
+    if name == "shifts":
+        name = LINE_KINDS[kind]["shifts"]
+    _assert_matches_finite_differences(
+        _line_function(reference, "extract", kind),
+        _line_extraction_inputs(kind),
+        name,
+        {"interpolation": "cubic"},
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "output_index"), [("directions", 0), ("directions", 1), ("shifts", 0)]
+)
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_reference_line_insertion_gradients_match_finite_differences(
+    kind, name, output_index
+):
+    if name == "shifts":
+        name = LINE_KINDS[kind]["shifts"]
+    _assert_matches_finite_differences(
+        _line_function(reference, "insert", kind),
+        _line_insertion_inputs(kind),
+        name,
+        {"interpolation": "cubic"},
+        output_index,
+    )
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device")
 def test_reference_runs_on_gpu():
     volume, rotations, shifts = (
@@ -373,6 +590,16 @@ def test_reference_runs_on_gpu():
     )
     on_gpu = reference.extract_central_slices_rfft_3d(
         volume.cuda(), rotations.cuda(), shifts_3d=shifts.cuda(), interpolation="cubic"
+    )
+    assert on_gpu.is_cuda
+    _assert_close(on_gpu.cpu(), on_cpu, rtol=1e-5)
+
+    lines, directions = _lines_rfft(N_POSES), _directions(N_POSES, 3, seed=4)
+    on_cpu, _ = reference.insert_central_lines_rfft_3d(
+        lines, directions, interpolation="cubic"
+    )
+    on_gpu, _ = reference.insert_central_lines_rfft_3d(
+        lines.cuda(), directions.cuda(), interpolation="cubic"
     )
     assert on_gpu.is_cuda
     _assert_close(on_gpu.cpu(), on_cpu, rtol=1e-5)
