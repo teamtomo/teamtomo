@@ -13,11 +13,21 @@ Memory Usage Comparison:
 
 For large movies that don't fit in memory, use `memory_efficient=True` in
 `dose_weight_movie()` or call `dose_weight_movie_memory_efficient_2d()` directly.
+
+`dose_weight_movie(..., frame_weights=table)` weights the frames with a per-frame
+B-factor table instead of Grant and Grigorieff's model (see
+:mod:`torch_fourier_filter.frame_weights`).
 """
 
 import einops
 import torch
 from torch_grid_utils.fftfreq_grid import fftfreq_grid
+
+from torch_fourier_filter.frame_weights import (
+    FrameWeightTable,
+    frame_weights_chunk,
+    frame_weights_normalization_grid,
+)
 
 
 def critical_exposure(
@@ -514,6 +524,7 @@ def dose_weight_movie(
     device: torch.device | None = None,
     memory_efficient: bool = False,
     chunk_size: int = 10,
+    frame_weights: FrameWeightTable | None = None,
 ) -> torch.Tensor:
     """
     Apply per-frame dose weighting to a movie in Fourier space.
@@ -559,6 +570,11 @@ def dose_weight_movie(
     chunk_size : int, optional
         The number of frames to process in each chunk for memory-efficient mode.
         Default is 100.
+    frame_weights : FrameWeightTable, optional
+        Per-frame B-factor weights (one row per frame), used instead of Grant and
+        Grigorieff's model. The table carries the frames' exposures, so
+        `pre_exposure`, `dose_per_frame`, `voltage`, `crit_exposure_bfactor` and
+        `a`, `b`, `c` are not used. Default is None (Grant and Grigorieff).
 
     Returns
     -------
@@ -577,6 +593,27 @@ def dose_weight_movie(
 
     # Move movie_dft to specified device if needed
     movie_dft = movie_dft.to(device)
+
+    if frame_weights is not None:
+        n_frames = movie_dft.shape[0]
+        if frame_weights.n_frames != n_frames:
+            raise ValueError(
+                f"frame_weights has {frame_weights.n_frames} frames, "
+                f"the movie {n_frames}"
+            )
+        k, log_norm = frame_weights_normalization_grid(
+            frame_weights, image_shape, pixel_size, rfft, fftshift, device
+        )
+        if not memory_efficient:
+            return frame_weights_chunk(movie_dft, 0, frame_weights, k, log_norm)
+        result = torch.empty_like(movie_dft)
+        for start_idx in range(0, n_frames, chunk_size):
+            end_idx = min(start_idx + chunk_size, n_frames)
+            result[start_idx:end_idx] = frame_weights_chunk(
+                movie_dft[start_idx:end_idx], start_idx, frame_weights, k, log_norm
+            )
+        return result
+
     # Calculate doses for each frame (dose AFTER each frame)
     doses = _frame_doses(
         movie_dft.shape[0], pre_exposure, dose_per_frame, device=device

@@ -22,6 +22,36 @@ Make sure to run tests before any commits:
 python -m pytest
 ```
 
+## Per-frame B-factor dose weighting
+
+`torch_fourier_filter.frame_weights` weights movie frames with RELION's per-frame
+model, w_f(k) = exp(B_f k²/4 + C_f), normalised at each frequency like the
+Grant & Grigorieff weighting.
+
+- **Default curve:** `default_frame_bfactors` gives a table for any frames. It
+  comes from a curve in physical exposure fitted on yeast ribosome LSU in situ
+  (300 kV) and single-particle microtubules (200 kV) (`data/frame_weights`).
+- **Your own fit:** any `FrameWeightTable`, saved as JSON, for example one refit
+  from your own particles.
+- **Matched template envelope:** `TemplateEnvelope` gives the radial envelope that
+  matches a sum weighted this way, optionally with a smooth `EnvelopeCorrection`.
+
+```python
+from torch_fourier_filter.dose_weight import dose_weight_movie
+from torch_fourier_filter.frame_weights import (
+    TemplateEnvelope,
+    default_frame_bfactors,
+    frame_exposures,
+)
+
+table = default_frame_bfactors(*frame_exposures(n_frames=50, dose_per_frame=1.0))
+weighted = dose_weight_movie(movie_dft, (h, w), pixel_size, frame_weights=table)
+image_dft = weighted.sum(0)
+
+envelope = TemplateEnvelope(frame_weights=table)  # or TemplateEnvelope.from_json(...)
+volume_dft = volume_dft * envelope.grid(volume.shape, pixel_size)
+```
+
 ## Changed in 0.7.0
 
 - `power_spectral_density` and `whitening_filter` take `image_shape`, which is
