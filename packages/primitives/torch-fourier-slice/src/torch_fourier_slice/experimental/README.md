@@ -104,6 +104,13 @@ take arrays centred on index `n // 2` either way. A line of length `2m` and one 
 `2m + 1` have the same rfft width, so a line insertion takes the lines' length as
 `line_length` (even by default, as `torch.fft.irfft` assumes).
 
+An anisotropic magnification `A` (real space, 2 x 2, yx), passed as
+`transform_matrix` to the slice functions and the real-space ones, is applied
+inside the kernels: each slice pixel at frequency `k` samples `(A^-1)^T k` before
+the Ewald offset and the rotation, its value scaled by `1 / |det A|`. That costs
+no second interpolation, and the insertion and every gradient kernel apply the
+same map (the matrix itself gets no gradient).
+
 Interpolation: `interpolation="linear"` (trilinear, default) or `"cubic"`
 (tricubic Catmull-Rom) — selected at **compile time** per call (§6). The
 real-space layer's gridding correction follows this choice (§7).

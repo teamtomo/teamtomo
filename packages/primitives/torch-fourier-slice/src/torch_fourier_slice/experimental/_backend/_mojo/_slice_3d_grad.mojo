@@ -35,6 +35,7 @@ from _common import (
     _fourier_coord,
     _rfft_half,
     _rotated_coord,
+    _slice_sample_yx,
     _slice_3d_shift_phase,
     _load_c2,
     _in_nyquist_cube,
@@ -195,8 +196,9 @@ def _extract_slice_3d_pose_grad_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return SIMD[DType.float32, 16](0)
-    var sx = coord_x * p.oversampling
-    var sy = coord_y * p.oversampling
+    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var sy = s_yx[0]
+    var sx = s_yx[1]
     var sz = _ewald_sz(p, sx, sy)
     var rb = 0 if p.bv_rot == 1 else i_bv
     var k = _rotated_coord(rot, (rb * p.bp + i_bp) * 9, sx, sy, sz)
@@ -220,7 +222,8 @@ def _extract_slice_3d_pose_grad_pixel[
     var grad_proj_b = TileTensor(
         grad_proj + i_bv * p.bp * ph * pw * 2, row_major(p.bp, ph, pw, 2)
     )
-    var gp = _load_c2(grad_proj_b, i_bp, y, x)
+    # the forward scaled the sampled value by the magnification's 1 / |det A|
+    var gp = _load_c2(grad_proj_b, i_bp, y, x) * p.mag_scale
     var pf = _slice_3d_phase_factor(
         shifts_2d, shifts_3d, i_bv, i_bp, coord_y, coord_x, k[0], k[1], k[2], p
     )
@@ -275,8 +278,9 @@ def _insert_slice_3d_pose_grad_pixel[
     var scale = _input_pixel_scale(y, x, p.proj_sidelength)
     if scale == 0.0:
         return SIMD[DType.float32, 16](0)
-    var sx = coord_x * p.oversampling
-    var sy = coord_y * p.oversampling
+    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var sy = s_yx[0]
+    var sx = s_yx[1]
     var sz = _ewald_sz(p, sx, sy)
     var rb = 0 if p.bv_rot == 1 else i_bv
     var k = _rotated_coord(rot, (rb * p.bp + i_bp) * 9, sx, sy, sz)
@@ -304,7 +308,7 @@ def _insert_slice_3d_pose_grad_pixel[
     )
     # insertion applies the conjugate phase to the projection value; both the
     # rotation and shift terms pair that against the gathered grad_rec field.
-    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * scale
+    var pvc = _cmul(pv, C2(pf[0], -pf[1])) * (scale * p.mag_scale)
     return _slice_3d_pose_grad_terms(
         coord_y,
         coord_x,
@@ -393,8 +397,9 @@ def _insert_slice_3d_weight_grad_pixel[
     var scale = _input_pixel_scale(y, x, p.proj_sidelength)
     if scale == 0.0:
         return
-    var sx = coord_x * p.oversampling
-    var sy = coord_y * p.oversampling
+    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var sy = s_yx[0]
+    var sx = s_yx[1]
     var rb = 0 if p.bv_rot == 1 else i_bv
     var k = _rotated_coord(
         rot, (rb * p.bp + i_bp) * 9, sx, sy, _ewald_sz(p, sx, sy)
@@ -448,4 +453,4 @@ def _insert_slice_3d_weight_grad_pixel[
     var off = (
         (i_bv * p.bp + i_bp) * p.proj_sidelength + y
     ) * p.proj_sidelength_half() + x
-    grad_weight[off] = scale * acc
+    grad_weight[off] = scale * p.mag_scale * acc

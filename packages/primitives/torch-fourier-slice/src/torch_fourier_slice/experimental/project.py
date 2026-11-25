@@ -45,6 +45,7 @@ def _project(
     zyx_shifts: bool,
     yx_shifts: bool,
     interpolation: str,
+    transform_matrix: torch.Tensor | None,
     apply_ewald_curvature: bool,
     ewald_voltage_kv: float,
     ewald_flip_sign: bool,
@@ -76,6 +77,7 @@ def _project(
         zyx_shifts=zyx_shifts,
         yx_shifts=yx_shifts,
         interpolation=interpolation,
+        transform_matrix=transform_matrix,
         apply_ewald_curvature=apply_ewald_curvature,
         ewald_voltage_kv=ewald_voltage_kv,
         ewald_flip_sign=ewald_flip_sign,
@@ -100,6 +102,7 @@ def project_3d_to_2d(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -140,6 +143,12 @@ def project_3d_to_2d(
     interpolation : str
         ``"linear"`` (trilinear, default) or ``"cubic"`` (tricubic Catmull-Rom).
         The gridding correction follows this choice.
+    transform_matrix : torch.Tensor | None
+        Optional ``(2, 2)`` anisotropic magnification ``A`` in real space (yx),
+        as in :func:`torch_fourier_slice.project_3d_to_2d`: the image at ``r`` is
+        the projection at ``A r``, scaled by ``1 / |det A|``. The kernel applies
+        it to each pixel's sample position, so it costs no extra interpolation.
+        Not differentiable.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
         use a flat central slice.
@@ -171,6 +180,7 @@ def project_3d_to_2d(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
@@ -190,6 +200,7 @@ def project_3d_to_2d_multichannel(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -216,6 +227,7 @@ def project_3d_to_2d_multichannel(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,

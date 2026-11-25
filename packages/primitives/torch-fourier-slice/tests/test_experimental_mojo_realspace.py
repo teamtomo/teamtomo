@@ -158,6 +158,75 @@ def test_project_backproject_round_trip(d):
     assert error < 1e-3
 
 
+def _magnified_projection(d: int, centre, matrix: torch.Tensor) -> torch.Tensor:
+    """Exact projection along z of the ``_blob(d, 2.0)`` at ``centre`` (zyx), read
+    at ``A r``: an image magnified by ``A`` (yx), as ``transform_matrix`` makes it."""
+    axis = torch.arange(d, dtype=torch.float32) - d // 2
+    yy, xx = torch.meshgrid(axis, axis, indexing="ij")
+    r = torch.stack([yy, xx], dim=-1) @ matrix.T
+    sigma = 2.0
+    profile = (r[..., 0] - centre[1]) ** 2 + (r[..., 1] - centre[2]) ** 2
+    return (2 * torch.pi) ** 0.5 * sigma * torch.exp(-profile / (2 * sigma**2))
+
+
+def _offset_blob(d: int, centre, sigma: float = 2.0) -> torch.Tensor:
+    axis = torch.arange(d, dtype=torch.float32) - d // 2
+    zz, yy, xx = torch.meshgrid(axis, axis, axis, indexing="ij")
+    r2 = (zz - centre[0]) ** 2 + (yy - centre[1]) ** 2 + (xx - centre[2]) ** 2
+    return torch.exp(-r2 / (2 * sigma**2))
+
+
+MAGNIFICATIONS = {
+    "stretch": torch.tensor([[1.1, 0.0], [0.0, 0.95]]),
+    "shear": torch.tensor([[1.04, 0.03], [-0.02, 0.97]]),
+}
+
+
+@pytest.mark.parametrize("d", [64, 63])
+@pytest.mark.parametrize("magnification", MAGNIFICATIONS)
+@pytest.mark.parametrize(
+    ("interpolation", "tolerance"), [("linear", 3e-4), ("cubic", 3e-5)]
+)
+def test_magnified_projection_matches_analytic_projection(
+    interpolation, tolerance, magnification, d
+):
+    """With ``transform_matrix`` A the image at r is the projection at A r."""
+    centre = (2.0, -3.0, 1.0)
+    matrix = MAGNIFICATIONS[magnification]
+    images = project_3d_to_2d(
+        _offset_blob(d, centre),
+        torch.eye(3),
+        transform_matrix=matrix,
+        interpolation=interpolation,
+    )
+    truth = _magnified_projection(d, centre, matrix)
+    error = (images[0] - truth).pow(2).mean().sqrt() / truth.abs().max()
+    assert error < tolerance
+
+
+def test_identity_magnification_changes_nothing():
+    volume = _blob(32, sigma=3.0)
+    rotations = _rotations(4)
+    plain = project_3d_to_2d(volume, rotations)
+    identity = project_3d_to_2d(volume, rotations, transform_matrix=torch.eye(2))
+    assert torch.equal(plain, identity)
+
+
+@pytest.mark.parametrize("magnification", MAGNIFICATIONS)
+def test_magnified_round_trip(magnification):
+    """Backprojecting magnified images with the same matrix recovers the volume,
+    scale included: the backprojection undoes the images' 1 / |det A|."""
+    d = 48
+    volume = _offset_blob(d, (2.0, -3.0, 1.0), sigma=3.0)
+    rotations = _rotations(300, seed=1)
+    matrix = MAGNIFICATIONS[magnification]
+
+    images = project_3d_to_2d(volume, rotations, transform_matrix=matrix)
+    reconstruction = backproject_2d_to_3d(images, rotations, transform_matrix=matrix)
+    plain = backproject_2d_to_3d(project_3d_to_2d(volume, rotations), rotations)
+    assert torch.allclose(reconstruction, plain, atol=1e-3 * volume.max())
+
+
 def test_rank_forms_agree():
     """The multichannel forms reproduce the single-volume ones, volume by volume."""
     d, bv, bp = 32, 3, 5
@@ -232,6 +301,14 @@ def test_gpu_matches_cpu(d):
     cpu_volume = backproject_2d_to_3d(cpu, rotations)
     gpu_volume = backproject_2d_to_3d(gpu, rotations)
     assert gpu_volume.device.type == device
+    assert torch.allclose(gpu_volume.cpu(), cpu_volume, atol=1e-3)
+
+    matrix = MAGNIFICATIONS["shear"]
+    cpu = project_3d_to_2d(volume, rotations, transform_matrix=matrix)
+    gpu = project_3d_to_2d(volume.to(device), rotations, transform_matrix=matrix)
+    assert torch.allclose(gpu.cpu(), cpu, atol=1e-3)
+    cpu_volume = backproject_2d_to_3d(cpu, rotations, transform_matrix=matrix)
+    gpu_volume = backproject_2d_to_3d(gpu, rotations, transform_matrix=matrix)
     assert torch.allclose(gpu_volume.cpu(), cpu_volume, atol=1e-3)
 
     image = _blob_2d(d, sigma=3.0)

@@ -1543,6 +1543,11 @@ def _extract_slice_3d_params(
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[3].shape[0]),
+        mag_yy=Float32(py=params_obj.mag_yy),
+        mag_yx=Float32(py=params_obj.mag_yx),
+        mag_xy=Float32(py=params_obj.mag_xy),
+        mag_xx=Float32(py=params_obj.mag_xx),
+        mag_scale=Float32(py=params_obj.mag_scale),
     )
 
 
@@ -1572,6 +1577,11 @@ def _slice_3d_grad_params(
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[3].shape[0]),
+        mag_yy=Float32(py=params_obj.mag_yy),
+        mag_yx=Float32(py=params_obj.mag_yx),
+        mag_xy=Float32(py=params_obj.mag_xy),
+        mag_xx=Float32(py=params_obj.mag_xx),
+        mag_scale=Float32(py=params_obj.mag_scale),
     )
 
 
@@ -1603,6 +1613,11 @@ def _line_2d_grad_params(
             ewald_curvature=0.0,
             has_shifts_3d=0,
             bv_shift_3d=1,
+            mag_yy=1.0,
+            mag_yx=0.0,
+            mag_xy=0.0,
+            mag_xx=1.0,
+            mag_scale=1.0,
         )
     return FourierSliceParams(
         bp=Int(py=bufs[1].shape[1]),
@@ -1620,6 +1635,11 @@ def _line_2d_grad_params(
         ewald_curvature=0.0,
         has_shifts_3d=0,
         bv_shift_3d=1,
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1645,6 +1665,11 @@ def _extract_line_2d_params(
         ewald_curvature=0.0,
         has_shifts_3d=0,
         bv_shift_3d=1,
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1670,6 +1695,11 @@ def _insert_line_2d_params(
         ewald_curvature=0.0,
         has_shifts_3d=0,
         bv_shift_3d=1,
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1698,6 +1728,11 @@ def _extract_line_3d_params(
         ewald_curvature=0.0,  # unused for a 1D line
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[2].shape[0]),
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1723,6 +1758,11 @@ def _insert_line_3d_params(
         ewald_curvature=0.0,
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[3].shape[0]),
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1754,6 +1794,11 @@ def _line_3d_grad_params(
             ewald_curvature=0.0,
             has_shifts_3d=0,
             bv_shift_3d=1,
+            mag_yy=1.0,
+            mag_yx=0.0,
+            mag_xy=0.0,
+            mag_xx=1.0,
+            mag_scale=1.0,
         )
     return FourierSliceParams(
         bp=Int(py=bufs[1].shape[1]),
@@ -1771,6 +1816,11 @@ def _line_3d_grad_params(
         ewald_curvature=0.0,
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[2].shape[0]),
+        mag_yy=1.0,
+        mag_yx=0.0,
+        mag_xy=0.0,
+        mag_xx=1.0,
+        mag_scale=1.0,
     )
 
 
@@ -1794,4 +1844,9 @@ def _insert_slice_3d_params(
         ewald_curvature=Float32(py=params_obj.ewald_curvature),
         has_shifts_3d=Int(py=params_obj.has_shifts_3d),
         bv_shift_3d=Int(py=bufs[4].shape[0]),
+        mag_yy=Float32(py=params_obj.mag_yy),
+        mag_yx=Float32(py=params_obj.mag_yx),
+        mag_xy=Float32(py=params_obj.mag_xy),
+        mag_xx=Float32(py=params_obj.mag_xx),
+        mag_scale=Float32(py=params_obj.mag_scale),
     )

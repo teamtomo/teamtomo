@@ -16,9 +16,10 @@ Two rank forms share one Mojo kernel; the Python layer only squeezes / transpose
   (poses shared across volumes, or per-volume via
   ``rotation_matrices (bv, bp, 3, 3)``).
 
-``rotation_matrices``/``shifts_3d``/``shifts_2d`` and the Ewald arguments follow
-the slice extraction in :mod:`.extraction`; the insertion applies the
-*conjugate* shift phase ramps (the forward adjoint).
+``rotation_matrices``/``shifts_3d``/``shifts_2d``, ``transform_matrix`` and the
+Ewald arguments follow the slice extraction in :mod:`.extraction`; the insertion
+applies the *conjugate* shift phase ramps and the same magnification and
+``1 / |det A|`` scale (the forward adjoint).
 
 ``volume_shape`` is the real-space ``(d, d, d)`` shape of the volume (cubic,
 any side). The volume and the slices share a pixel size, so slice frequency
@@ -83,6 +84,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ._backend._common import Magnification
 from ._backend._line_2d import InsertLines2D
 from ._backend._line_3d import InsertLines3D
 from ._backend._slice_3d import InsertSlices3D
@@ -105,6 +107,7 @@ def _insert_slices_3d(
     zyx_shifts,
     yx_shifts,
     interpolation,
+    transform_matrix,
     apply_ewald_curvature,
     ewald_voltage_kv,
     ewald_flip_sign,
@@ -128,6 +131,7 @@ def _insert_slices_3d(
             ewald_flip_sign,
             ewald_px_size,
         ),
+        Magnification.from_matrix(transform_matrix),
     )
 
 
@@ -143,6 +147,7 @@ def insert_central_slices_rfft_3d(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -174,6 +179,7 @@ def insert_central_slices_rfft_3d(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
@@ -194,6 +200,7 @@ def insert_central_slices_rfft_3d_multichannel(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -224,6 +231,7 @@ def insert_central_slices_rfft_3d_multichannel(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,

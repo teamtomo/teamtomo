@@ -15,6 +15,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+from ._backend._common import Magnification
 from ._gridding import gridding_correction
 from .insertion import (
     insert_central_slices_rfft_3d,
@@ -35,6 +36,7 @@ def _backproject(
     zyx_shifts: bool,
     yx_shifts: bool,
     interpolation: str,
+    transform_matrix: torch.Tensor | None,
     apply_ewald_curvature: bool,
     ewald_voltage_kv: float,
     ewald_flip_sign: bool,
@@ -50,6 +52,11 @@ def _backproject(
     image_rfft = torch.fft.rfftn(
         torch.fft.ifftshift(images, dim=(-2, -1)), dim=(-2, -1)
     ).contiguous()
+    magnification = Magnification.from_matrix(transform_matrix)
+    if not magnification.is_identity:
+        # the insertion scales each sample by 1 / |det A| (the adjoint of the
+        # projection's), and the images carry that scale already: undo it
+        image_rfft = image_rfft / magnification.mag_scale
 
     # the rfft layer takes the inverse (image -> volume) rotation of the active
     # rotation the real-space layer accepts; the weight volume is the sampling
@@ -66,6 +73,7 @@ def _backproject(
         zyx_shifts=zyx_shifts,
         yx_shifts=yx_shifts,
         interpolation=interpolation,
+        transform_matrix=transform_matrix,
         apply_ewald_curvature=apply_ewald_curvature,
         ewald_voltage_kv=ewald_voltage_kv,
         ewald_flip_sign=ewald_flip_sign,
@@ -97,6 +105,7 @@ def backproject_2d_to_3d(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -142,6 +151,11 @@ def backproject_2d_to_3d(
     interpolation : str
         ``"linear"`` (trilinear, default) or ``"cubic"`` (tricubic Catmull-Rom).
         The gridding correction follows this choice.
+    transform_matrix : torch.Tensor | None
+        Optional ``(2, 2)`` anisotropic magnification ``A`` in real space (yx) of
+        the images, as :func:`.project_3d_to_2d` applies it: each pixel goes back
+        where the unmagnified projection has it, and the images' ``1 / |det A|``
+        intensity scale is undone. Not differentiable.
     apply_ewald_curvature : bool
         If True, bend the central slice onto an Ewald sphere. If False (default),
         use a flat central slice.
@@ -174,6 +188,7 @@ def backproject_2d_to_3d(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
@@ -194,6 +209,7 @@ def backproject_2d_to_3d_multichannel(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -221,6 +237,7 @@ def backproject_2d_to_3d_multichannel(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
