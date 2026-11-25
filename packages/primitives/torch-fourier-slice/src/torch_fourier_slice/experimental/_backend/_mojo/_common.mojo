@@ -606,6 +606,8 @@ def _fourier_coord(i: Int, n: Int) -> Float32:
 # Sample points further than this past the Nyquist cube read as 0 / are dropped. A
 # small tolerance (in voxels) so rounding in the rotation doesn't drop points that
 # lie exactly on the Nyquist plane, e.g. under a float32 90 degree rotation.
+# Mirrors `torch_fourier_slice._dft_utils.NYQUIST_TOLERANCE`, the definition every
+# backend shares: change both (tests/test_nyquist_edge.py checks they match).
 comptime NYQUIST_TOLERANCE: Float32 = 1e-3
 
 
