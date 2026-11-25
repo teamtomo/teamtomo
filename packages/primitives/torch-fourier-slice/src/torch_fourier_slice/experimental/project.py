@@ -1,13 +1,14 @@
-"""Experimental Mojo-backed real-space projection: 3D volume -> 2D images.
+"""Experimental Mojo-backed real-space projection: 3D volume -> 2D images, 2D -> 1D.
 
 The real-space layer over :mod:`.extraction`: pad, correct for the
 interpolation kernel, ``rfftn`` over the spatial dims, extract central slices
-with the Mojo kernel, ``irfftn`` back, unpad. Callers work entirely in real
-space; the rfft layout is an implementation detail.
+(or lines) with the Mojo kernel, ``irfftn`` back, unpad. Callers work entirely
+in real space; the rfft layout is an implementation detail.
 
-Mirrors :func:`torch_fourier_slice.project_3d_to_2d`, but the compute backend
-follows the input tensor's device: a CPU tensor runs the multithreaded Mojo CPU
-kernel, an ``mps`` / ``cuda`` tensor runs the Mojo GPU kernel.
+Mirrors :func:`torch_fourier_slice.project_3d_to_2d` and
+:func:`torch_fourier_slice.project_2d_to_1d`, but the compute backend follows
+the input tensor's device: a CPU tensor runs the multithreaded Mojo CPU kernel,
+an ``mps`` / ``cuda`` tensor runs the Mojo GPU kernel.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ import torch.nn.functional as F
 
 from ._gridding import gridding_correction
 from .extraction import (
+    extract_central_lines_rfft_2d,
+    extract_central_lines_rfft_2d_multichannel,
     extract_central_slices_rfft_3d,
     extract_central_slices_rfft_3d_multichannel,
 )
@@ -218,4 +221,143 @@ def project_3d_to_2d_multichannel(
         ewald_flip_sign,
         ewald_px_size,
         extract_central_slices_rfft_3d_multichannel,
+    )
+
+
+def _project_2d(
+    image: torch.Tensor,
+    directions: torch.Tensor,
+    shifts_2d: torch.Tensor | None,
+    pad_factor: float,
+    fftfreq_max: float | None,
+    yx_directions: bool,
+    yx_shifts: bool,
+    interpolation: str,
+    extract_fn,
+) -> torch.Tensor:
+    """Shared 2D -> 1D pipeline; ``extract_fn`` picks the single / multichannel form."""
+    pad = _pad_width(image.shape[-1], pad_factor)
+    if pad > 0:
+        image = F.pad(image, pad=[pad] * 4)
+    box = image.shape[-1]
+
+    # de-apodize *before* the transform so the interpolation puts it back
+    image = image / gridding_correction(box, interpolation, image.device, ndim=2)
+
+    # the centre pixel (n // 2) to the origin; for odd n only ifftshift does that
+    image_rfft = torch.fft.rfftn(torch.fft.ifftshift(image, dim=(-2, -1)), dim=(-2, -1))
+    # a line along a direction is the same in both layers: no transpose
+    lines = extract_fn(
+        image_rfft.contiguous(),
+        directions,
+        shifts_2d=shifts_2d,
+        fftfreq_max=fftfreq_max,
+        yx_directions=yx_directions,
+        yx_shifts=yx_shifts,
+        interpolation=interpolation,
+    )
+    lines = torch.fft.fftshift(torch.fft.irfft(lines, n=box, dim=-1), dim=-1)
+    if pad > 0:
+        lines = F.pad(lines, pad=[-pad] * 2)
+    return lines
+
+
+def project_2d_to_1d(
+    image: torch.Tensor,
+    directions: torch.Tensor,
+    shifts_2d: torch.Tensor | None = None,
+    pad_factor: float = 2.0,
+    fftfreq_max: float | None = None,
+    yx_directions: bool = False,
+    yx_shifts: bool = False,
+    interpolation: str = "linear",
+) -> torch.Tensor:
+    """Project a real square image onto lines (Mojo kernel).
+
+    Each line is the image's projection onto a direction ``u``: its pixel ``s``
+    (counted from the centre pixel ``d // 2``) sums the image along the line
+    through ``s * u`` perpendicular to ``u``, a row of the Radon transform. By the
+    projection-slice theorem it is the central line of the image's DFT along
+    ``u``, which is how it is computed.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Real square image ``(d, d)``, centred on pixel ``d // 2``, of any side.
+        Its device selects the CPU/GPU backend.
+    directions : torch.Tensor
+        Real ``(2,)`` or ``(bp, 2)`` unit vectors ``u``, xy unless
+        ``yx_directions``. A direction poses a line in real and Fourier space
+        alike, so these are the directions :func:`.extract_central_lines_rfft_2d`
+        takes for the same lines. For the active rotation ``R`` (xy) that
+        :func:`torch_fourier_slice.project_2d_to_1d` takes, ``u`` is the first
+        row of ``R``.
+    shifts_2d : torch.Tensor | None
+        Optional ``(..., bp, 2)`` shifts of the image, applied before projecting.
+    pad_factor : float
+        Real-space padding applied before the transform; ``2.0`` (default)
+        doubles the box. Must be ``>= 1.0``.
+    fftfreq_max : float | None
+        Maximum frequency (cycles/pixel, Nyquist = 0.5) to include. Defaults to
+        Nyquist.
+    yx_directions : bool
+        If True, ``directions`` are in yx order. If False (default) they are xy.
+    yx_shifts : bool
+        If True, ``shifts_2d`` are in yx order. If False (default) they are xy.
+    interpolation : str
+        ``"linear"`` (bilinear, default) or ``"cubic"`` (bicubic Catmull-Rom). The
+        gridding correction follows this choice.
+
+    Returns
+    -------
+    lines : torch.Tensor
+        Real ``(bp, d)`` projections, on the input device.
+    """
+    if image.dim() != 2:
+        raise ValueError(
+            "image must be (d, d); use project_2d_to_1d_multichannel for (bv, d, d)"
+        )
+    return _project_2d(
+        image,
+        directions,
+        shifts_2d,
+        pad_factor,
+        fftfreq_max,
+        yx_directions,
+        yx_shifts,
+        interpolation,
+        extract_central_lines_rfft_2d,
+    )
+
+
+def project_2d_to_1d_multichannel(
+    image: torch.Tensor,
+    directions: torch.Tensor,
+    shifts_2d: torch.Tensor | None = None,
+    pad_factor: float = 2.0,
+    fftfreq_max: float | None = None,
+    yx_directions: bool = False,
+    yx_shifts: bool = False,
+    interpolation: str = "linear",
+) -> torch.Tensor:
+    """Project a batch of real square images onto lines (Mojo kernel).
+
+    ``image`` is ``(bv, d, d)``. Directions are shared across images
+    (``(bp, 2)``) or per-image (``(bv, bp, 2)``). See :func:`project_2d_to_1d`
+    for the shared parameters.
+
+    Returns real ``(bp, bv, d)`` lines (pose-major) on the input device.
+    """
+    if image.dim() != 3:
+        raise ValueError("image must be (bv, d, d) for multi-channel")
+    return _project_2d(
+        image,
+        directions,
+        shifts_2d,
+        pad_factor,
+        fftfreq_max,
+        yx_directions,
+        yx_shifts,
+        interpolation,
+        extract_central_lines_rfft_2d_multichannel,
     )

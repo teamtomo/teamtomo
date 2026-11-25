@@ -50,13 +50,18 @@ def gridding_correction(
     sidelength: int,
     interpolation: str,
     device: torch.device | str | None = None,
+    ndim: int = 3,
 ) -> torch.Tensor:
-    """Cubic ``(d, d, d)`` de-apodization volume for ``interpolation``.
+    """``(d,) * ndim`` de-apodization array for ``interpolation``.
 
-    Divide a centered real-space volume by this to undo the apodization the
-    interpolation kernel imposes. Built as an outer product of the per-axis 1D
-    transform, so it never materialises an intermediate coordinate grid.
+    Divide a centered real-space volume (``ndim=3``) or image (``ndim=2``) by this
+    to undo the apodization the interpolation kernel imposes. Built as an outer
+    product of the per-axis 1D transform, so it never materialises an intermediate
+    coordinate grid.
     """
     frequency = torch.fft.fftshift(torch.fft.fftfreq(sidelength, device=device))
     k = _kernel_transform(frequency, interpolation)
-    return k[:, None, None] * k[None, :, None] * k[None, None, :]
+    correction = k
+    for _ in range(ndim - 1):
+        correction = correction[..., None] * k
+    return correction
