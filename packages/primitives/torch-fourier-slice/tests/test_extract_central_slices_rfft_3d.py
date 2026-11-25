@@ -172,8 +172,11 @@ def test_extract_central_slices_rfft_3d_symmetry_cases(
         rotation_matrices=right_rot,
     )
 
-    # Check that the slices are conjugates of each other
-    assert torch.allclose(left_slice, torch.conj(right_slice), atol=1e-6), (
+    # Check that the slices are conjugates of each other, to float32 precision at
+    # the slice's scale: the 180 degree matrix keeps ~1e-16 entries, which can move
+    # a sample by a rounding step on some platforms (arm64)
+    atol = 1e-6 * left_slice.abs().max().item()
+    assert torch.allclose(left_slice, torch.conj(right_slice), atol=atol), (
         f"Slices for angles {left_angles} and {right_angles} are not conjugates."
     )
 
@@ -209,8 +212,11 @@ def test_extract_central_slices_rfft_3d_symmetry_cases_large_volume(
         rotation_matrices=right_rot,
     )
 
-    # Check that the slices are conjugates of each other
-    assert torch.allclose(left_slice, torch.conj(right_slice), atol=1e-6), (
+    # Check that the slices are conjugates of each other, to float32 precision at
+    # the slice's scale: the 180 degree matrix keeps ~1e-16 entries, which can move
+    # a sample by a rounding step on some platforms (arm64)
+    atol = 1e-6 * left_slice.abs().max().item()
+    assert torch.allclose(left_slice, torch.conj(right_slice), atol=atol), (
         f"Slices for angles {left_angles} and {right_angles} are not conjugates."
     )
 
@@ -254,7 +260,9 @@ def test_extract_central_slices_rfft_3d_symmetry_random_angles(device: str):
             rotation_matrices=right_rot,
         )
 
-        assert torch.allclose(left_slice, torch.conj(right_slice), atol=1e-6), (
+        # to float32 precision at the slice's scale, as above
+        atol = 1e-6 * left_slice.abs().max().item()
+        assert torch.allclose(left_slice, torch.conj(right_slice), atol=atol), (
             "Slices are not conjugates."
         )
 
