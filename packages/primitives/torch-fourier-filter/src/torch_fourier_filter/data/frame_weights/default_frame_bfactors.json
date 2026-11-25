@@ -1,0 +1,38 @@
+{
+ "description": "Default per-frame B-factor and log-scale curve in physical exposure, RELION's per-frame model w_f(k) = exp(B_f k^2 / 4 + C_f).",
+ "exposure_unit": "e/A^2 (physical, no voltage factor)",
+ "knots_exposure": [
+  0.0,
+  10.0,
+  20.0,
+  30.0,
+  40.0,
+  56.0
+ ],
+ "bfactor": [
+  0.0,
+  -15.925,
+  -76.436,
+  -172.553,
+  -326.917,
+  -488.124
+ ],
+ "log_scale": [
+  0.0,
+  -0.11456,
+  -0.25725,
+  -0.3985,
+  -0.52903,
+  -0.79503
+ ],
+ "interpolation": "monotone cubic (PCHIP) through the knots; linear beyond the last knot with the last segment's slope; exposure below 0 is held at 0",
+ "gauge": "B and log scale are relative to zero exposure; frame weights are normalised at each frequency, so a common offset cancels",
+ "provenance": {
+  "fitted": "2026-11-24",
+  "datasets": [
+   "large ribosomal subunit (LSU) of yeast ribosomes in situ, 300 kV",
+   "single-particle microtubule specimens, 200 kV"
+  ],
+  "method": "per-frame B and scale measured at refined particle poses, then fitted jointly from frame 2 on as monotone curves in exposure; frames 0-1 are dataset-specific and not fitted"
+ }
+}
