@@ -41,7 +41,23 @@ def _load():
         )
         import fourier_slice_kernels
 
+    # A build without a GPU target has no GPU entry points (see PyInit in
+    # fourier_slice_kernels.mojo). The importer caches builds by source hash
+    # only, so one made on a machine without a GPU (e.g. a cluster login node
+    # sharing this environment) can be loaded where a GPU is present.
+    if not hasattr(fourier_slice_kernels, "DeviceSession") and _gpu_present():
+        raise ImportError(
+            "the cached Mojo kernels were built on a machine without a GPU; "
+            f"delete {_MOJO_DIR / '__mojocache__'} and import again to rebuild "
+            "them for this GPU"
+        )
     return fourier_slice_kernels
+
+
+def _gpu_present() -> bool:
+    import torch
+
+    return torch.cuda.is_available() or torch.backends.mps.is_available()
 
 
 try:  # eager compile + load on first import of this module
