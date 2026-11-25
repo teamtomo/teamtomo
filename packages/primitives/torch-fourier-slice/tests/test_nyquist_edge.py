@@ -209,11 +209,13 @@ def test_torch_lines_match_periodic_reference(sidelength):
     _assert_matches(lines, _reference_sample(dft.numpy(), k), dft)
 
 
+@pytest.mark.parametrize("sidelength", [16, 15])
 @pytest.mark.parametrize("backend", EXPERIMENTAL_SLICES)
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_experimental_slices_match_periodic_reference(backend, interpolation):
+def test_experimental_slices_match_periodic_reference(
+    backend, interpolation, sidelength
+):
     extract, _ = backend
-    sidelength = 16
     dft = _random_rfft((sidelength,) * 3)
     rotations = _rotations(ndim=3)
     k = _slice_coordinates(sidelength, rotations)
@@ -240,13 +242,16 @@ def test_experimental_slices_match_periodic_reference(backend, interpolation):
         pytest.param(reference.extract_central_lines_rfft_2d, id="reference"),
     ],
 )
+@pytest.mark.parametrize("sidelength", [16, 15])
 @pytest.mark.parametrize("interpolation", ["linear", "cubic"])
-def test_experimental_lines_match_periodic_reference(extract, interpolation):
-    sidelength = 16
+def test_experimental_lines_match_periodic_reference(
+    extract, interpolation, sidelength
+):
     dft = _random_rfft((sidelength,) * 2)
     rotations = _rotations(ndim=2)
     k = _line_coordinates(sidelength, rotations)
-    assert _n_edge_samples(k, sidelength, interpolation) > 50
+    if sidelength % 2 == 0:  # odd lines stop at (n - 1) / 2, inside the stored grid
+        assert _n_edge_samples(k, sidelength, interpolation) > 50
 
     # a line along direction u samples s * u, the second column of the rotation
     directions = rotations[..., :, 1].contiguous()
@@ -256,11 +261,11 @@ def test_experimental_lines_match_periodic_reference(extract, interpolation):
     _assert_matches(lines, _reference_sample(dft.numpy(), k, interpolation), dft)
 
 
+@pytest.mark.parametrize("sidelength", [16, 15])
 @pytest.mark.parametrize("backend", EXPERIMENTAL_SLICES)
-def test_backends_agree_on_slices(backend):
+def test_backends_agree_on_slices(backend, sidelength):
     """Every pixel, including the slice corners and the Nyquist row."""
     extract, _ = backend
-    sidelength = 16
     dft = _random_rfft((sidelength,) * 3)
     rotations = _rotations(ndim=3)
 
@@ -275,11 +280,11 @@ def test_backends_agree_on_slices(backend):
     assert torch.allclose(experimental, canonical, atol=1e-5 * scale.item(), rtol=0)
 
 
+@pytest.mark.parametrize("sidelength", [16, 15])
 @pytest.mark.parametrize("backend", EXPERIMENTAL_SLICES)
-def test_backends_agree_on_backprojection(backend):
+def test_backends_agree_on_backprojection(backend, sidelength):
     """Every voxel of the data and weights, self-conjugate ones included."""
     _, insert = backend
-    sidelength = 16
     rotations = _rotations(ndim=3)
     generator = torch.Generator().manual_seed(1)
     images = torch.randn((N_ROTATIONS, sidelength, sidelength), generator=generator)

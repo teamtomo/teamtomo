@@ -159,6 +159,7 @@ def _insert_lines_3d(
     zyx_directions,
     zyx_shifts,
     interpolation,
+    line_length,
 ):
     """Insert in the kernels' canonical ``(bv, bp, w)`` layout."""
     return insert_lines_3d(
@@ -169,6 +170,7 @@ def _insert_lines_3d(
         volume_shape,
         fftfreq_max,
         interpolation,
+        line_length,
     )
 
 
@@ -179,6 +181,7 @@ def insert_central_lines_rfft_3d(
     shifts_3d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
     interpolation: str = "linear",
@@ -204,6 +207,7 @@ def insert_central_lines_rfft_3d(
         zyx_directions,
         zyx_shifts,
         interpolation,
+        line_length,
     )
     return data.squeeze(0), weight_vol.squeeze(0)
 
@@ -215,6 +219,7 @@ def insert_central_lines_rfft_3d_multichannel(
     shifts_3d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
     interpolation: str = "linear",
@@ -240,6 +245,7 @@ def insert_central_lines_rfft_3d_multichannel(
         zyx_directions,
         zyx_shifts,
         interpolation,
+        line_length,
     )
 
 
@@ -253,6 +259,7 @@ def _insert_lines_2d(
     yx_directions,
     yx_shifts,
     interpolation,
+    line_length,
 ):
     """Insert in the kernels' canonical ``(bv, bp, w)`` layout."""
     return insert_lines_2d(
@@ -263,6 +270,7 @@ def _insert_lines_2d(
         image_shape,
         fftfreq_max,
         interpolation,
+        line_length,
     )
 
 
@@ -273,6 +281,7 @@ def insert_central_lines_rfft_2d(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
@@ -297,6 +306,7 @@ def insert_central_lines_rfft_2d(
         yx_directions,
         yx_shifts,
         interpolation,
+        line_length,
     )
     return data.squeeze(0), weight_image.squeeze(0)
 
@@ -308,6 +318,7 @@ def insert_central_lines_rfft_2d_multichannel(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
@@ -333,4 +344,5 @@ def insert_central_lines_rfft_2d_multichannel(
         yx_directions,
         yx_shifts,
         interpolation,
+        line_length,
     )

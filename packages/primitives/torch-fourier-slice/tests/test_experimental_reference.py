@@ -645,6 +645,134 @@ def test_reference_line_insertion_gradients_match_finite_differences(
     )
 
 
+# --- odd sizes ----------------------------------------------------------------
+
+# (array side, projection side): odd throughout, an odd slice or line of an even
+# array, and an even one of an odd array
+ODD_SIDES = {"odd": (15, 15), "odd_projection": (16, 11), "odd_array": (15, 10)}
+
+
+def _random_rfft(shape, ndim, seed):
+    """The rfft over the last ``ndim`` axes of a random real array."""
+    generator = torch.Generator().manual_seed(seed)
+    real = torch.randn(shape, generator=generator)
+    return torch.fft.rfftn(real, dim=tuple(range(-ndim, 0)))
+
+
+def _assert_gradients_match(function, mojo_function, inputs, kwargs, groups):
+    """Gradients agree for each ``output_index -> input names`` in ``groups``."""
+    for output_index, names in groups.items():
+        actual = _gradients(function, inputs, kwargs, output_index)
+        expected = _gradients(mojo_function, inputs, kwargs, output_index)
+        for name in names:
+            _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("sides", ODD_SIDES.values(), ids=ODD_SIDES.keys())
+def test_odd_slices_match_mojo(sides, interpolation):
+    """Values and gradients of slices cut from and inserted into odd arrays."""
+    side, proj_side = sides
+    poses = {
+        "rotation_matrices": _rotations(N_POSES, seed=4),
+        "shifts_2d": _shifts(N_POSES, 2),
+        "shifts_3d": _shifts(N_POSES, 3),
+    }
+    inputs = {"volume_rfft": _random_rfft((side,) * 3, 3, seed=0), **poses}
+    kwargs = {"output_shape": (proj_side,) * 2, "interpolation": interpolation}
+    functions = (
+        reference.extract_central_slices_rfft_3d,
+        extraction.extract_central_slices_rfft_3d,
+    )
+    _assert_close(*(f(**inputs, **kwargs) for f in functions), rtol=1e-5)
+    _assert_gradients_match(*functions, inputs, kwargs, {None: list(inputs)})
+
+    generator = torch.Generator().manual_seed(9)
+    inputs = {
+        "image_rfft": _random_rfft((N_POSES, proj_side, proj_side), 2, seed=1),
+        **poses,
+        "weights": torch.rand(
+            N_POSES, proj_side, proj_side // 2 + 1, generator=generator
+        ),
+    }
+    kwargs = {"volume_shape": (side,) * 3, "interpolation": interpolation}
+    functions = (
+        reference.insert_central_slices_rfft_3d,
+        insertion.insert_central_slices_rfft_3d,
+    )
+    (data, weights), (mojo_data, mojo_weights) = (
+        f(**inputs, **kwargs) for f in functions
+    )
+    _assert_close(data, mojo_data, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
+    groups = {0: list(inputs)[:-1], 1: ["weights", "rotation_matrices"]}
+    _assert_gradients_match(*functions, inputs, kwargs, groups)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+@pytest.mark.parametrize("sides", ODD_SIDES.values(), ids=ODD_SIDES.keys())
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_odd_lines_match_mojo(kind, sides, interpolation):
+    """Values and gradients of lines of odd length, or of odd arrays."""
+    side, line_length = sides
+    ndim, shifts = LINE_KINDS[kind]["ndim"], LINE_KINDS[kind]["shifts"]
+    poses = {
+        "directions": _directions(N_POSES, ndim, seed=4),
+        shifts: _shifts(N_POSES, ndim),
+    }
+    array_name = "volume_rfft" if kind == "3d" else "image_rfft"
+    inputs = {array_name: _random_rfft((side,) * ndim, ndim, seed=0), **poses}
+    kwargs = {"output_length": line_length, "interpolation": interpolation}
+    functions = tuple(
+        _line_function(module, "extract", kind) for module in (reference, extraction)
+    )
+    _assert_close(*(f(**inputs, **kwargs) for f in functions), rtol=1e-5)
+    _assert_gradients_match(*functions, inputs, kwargs, {None: list(inputs)})
+
+    generator = torch.Generator().manual_seed(9)
+    inputs = {
+        "lines": _random_rfft((N_POSES, line_length), 1, seed=1),
+        **poses,
+        "weights": torch.rand(N_POSES, line_length // 2 + 1, generator=generator),
+    }
+    kwargs = {
+        **_array_shape(kind, side),
+        "line_length": line_length,
+        "interpolation": interpolation,
+    }
+    functions = tuple(
+        _line_function(module, "insert", kind) for module in (reference, insertion)
+    )
+    (data, weights), (mojo_data, mojo_weights) = (
+        f(**inputs, **kwargs) for f in functions
+    )
+    _assert_close(data, mojo_data, rtol=1e-5)
+    _assert_close(weights, mojo_weights, rtol=1e-5)
+    groups = {0: list(inputs)[:-1], 1: ["weights", "directions"]}
+    _assert_gradients_match(*functions, inputs, kwargs, groups)
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        pytest.param(insertion, id="mojo", marks=requires_mojo),
+        pytest.param(reference, id="reference"),
+    ],
+)
+@pytest.mark.parametrize("kind", LINE_KINDS)
+def test_line_length_must_fit_the_lines(module, kind):
+    """A length of 2m or 2m + 1 has m + 1 rfft samples; any other is an error."""
+    ndim = LINE_KINDS[kind]["ndim"]
+    lines = _lines_rfft(N_POSES)  # SIDELENGTH // 2 + 1 samples
+    args = (lines, (SIDELENGTH,) * ndim, _directions(N_POSES, ndim, seed=4))
+    insert = _line_function(module, "insert", kind)
+    insert(*args, line_length=SIDELENGTH + 1)
+    with pytest.raises(ValueError, match="line_length"):
+        insert(*args, line_length=SIDELENGTH + 2)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no CUDA device")
 def test_reference_runs_on_gpu():
     volume, rotations, shifts = (

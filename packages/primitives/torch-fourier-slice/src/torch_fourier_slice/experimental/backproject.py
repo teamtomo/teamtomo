@@ -48,7 +48,7 @@ def _backproject(
     box = images.shape[-1]
 
     image_rfft = torch.fft.rfftn(
-        torch.fft.fftshift(images, dim=(-2, -1)), dim=(-2, -1)
+        torch.fft.ifftshift(images, dim=(-2, -1)), dim=(-2, -1)
     ).contiguous()
 
     # the rfft layer takes the inverse (image -> volume) rotation of the active
@@ -110,8 +110,8 @@ def backproject_2d_to_3d(
     Parameters
     ----------
     images : torch.Tensor
-        Real ``(bp, d, d)`` square projection images with an even side length.
-        Their device selects the CPU/GPU backend.
+        Real ``(bp, d, d)`` square projection images, centred on pixel
+        ``d // 2``, of any side. Their device selects the CPU/GPU backend.
     rotation_matrices : torch.Tensor
         Real ``(3, 3)`` or ``(bp, 3, 3)`` rotation matrices (see ``zyx_matrices``),
         the same convention as :func:`.project_3d_to_2d`: each image is a

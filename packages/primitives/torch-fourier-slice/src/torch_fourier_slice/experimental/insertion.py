@@ -21,7 +21,7 @@ the slice extraction in :mod:`.extraction`; the insertion applies the
 *conjugate* shift phase ramps (the forward adjoint).
 
 ``volume_shape`` is the real-space ``(d, d, d)`` shape of the volume (cubic,
-even side). The volume and the slices share a pixel size, so slice frequency
+any side). The volume and the slices share a pixel size, so slice frequency
 index ``k`` lands at ``k * d / h`` in the volume: a volume twice the slices'
 side oversamples them twofold.
 
@@ -50,13 +50,14 @@ Two rank forms share one Mojo kernel; the Python layer only squeezes / transpose
 
 ``directions`` are unit vectors (as in the extractor); the insertion applies
 the *conjugate* 3D-shift phase ramp (the forward adjoint). ``volume_shape`` is
-the real-space ``(d, d, d)`` shape of the volume (cubic, even side): for lines
+the real-space ``(d, d, d)`` shape of the volume (cubic, any side): for lines
 of length ``L``, line frequency index ``k`` lands at ``k * d / L`` along the
 direction. ``weights`` is an optional real per-sample tensor matching ``lines``.
 
-``lines`` must be the rfft of even-length lines, as the extractors produce: an
-odd-length line has the same rfft width, so its length can't be recovered and
-it is taken as ``2 * (w - 1)``.
+``line_length`` is the lines' real-space length ``L``. A line of length ``2m``
+and one of ``2m + 1`` have the same rfft width ``w``, so as for
+``torch.fft.irfft`` it defaults to the even ``2 * (w - 1)``; give it for odd
+lengths.
 
 Central lines: 1D lines -> 2D image
 -----------------------------------
@@ -67,16 +68,15 @@ by default) into a weight image for density compensation. Reconstructs an image
 from its sinogram lines (2D direct Fourier inversion). Differentiable w.r.t. the
 input ``lines``, ``weights``, ``directions`` and ``shifts_2d``.
 
-``image_shape`` is the real-space ``(h, h)`` shape of the image (square, even
+``image_shape`` is the real-space ``(h, h)`` shape of the image (square, any
 side): for lines of length ``L``, line frequency index ``k`` lands at
 ``k * h / L`` along the direction.
 
 - single image:  ``lines (bp, w)`` -> ``image (h, w_rfft)``
 - multi-image:   ``lines (bp, bv, w)`` -> ``images (bv, h, w_rfft)``
 
-``lines`` must be the rfft of even-length lines, as the extractors produce: an
-odd-length line has the same rfft width, so its length can't be recovered and
-it is taken as ``2 * (w - 1)``.
+``line_length`` is the lines' real-space length ``L``: the even ``2 * (w - 1)``
+by default, as for the 3D lines.
 """
 
 from __future__ import annotations
@@ -242,6 +242,7 @@ def _insert_lines_3d(
     zyx_directions,
     zyx_shifts,
     interpolation,
+    line_length,
 ):
     """Run the differentiable kernel in its canonical ``(bv, bp, w)`` layout."""
     return InsertLines3D.apply(
@@ -252,6 +253,7 @@ def _insert_lines_3d(
         volume_shape,
         fftfreq_max,
         interpolation,
+        line_length,
     )
 
 
@@ -262,6 +264,7 @@ def insert_central_lines_rfft_3d(
     shifts_3d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
     interpolation: str = "linear",
@@ -293,6 +296,7 @@ def insert_central_lines_rfft_3d(
         zyx_directions,
         zyx_shifts,
         interpolation,
+        line_length,
     )
     return data.squeeze(0), weight_vol.squeeze(0)
 
@@ -304,6 +308,7 @@ def insert_central_lines_rfft_3d_multichannel(
     shifts_3d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
     interpolation: str = "linear",
@@ -330,6 +335,7 @@ def insert_central_lines_rfft_3d_multichannel(
         zyx_directions,
         zyx_shifts,
         interpolation,
+        line_length,
     )
     return data, weight_vol
 
@@ -344,6 +350,7 @@ def _insert_lines_2d(
     yx_directions,
     yx_shifts,
     interpolation,
+    line_length,
 ):
     """Run the differentiable kernel in its canonical ``(bv, bp, w)`` layout."""
     return InsertLines2D.apply(
@@ -354,6 +361,7 @@ def _insert_lines_2d(
         image_shape,
         fftfreq_max,
         interpolation,
+        line_length,
     )
 
 
@@ -364,6 +372,7 @@ def insert_central_lines_rfft_2d(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
@@ -391,6 +400,7 @@ def insert_central_lines_rfft_2d(
         yx_directions,
         yx_shifts,
         interpolation,
+        line_length,
     )
     return data.squeeze(0), wimg.squeeze(0)
 
@@ -402,6 +412,7 @@ def insert_central_lines_rfft_2d_multichannel(
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
     fftfreq_max: float | None = None,
+    line_length: int | None = None,
     yx_directions: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
@@ -426,5 +437,6 @@ def insert_central_lines_rfft_2d_multichannel(
         yx_directions,
         yx_shifts,
         interpolation,
+        line_length,
     )
     return data, wimg
