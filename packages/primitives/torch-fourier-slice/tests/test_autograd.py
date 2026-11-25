@@ -30,13 +30,13 @@ def _rfft_volume(n: int = 16, n_channels: int | None = None) -> torch.Tensor:
 def test_extraction_does_not_modify_rotation_matrices(extract_fn, n_channels):
     """Extraction must not write into the caller's rotation matrices.
 
-    `rot_tolerance` snaps near-zero matrix elements to zero. Doing that in place
-    silently zeroed elements of the caller's own array, because the preceding
-    `.to(torch.float32)` is a no-op that returns the same tensor when the input
-    is already float32.
+    It once snapped near-zero matrix elements to zero (`rot_tolerance`) in place,
+    which silently zeroed elements of the caller's own array, because the
+    preceding `.to(torch.float32)` is a no-op that returns the same tensor when
+    the input is already float32.
     """
     rotation_matrices = torch.eye(3).expand(4, 3, 3).contiguous()
-    # a legitimately tiny, non-zero element, below the default rot_tolerance
+    # a legitimately tiny, non-zero element
     rotation_matrices[0, 0, 1] = 1e-12
     expected = rotation_matrices.clone()
 
@@ -58,7 +58,7 @@ def test_extraction_does_not_modify_rotation_matrices(extract_fn, n_channels):
 def test_extraction_accepts_rotation_matrices_requiring_grad(extract_fn, n_channels):
     """Rotation matrices may be optimised, so they may be autograd leaves.
 
-    The in-place `rot_tolerance` write raised
+    An in-place write that extraction once made (the old `rot_tolerance`) raised
     "a leaf Variable that requires grad is being used in an in-place operation".
     """
     rotation_matrices = torch.eye(3).expand(4, 3, 3).contiguous().clone()
