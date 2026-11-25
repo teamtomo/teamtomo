@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from .._conventions import ewald_coefficient, to_zyx_matrices, to_zyx_vectors
 from ._line import extract_lines_2d, extract_lines_3d
-from ._slice_3d import extract_slices_3d
+from ._slice import extract_slices_3d
 
 if TYPE_CHECKING:
     import torch

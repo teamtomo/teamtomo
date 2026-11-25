@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from .._backend._common import reconstruction_volume_shape
 from .._conventions import ewald_coefficient, to_zyx_matrices, to_zyx_vectors
 from ._line import insert_lines_2d, insert_lines_3d
-from ._slice_3d import insert_slices_3d
+from ._slice import insert_slices_3d
 
 if TYPE_CHECKING:
     import torch
