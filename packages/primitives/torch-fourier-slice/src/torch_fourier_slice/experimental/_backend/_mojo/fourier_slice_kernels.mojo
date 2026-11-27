@@ -47,7 +47,7 @@ Tensor layouts (C-contiguous, rfft with DC at the origin):
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
-from std.sys import num_physical_cores
+from std.sys import has_accelerator, num_physical_cores
 
 from max.algorithm import parallelize
 from max.gpu.host import DeviceContext
@@ -118,131 +118,150 @@ from _slice_3d_grad import (
 
 @export
 def PyInit_fourier_slice_kernels() abi("C") -> PythonObject:
+    # The GPU entry points and `DeviceSession` are registered only when building
+    # for an accelerator: instantiating them without one fails the whole build
+    # ("Unknown GPU architecture detected"), e.g. on a machine with no GPU.
     try:
         var m = PythonModuleBuilder("fourier_slice_kernels")
         m.def_function[extract_central_slices_rfft_3d](
             "extract_central_slices_rfft_3d",
             docstring="Extract 2D central slices from a 3D volume (CPU).",
         )
-        m.def_function[extract_central_slices_rfft_3d_gpu](
-            "extract_central_slices_rfft_3d_gpu",
-            docstring="Extract 2D central slices from a 3D volume (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[extract_central_slices_rfft_3d_gpu](
+                "extract_central_slices_rfft_3d_gpu",
+                docstring="Extract 2D central slices from a 3D volume (GPU).",
+            )
         m.def_function[insert_central_slices_rfft_3d](
             "insert_central_slices_rfft_3d",
             docstring="Insert 2D central slices into a 3D volume (CPU).",
         )
-        m.def_function[insert_central_slices_rfft_3d_gpu](
-            "insert_central_slices_rfft_3d_gpu",
-            docstring="Insert 2D central slices into a 3D volume (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_slices_rfft_3d_gpu](
+                "insert_central_slices_rfft_3d_gpu",
+                docstring="Insert 2D central slices into a 3D volume (GPU).",
+            )
         m.def_function[extract_central_lines_rfft_3d](
             "extract_central_lines_rfft_3d",
             docstring="Extract 1D central lines from a 3D volume (CPU).",
         )
-        m.def_function[extract_central_lines_rfft_3d_gpu](
-            "extract_central_lines_rfft_3d_gpu",
-            docstring="Extract 1D central lines from a 3D volume (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[extract_central_lines_rfft_3d_gpu](
+                "extract_central_lines_rfft_3d_gpu",
+                docstring="Extract 1D central lines from a 3D volume (GPU).",
+            )
         m.def_function[insert_central_lines_rfft_3d](
             "insert_central_lines_rfft_3d",
             docstring="Insert 1D central lines into a 3D volume (CPU).",
         )
-        m.def_function[insert_central_lines_rfft_3d_gpu](
-            "insert_central_lines_rfft_3d_gpu",
-            docstring="Insert 1D central lines into a 3D volume (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_lines_rfft_3d_gpu](
+                "insert_central_lines_rfft_3d_gpu",
+                docstring="Insert 1D central lines into a 3D volume (GPU).",
+            )
         m.def_function[extract_central_lines_rfft_3d_pose_grad](
             "extract_central_lines_rfft_3d_pose_grad",
             docstring="Line-extraction direction/3D-shift gradients (CPU).",
         )
-        m.def_function[extract_central_lines_rfft_3d_pose_grad_gpu](
-            "extract_central_lines_rfft_3d_pose_grad_gpu",
-            docstring="Line-extraction direction/3D-shift gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[extract_central_lines_rfft_3d_pose_grad_gpu](
+                "extract_central_lines_rfft_3d_pose_grad_gpu",
+                docstring="Line-extraction direction/3D-shift gradients (GPU).",
+            )
         m.def_function[insert_central_lines_rfft_3d_pose_grad](
             "insert_central_lines_rfft_3d_pose_grad",
             docstring="Line-insertion direction/3D-shift gradients (CPU).",
         )
-        m.def_function[insert_central_lines_rfft_3d_pose_grad_gpu](
-            "insert_central_lines_rfft_3d_pose_grad_gpu",
-            docstring="Line-insertion direction/3D-shift gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_lines_rfft_3d_pose_grad_gpu](
+                "insert_central_lines_rfft_3d_pose_grad_gpu",
+                docstring="Line-insertion direction/3D-shift gradients (GPU).",
+            )
         m.def_function[insert_central_lines_rfft_3d_weight_grad](
             "insert_central_lines_rfft_3d_weight_grad",
             docstring="Line-insertion weight gradients (CPU).",
         )
-        m.def_function[insert_central_lines_rfft_3d_weight_grad_gpu](
-            "insert_central_lines_rfft_3d_weight_grad_gpu",
-            docstring="Line-insertion weight gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_lines_rfft_3d_weight_grad_gpu](
+                "insert_central_lines_rfft_3d_weight_grad_gpu",
+                docstring="Line-insertion weight gradients (GPU).",
+            )
         m.def_function[extract_central_lines_rfft_2d](
             "extract_central_lines_rfft_2d",
             docstring="Extract 1D central lines from a 2D image (CPU).",
         )
-        m.def_function[extract_central_lines_rfft_2d_gpu](
-            "extract_central_lines_rfft_2d_gpu",
-            docstring="Extract 1D central lines from a 2D image (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[extract_central_lines_rfft_2d_gpu](
+                "extract_central_lines_rfft_2d_gpu",
+                docstring="Extract 1D central lines from a 2D image (GPU).",
+            )
         m.def_function[insert_central_lines_rfft_2d](
             "insert_central_lines_rfft_2d",
             docstring="Insert 1D central lines into a 2D image (CPU).",
         )
-        m.def_function[insert_central_lines_rfft_2d_gpu](
-            "insert_central_lines_rfft_2d_gpu",
-            docstring="Insert 1D central lines into a 2D image (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_lines_rfft_2d_gpu](
+                "insert_central_lines_rfft_2d_gpu",
+                docstring="Insert 1D central lines into a 2D image (GPU).",
+            )
         m.def_function[extract_central_lines_rfft_2d_pose_grad](
             "extract_central_lines_rfft_2d_pose_grad",
             docstring="2D-line-extraction direction gradients (CPU).",
         )
-        m.def_function[extract_central_lines_rfft_2d_pose_grad_gpu](
-            "extract_central_lines_rfft_2d_pose_grad_gpu",
-            docstring="2D-line-extraction direction gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[extract_central_lines_rfft_2d_pose_grad_gpu](
+                "extract_central_lines_rfft_2d_pose_grad_gpu",
+                docstring="2D-line-extraction direction gradients (GPU).",
+            )
         m.def_function[insert_central_lines_rfft_2d_pose_grad](
             "insert_central_lines_rfft_2d_pose_grad",
             docstring="2D-line insertion direction gradients (CPU).",
         )
-        m.def_function[insert_central_lines_rfft_2d_pose_grad_gpu](
-            "insert_central_lines_rfft_2d_pose_grad_gpu",
-            docstring="2D-line insertion direction gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_lines_rfft_2d_pose_grad_gpu](
+                "insert_central_lines_rfft_2d_pose_grad_gpu",
+                docstring="2D-line insertion direction gradients (GPU).",
+            )
         m.def_function[insert_central_lines_rfft_2d_weight_grad](
             "insert_central_lines_rfft_2d_weight_grad",
             docstring="2D-line insertion weight gradients (CPU).",
         )
-        m.def_function[insert_central_lines_rfft_2d_weight_grad_gpu](
-            "insert_central_lines_rfft_2d_weight_grad_gpu",
-            docstring="2D-line insertion weight gradients (GPU).",
-        )
-        _ = m.add_type[DeviceSession]("DeviceSession").def_py_init[
-            DeviceSession.py_init
-        ]()
+        comptime if has_accelerator():
+            m.def_function[insert_central_lines_rfft_2d_weight_grad_gpu](
+                "insert_central_lines_rfft_2d_weight_grad_gpu",
+                docstring="2D-line insertion weight gradients (GPU).",
+            )
+        comptime if has_accelerator():
+            _ = m.add_type[DeviceSession]("DeviceSession").def_py_init[
+                DeviceSession.py_init
+            ]()
         m.def_function[extract_central_slices_rfft_3d_pose_grad](
             "extract_central_slices_rfft_3d_pose_grad",
             docstring="Slice-extraction rotation/shift gradients (CPU).",
         )
-        m.def_function[extract_central_slices_rfft_3d_pose_grad_gpu](
-            "extract_central_slices_rfft_3d_pose_grad_gpu",
-            docstring="Slice-extraction rotation/shift gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[extract_central_slices_rfft_3d_pose_grad_gpu](
+                "extract_central_slices_rfft_3d_pose_grad_gpu",
+                docstring="Slice-extraction rotation/shift gradients (GPU).",
+            )
         m.def_function[insert_central_slices_rfft_3d_pose_grad](
             "insert_central_slices_rfft_3d_pose_grad",
             docstring="Slice-insertion rotation/shift gradients (CPU).",
         )
-        m.def_function[insert_central_slices_rfft_3d_pose_grad_gpu](
-            "insert_central_slices_rfft_3d_pose_grad_gpu",
-            docstring="Slice-insertion rotation/shift gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_slices_rfft_3d_pose_grad_gpu](
+                "insert_central_slices_rfft_3d_pose_grad_gpu",
+                docstring="Slice-insertion rotation/shift gradients (GPU).",
+            )
         m.def_function[insert_central_slices_rfft_3d_weight_grad](
             "insert_central_slices_rfft_3d_weight_grad",
             docstring="Slice-insertion weight gradients (CPU).",
         )
-        m.def_function[insert_central_slices_rfft_3d_weight_grad_gpu](
-            "insert_central_slices_rfft_3d_weight_grad_gpu",
-            docstring="Slice-insertion weight gradients (GPU).",
-        )
+        comptime if has_accelerator():
+            m.def_function[insert_central_slices_rfft_3d_weight_grad_gpu](
+                "insert_central_slices_rfft_3d_weight_grad_gpu",
+                docstring="Slice-insertion weight gradients (GPU).",
+            )
         return m.finalize()
     except e:
         abort(String("failed to create fourier_slice_kernels module: ", e))
