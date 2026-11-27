@@ -13,6 +13,7 @@ autograd.
 from __future__ import annotations
 
 import torch
+from torch_grid_utils import rfft_shape
 
 from ._common import (
     input_line_scale,
@@ -29,8 +30,8 @@ from ._validation import (
     interp_code,
     prep_directions_3d,
     prep_shifts_3d,
-    rfft_volume_shape,
     validate_reconstruction,
+    validate_volume_shape,
 )
 
 
@@ -412,10 +413,11 @@ class InsertLines3D(torch.autograd.Function):
         line_sidelength = even_line_sidelength(lines4.shape[2])
         if weights is None:  # unit weights: the weight volume is the density
             weights = torch.ones(lines.shape, dtype=torch.float32, device=lines.device)
+        d, h, w = rfft_shape(validate_volume_shape(volume_shape))
         data_vol, weight_vol = run_insert_lines_3d(
             lines,
             directions,
-            rfft_volume_shape(volume_shape),
+            (d, h, w),
             weights=weights,
             fftfreq_max=fftfreq_max,
             interpolation=interpolation,

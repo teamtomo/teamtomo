@@ -10,6 +10,7 @@ autograd.
 from __future__ import annotations
 
 import torch
+from torch_grid_utils import rfft_shape
 
 from ._common import (
     input_line_scale,
@@ -26,8 +27,8 @@ from ._validation import (
     interp_code,
     prep_directions_2d,
     prep_shifts_2d,
-    rfft_image_shape,
     validate_image_2d,
+    validate_image_shape,
 )
 
 
@@ -395,10 +396,11 @@ class InsertLines2D(torch.autograd.Function):
         line_sidelength = even_line_sidelength(lines3.shape[2])
         if weights is None:  # unit weights: the weight image is the density
             weights = torch.ones(lines.shape, dtype=torch.float32, device=lines.device)
+        h, w = rfft_shape(validate_image_shape(image_shape))
         img, wimg = run_insert_lines_2d(
             lines,
             directions,
-            rfft_image_shape(image_shape),
+            (h, w),
             weights=weights,
             fftfreq_max=fftfreq_max,
             interpolation=interpolation,

@@ -74,16 +74,22 @@ def _square_side(shape: Sequence[int], ndim: int, name: str) -> int:
     return side
 
 
-def rfft_volume_shape(volume_shape: Sequence[int]) -> tuple[int, int, int]:
-    """Rfft shape ``(d, d, d // 2 + 1)`` of a real-space ``(d, d, d)`` volume."""
+def validate_volume_shape(volume_shape: Sequence[int]) -> tuple[int, int, int]:
+    """Check a real-space volume shape is cubic and even; return it as ints.
+
+    Its rfft shape is ``torch_grid_utils.rfft_shape(volume_shape)``.
+    """
     side = _square_side(volume_shape, 3, "volume_shape")
-    return (side, side, side // 2 + 1)
+    return (side, side, side)
 
 
-def rfft_image_shape(image_shape: Sequence[int]) -> tuple[int, int]:
-    """Rfft shape ``(h, h // 2 + 1)`` of a real-space ``(h, h)`` image."""
+def validate_image_shape(image_shape: Sequence[int]) -> tuple[int, int]:
+    """Check a real-space image shape is square and even; return it as ints.
+
+    Its rfft shape is ``torch_grid_utils.rfft_shape(image_shape)``.
+    """
     side = _square_side(image_shape, 2, "image_shape")
-    return (side, side // 2 + 1)
+    return (side, side)
 
 
 def validate_reconstruction(

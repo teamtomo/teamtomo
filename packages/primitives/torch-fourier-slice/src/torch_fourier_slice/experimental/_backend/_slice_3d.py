@@ -8,6 +8,7 @@ autograd.
 from __future__ import annotations
 
 import torch
+from torch_grid_utils import rfft_shape
 
 from ._common import (
     input_pixel_scale,
@@ -24,8 +25,8 @@ from ._validation import (
     prep_rotations,
     prep_shifts_2d,
     prep_shifts_3d,
-    rfft_volume_shape,
     validate_reconstruction,
+    validate_volume_shape,
 )
 
 
@@ -514,12 +515,13 @@ class InsertSlices3D(torch.autograd.Function):
             weights = torch.ones(
                 projections.shape, dtype=torch.float32, device=projections.device
             )
+        d, h, w = rfft_shape(validate_volume_shape(volume_shape))
         data_vol, weight_vol = run_insert_slices_3d_hermitian(
             projections,
             rotations,
             weights,
             shifts_2d,
-            rfft_volume_shape(volume_shape),
+            (d, h, w),
             fftfreq_max,
             interpolation,
             ewald_curvature,

@@ -27,10 +27,10 @@ from .._backend._validation import (
     prep_directions_3d,
     prep_shifts_2d,
     prep_shifts_3d,
-    rfft_image_shape,
-    rfft_volume_shape,
     validate_image_2d,
+    validate_image_shape,
     validate_reconstruction,
+    validate_volume_shape,
 )
 from ._rfft import gather, scatter
 
@@ -179,7 +179,7 @@ def insert_lines_3d(
         raise ValueError("directions pose count must match lines")
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, lines.device)
     line_sidelength = even_line_sidelength(w)
-    _, sidelength, _ = rfft_volume_shape(volume_shape)
+    sidelength = validate_volume_shape(volume_shape)[0]
 
     k, inside = _line_samples(
         directions,
@@ -257,7 +257,7 @@ def insert_lines_2d(
         raise ValueError("directions pose count must match lines")
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, lines.device)
     line_sidelength = even_line_sidelength(w)
-    sidelength, _ = rfft_image_shape(image_shape)
+    sidelength = validate_image_shape(image_shape)[0]
 
     k, inside = _line_samples(
         directions,

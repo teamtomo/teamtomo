@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .._backend._validation import rfft_volume_shape
+from .._backend._validation import validate_volume_shape
 from .._conventions import ewald_coefficient, to_zyx_matrices, to_zyx_vectors
 from ._line import insert_lines_2d, insert_lines_3d
 from ._slice import insert_slices_3d
@@ -35,7 +35,7 @@ def _insert_slices_3d(
     ewald_px_size,
 ):
     """Insert in the kernels' canonical ``(bv, bp, ...)`` layout."""
-    volume_sidelength = rfft_volume_shape(volume_shape)[1]
+    volume_sidelength = validate_volume_shape(volume_shape)[0]
     return insert_slices_3d(
         image_rfft,
         weights,

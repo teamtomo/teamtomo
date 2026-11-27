@@ -19,8 +19,8 @@ from .._backend._validation import (
     prep_rotations,
     prep_shifts_2d,
     prep_shifts_3d,
-    rfft_volume_shape,
     validate_reconstruction,
+    validate_volume_shape,
 )
 from ._rfft import gather, scatter
 
@@ -199,7 +199,7 @@ def insert_slices_3d(
         raise ValueError("rotations pose count must match slices")
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, device)
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, device)
-    _, sidelength, _ = rfft_volume_shape(volume_shape)
+    sidelength = validate_volume_shape(volume_shape)[0]
     # the cutoff is in slice pixels, Nyquist by default (as the extraction)
     radius = h / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
 

@@ -86,7 +86,7 @@ from typing import TYPE_CHECKING
 from ._backend._line_2d import InsertLines2D
 from ._backend._line_3d import InsertLines3D
 from ._backend._slice_3d import InsertSlices3D
-from ._backend._validation import rfft_volume_shape
+from ._backend._validation import validate_volume_shape
 from ._conventions import ewald_coefficient, to_zyx_matrices, to_zyx_vectors
 
 if TYPE_CHECKING:
@@ -111,7 +111,7 @@ def _insert_slices_3d(
     ewald_px_size,
 ):
     """Run the differentiable kernel in its canonical ``(bv, bp, ...)`` layout."""
-    volume_sidelength = rfft_volume_shape(volume_shape)[1]
+    volume_sidelength = validate_volume_shape(volume_shape)[0]
     return InsertSlices3D.apply(
         image_rfft,
         weights,
