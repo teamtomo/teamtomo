@@ -35,7 +35,7 @@ from _common import (
     _fourier_coord,
     _rfft_half,
     _rotated_coord,
-    _slice_sample_yx,
+    _magnified_coord,
     _slice_3d_shift_phase,
     _load_c2,
     _in_nyquist_cube,
@@ -196,7 +196,7 @@ def _extract_slice_3d_pose_grad_pixel[
     var coord_x = Float32(x)
     if coord_y * coord_y + coord_x * coord_x > p.radius_cutoff_sq:
         return SIMD[DType.float32, 16](0)
-    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var s_yx = _magnified_coord(p, coord_y, coord_x)
     var sy = s_yx[0]
     var sx = s_yx[1]
     var sz = _ewald_sz(p, sx, sy)
@@ -278,7 +278,7 @@ def _insert_slice_3d_pose_grad_pixel[
     var scale = _input_pixel_scale(y, x, p.proj_sidelength)
     if scale == 0.0:
         return SIMD[DType.float32, 16](0)
-    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var s_yx = _magnified_coord(p, coord_y, coord_x)
     var sy = s_yx[0]
     var sx = s_yx[1]
     var sz = _ewald_sz(p, sx, sy)
@@ -397,7 +397,7 @@ def _insert_slice_3d_weight_grad_pixel[
     var scale = _input_pixel_scale(y, x, p.proj_sidelength)
     if scale == 0.0:
         return
-    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var s_yx = _magnified_coord(p, coord_y, coord_x)
     var sy = s_yx[0]
     var sx = s_yx[1]
     var rb = 0 if p.bv_rot == 1 else i_bv

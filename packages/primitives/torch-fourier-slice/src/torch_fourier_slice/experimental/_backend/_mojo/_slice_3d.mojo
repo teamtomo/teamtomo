@@ -18,9 +18,9 @@ from _common import (
     _fourier_coord,
     _input_pixel_scale,
     _load_c2,
+    _magnified_coord,
     _rfft_half,
     _rotated_coord,
-    _slice_sample_yx,
     _slice_3d_shift_phase,
     _store_c2,
 )
@@ -50,7 +50,7 @@ def _extract_slice_3d_pixel[
         return  # outside the cutoff: leave the (pre-zeroed) output at 0
 
     var rb = 0 if p.bv_rot == 1 else i_bv
-    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var s_yx = _magnified_coord(p, coord_y, coord_x)
     var sy = s_yx[0]
     var sx = s_yx[1]
     var k = _rotated_coord(
@@ -122,7 +122,7 @@ def _insert_slice_3d_pixel[
 
     # the 3D shift phase needs the rotated coordinate, so compute `k` first
     var rb = 0 if p.bv_rot == 1 else i_bv
-    var s_yx = _slice_sample_yx(p, coord_y, coord_x)
+    var s_yx = _magnified_coord(p, coord_y, coord_x)
     var sy = s_yx[0]
     var sx = s_yx[1]
     var k = _rotated_coord(

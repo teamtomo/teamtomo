@@ -794,7 +794,7 @@ def _input_line_scale(x: Int, n: Int) -> Float32:
 
 
 @always_inline
-def _slice_sample_yx(
+def _magnified_coord(
     p: FourierSliceParams, coord_y: Float32, coord_x: Float32
 ) -> SIMD[DType.float32, 2]:
     """In-plane sample coordinate (lanes y, x) of the slice pixel at (coord_y, coord_x).
