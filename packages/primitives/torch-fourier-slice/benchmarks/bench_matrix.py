@@ -4,9 +4,10 @@ Compares torch-fourier-slice canonical (pure PyTorch) vs. experimental (Mojo)
 vs., optionally, torch-projectors -- for central-slice insertion and
 extraction, forward-only and forward+backward, on CPU and/or GPU.
 
-Assumes ``torch-fourier-slice[mojo]`` is installed. ``torch-projectors`` is
-optional: if it isn't importable, its rows are simply omitted from the
-matrix -- torch-fourier-slice canonical vs experimental is always compared,
+Assumes the Mojo kernels are available (Python >= 3.12, Linux or Apple
+Silicon). ``torch-projectors`` is optional: if it isn't importable, its rows are
+simply omitted from the matrix -- torch-fourier-slice canonical vs experimental
+is always compared,
 with or without torch-projectors installed.
 
 Output is CSV, one row per (operation, backend, device, box, bp, interp,

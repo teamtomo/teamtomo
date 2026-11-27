@@ -53,9 +53,10 @@ def _load(kind: Literal["cpu", "gpu"]) -> object:
     except Exception as exc:  # compile failure, missing `mojo`, ...
         _errors[name] = exc
         raise ImportError(
-            f"Mojo kernels '{name}' failed to compile / load. Install the optional "
-            "'mojo' extra (pip install 'torch-image-interpolation[mojo]') and, for "
-            "GPU kernels, a working GPU compiler toolchain."
+            f"Mojo kernels '{name}' failed to compile / load. "
+            "torch-image-interpolation installs mojo and max on Python >= 3.12 for "
+            "Linux and Apple Silicon macOS; GPU kernels also need a working GPU "
+            "compiler toolchain."
         ) from exc
     _modules[name] = module
     return module
