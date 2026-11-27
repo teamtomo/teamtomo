@@ -8,12 +8,14 @@ autograd.
 from __future__ import annotations
 
 import torch
+from torch_grid_utils import rfft_shape
 
 from ._common import (
     input_pixel_scale,
-    reconstruction_volume_shape,
     reduce_to,
+    sampling_scale,
     symmetrise_hermitian_planes,
+    zero_unused_grads,
 )
 from ._device import prepare_launch
 from ._loader import device_session, kernels
@@ -24,6 +26,7 @@ from ._validation import (
     prep_shifts_2d,
     prep_shifts_3d,
     validate_reconstruction,
+    validate_volume_shape,
 )
 
 
@@ -32,7 +35,6 @@ def run_extract_slices_3d(
     rotations: torch.Tensor,
     shifts_2d: torch.Tensor | None,
     output_shape: tuple[int, int] | None,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
@@ -73,7 +75,7 @@ def run_extract_slices_3d(
         device=tgt,
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(sidelength, proj_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=int(has_shifts_2d),
         has_weights=0,
@@ -105,7 +107,6 @@ def run_insert_slices_3d(
     *,
     shifts_2d: torch.Tensor | None = None,
     weights: torch.Tensor | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     interpolation: str = "linear",
     friedel_double: bool = False,
@@ -115,7 +116,8 @@ def run_insert_slices_3d(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Insert complex ``slices`` ``(bv, bp, h, w)`` into a 3D rfft volume.
 
-    ``volume_shape`` is ``(d, sidelength, sidelength_half)`` (no batch).
+    ``volume_shape`` is ``(d, sidelength, sidelength_half)`` (no batch); slice
+    frequency ``k`` lands at ``k * sidelength / h`` (``sampling_scale``).
     ``shifts_2d`` applies the *conjugate* phase ramp (adjoint of the forward shift).
     ``friedel_double`` also inserts the Hermitian counterpart on the x = 0 and
     x = n/2 planes and ``skip_redundant`` counts each Hermitian pair of the input
@@ -154,9 +156,10 @@ def run_insert_slices_3d(
     else:
         w_in = torch.zeros(bv, bp, h, w, dtype=torch.float32, device=tgt)  # unused
 
-    radius = sidelength / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
+    # the cutoff is in slice pixels, Nyquist by default (as the extraction)
+    radius = h / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(sidelength, h),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=int(has_shifts_2d),
         has_weights=int(weights is not None),
@@ -185,13 +188,16 @@ def run_insert_slices_3d_hermitian(
     rotations: torch.Tensor,
     weights: torch.Tensor | None,
     shifts_2d: torch.Tensor | None,
-    oversampling: float,
+    volume_shape: tuple[int, int, int],
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
     shifts_3d: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """Insert central slices into a Hermitian 3D rfft volume (+ weights)."""
+    """Insert central slices into a Hermitian 3D rfft volume (+ weights).
+
+    ``volume_shape`` is the rfft ``(d, sidelength, sidelength_half)``.
+    """
     if projections.dim() == 3:
         projections = projections.unsqueeze(0)
         if weights is not None and weights.dim() == 3:
@@ -207,10 +213,9 @@ def run_insert_slices_3d_hermitian(
     return run_insert_slices_3d(
         projections,
         rotations,
-        reconstruction_volume_shape(h, oversampling),
+        volume_shape,
         shifts_2d=shifts_2d,
         weights=weights,
-        oversampling=oversampling,
         fftfreq_max=fftfreq_max,
         interpolation=interpolation,
         friedel_double=True,
@@ -226,7 +231,6 @@ def run_slice_3d_pose_grad(
     shifts_2d: torch.Tensor | None,
     pixels: torch.Tensor,
     *,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     insert: bool,
@@ -248,7 +252,7 @@ def run_slice_3d_pose_grad(
     tgt = device if use_gpu else torch.device("cpu")
     if volume.dim() == 3:
         volume = volume.unsqueeze(0)
-    bv, _d, _sidelength, _sh = volume.shape
+    bv, _d, sidelength, _sh = volume.shape
     rot, bv_rot, bp = prep_rotations(rotations, bv, tgt)
     shifts_2d_t, has_shifts_2d = prep_shifts_2d(shifts_2d, bv, bp, tgt)
     shifts_3d_t, has_shifts_3d = prep_shifts_3d(shifts_3d, bv, bp, tgt)
@@ -274,7 +278,7 @@ def run_slice_3d_pose_grad(
         else float(fftfreq_max) * proj_sidelength
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(sidelength, proj_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=int(has_shifts_2d),
         has_weights=0,
@@ -323,7 +327,6 @@ def run_slice_3d_weight_grad(
     rotations: torch.Tensor,
     proj_sidelength: int,
     *,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
@@ -354,7 +357,7 @@ def run_slice_3d_weight_grad(
         else float(fftfreq_max) * proj_sidelength
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(grad_weight_vol.shape[-2], proj_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=0,
         has_weights=0,
@@ -389,7 +392,6 @@ class ExtractSlices3D(torch.autograd.Function):
         shifts_2d: torch.Tensor | None,
         shifts_3d: torch.Tensor | None,
         output_shape: tuple[int, int] | None,
-        oversampling: float,
         fftfreq_max: float | None,
         interpolation: str,
         ewald_curvature: float = 0.0,
@@ -399,7 +401,6 @@ class ExtractSlices3D(torch.autograd.Function):
             rotations,
             shifts_2d,
             output_shape,
-            oversampling,
             fftfreq_max,
             interpolation,
             ewald_curvature,
@@ -413,7 +414,6 @@ class ExtractSlices3D(torch.autograd.Function):
         ctx.rotations = rotations
         ctx.shifts_2d = shifts_2d
         ctx.shifts_3d = shifts_3d
-        ctx.oversampling = oversampling
         ctx.fftfreq_max = fftfreq_max
         ctx.interpolation = interpolation
         ctx.ewald_curvature = ewald_curvature
@@ -433,7 +433,6 @@ class ExtractSlices3D(torch.autograd.Function):
                 ctx.rotations,
                 ctx.vol_shape,
                 shifts_2d=ctx.shifts_2d,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 friedel_double=False,
@@ -453,7 +452,6 @@ class ExtractSlices3D(torch.autograd.Function):
                 ctx.rotations,
                 ctx.shifts_2d,
                 grad_proj,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 insert=False,
@@ -476,7 +474,6 @@ class ExtractSlices3D(torch.autograd.Function):
             None,
             None,
             None,
-            None,
         )
 
 
@@ -484,6 +481,10 @@ class InsertSlices3D(torch.autograd.Function):
     """Differentiable 2D->3D central-slice insertion.
 
     Differentiable w.r.t. projections, weights, rotations and shifts.
+
+    ``weights=None`` splats unit weights, so the weight volume is the sampling
+    density. An unused output's gradient arrives as ``None`` and its part of the
+    backward is skipped (``zero_unused_grads``).
 
     The data-gradient is the exact transpose of the (friedel_double +
     skip_redundant) scatter: symmetrise the volume gradient on the kx = 0 and
@@ -505,17 +506,22 @@ class InsertSlices3D(torch.autograd.Function):
         rotations: torch.Tensor,
         shifts_2d: torch.Tensor | None,
         shifts_3d: torch.Tensor | None,
-        oversampling: float,
+        volume_shape: tuple[int, int, int],
         fftfreq_max: float | None,
         interpolation: str,
         ewald_curvature: float = 0.0,
     ):
+        if weights is None:  # unit weights: the weight volume is the density
+            weights = torch.ones(
+                projections.shape, dtype=torch.float32, device=projections.device
+            )
+        d, h, w = rfft_shape(validate_volume_shape(volume_shape))
         data_vol, weight_vol = run_insert_slices_3d_hermitian(
             projections,
             rotations,
             weights,
             shifts_2d,
-            oversampling,
+            (d, h, w),
             fftfreq_max,
             interpolation,
             ewald_curvature,
@@ -528,32 +534,29 @@ class InsertSlices3D(torch.autograd.Function):
         ctx.rotations = rotations
         ctx.shifts_2d = shifts_2d
         ctx.shifts_3d = shifts_3d
-        ctx.oversampling = oversampling
         ctx.fftfreq_max = fftfreq_max
         ctx.interpolation = interpolation
         ctx.ewald_curvature = ewald_curvature
         ctx.input_dim = projections.dim()
-        if weight_vol is None:
-            weight_vol = torch.empty(0, device=data_vol.device)
+        ctx.set_materialize_grads(False)  # unused outputs give None
         return data_vol, weight_vol
 
     @staticmethod
-    def backward(ctx, grad_data: torch.Tensor, grad_weight: torch.Tensor):
+    def backward(ctx, grad_data: torch.Tensor | None, grad_weight: torch.Tensor | None):
         needs = ctx.needs_input_grad
         side = ctx.proj_sidelength
 
         g = None
-        if needs[0] or needs[2] or needs[3] or needs[4]:
+        if grad_data is not None and (needs[0] or needs[2] or needs[3] or needs[4]):
             g = symmetrise_hermitian_planes(grad_data)
 
         grad_proj = None
-        if needs[0]:
+        if needs[0] and g is not None:
             grad_proj = run_extract_slices_3d(
                 g,
                 ctx.rotations,
                 ctx.shifts_2d,
                 (side, side),
-                ctx.oversampling,
                 ctx.fftfreq_max,
                 ctx.interpolation,
                 ctx.ewald_curvature,
@@ -565,12 +568,11 @@ class InsertSlices3D(torch.autograd.Function):
                 grad_proj = grad_proj[0]
 
         grad_weights = None
-        if needs[1] and ctx.weights is not None and grad_weight is not None:
+        if needs[1] and grad_weight is not None:
             gw = run_slice_3d_weight_grad(
                 grad_weight,
                 ctx.rotations,
                 side,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 ewald_curvature=ctx.ewald_curvature,
@@ -583,14 +585,13 @@ class InsertSlices3D(torch.autograd.Function):
         grad_shift = None
         grad_shift_3d = None
         pose_kwargs = {
-            "oversampling": ctx.oversampling,
             "fftfreq_max": ctx.fftfreq_max,
             "interpolation": ctx.interpolation,
             "insert": True,
             "ewald_curvature": ctx.ewald_curvature,
         }
         gr = None
-        if needs[2] or needs[3] or needs[4]:
+        if g is not None and (needs[2] or needs[3] or needs[4]):
             gr, gs, gs3 = run_slice_3d_pose_grad(
                 g,
                 ctx.rotations,
@@ -603,7 +604,7 @@ class InsertSlices3D(torch.autograd.Function):
                 grad_shift = reduce_to(gs, ctx.shifts_2d)
             if needs[4] and ctx.shifts_3d is not None and gs3 is not None:
                 grad_shift_3d = reduce_to(gs3, ctx.shifts_3d)
-        if needs[2] and ctx.weights is not None and grad_weight is not None:
+        if needs[2] and grad_weight is not None:
             # the weight volume's rotation dependence: a real field (zero
             # imaginary part) and real pixels make the kernel's Re[a conj(b)]
             # pairing the plain product weight * spatial gradient
@@ -618,14 +619,12 @@ class InsertSlices3D(torch.autograd.Function):
         if needs[2] and gr is not None:
             grad_rot = reduce_to(gr, ctx.rotations)
 
-        return (
-            grad_proj,
-            grad_weights,
-            grad_rot,
-            grad_shift,
-            grad_shift_3d,
-            None,
-            None,
-            None,
-            None,
+        grads = (grad_proj, grad_weights, grad_rot, grad_shift, grad_shift_3d)
+        inputs = (
+            ctx.projections,
+            ctx.weights,
+            ctx.rotations,
+            ctx.shifts_2d,
+            ctx.shifts_3d,
         )
+        return (*zero_unused_grads(grads, inputs, needs[:5]), None, None, None, None)

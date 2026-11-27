@@ -10,8 +10,15 @@ autograd.
 from __future__ import annotations
 
 import torch
+from torch_grid_utils import rfft_shape
 
-from ._common import input_line_scale, reduce_to, symmetrise_hermitian_columns
+from ._common import (
+    input_line_scale,
+    reduce_to,
+    sampling_scale,
+    symmetrise_hermitian_columns,
+    zero_unused_grads,
+)
 from ._device import prepare_launch
 from ._loader import device_session, kernels
 from ._validation import (
@@ -21,6 +28,7 @@ from ._validation import (
     prep_directions_2d,
     prep_shifts_2d,
     validate_image_2d,
+    validate_image_shape,
 )
 
 
@@ -28,7 +36,6 @@ def run_extract_lines_2d(
     image_rfft: torch.Tensor,
     directions: torch.Tensor,
     output_length: int | None,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     shifts_2d: torch.Tensor | None = None,
@@ -57,7 +64,7 @@ def run_extract_lines_2d(
         else float(fftfreq_max) * line_sidelength
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(h, line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=int(has_shifts_2d),
         has_weights=0,
@@ -88,7 +95,6 @@ def run_insert_lines_2d(
     image_shape: tuple[int, int],
     *,
     weights: torch.Tensor | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     interpolation: str = "linear",
     friedel_double: bool = False,
@@ -132,7 +138,7 @@ def run_insert_lines_2d(
         else float(fftfreq_max) * line_sidelength
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(h, line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=int(has_shifts_2d),
         has_weights=int(weights is not None),
@@ -161,7 +167,6 @@ def run_line_2d_pose_grad(
     directions: torch.Tensor,
     line_pixels: torch.Tensor,
     *,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
     insert: bool,
@@ -202,7 +207,7 @@ def run_line_2d_pose_grad(
         else float(fftfreq_max) * line_sidelength
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(image.shape[-2], line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=int(has_shifts_2d),
         has_weights=0,
@@ -238,7 +243,6 @@ def run_line_2d_weight_grad(
     directions: torch.Tensor,
     line_sidelength: int,
     *,
-    oversampling: float,
     fftfreq_max: float | None,
     interpolation: str,
 ) -> torch.Tensor:
@@ -264,7 +268,7 @@ def run_line_2d_weight_grad(
         else float(fftfreq_max) * line_sidelength
     )
     params = KernelParams(
-        oversampling=float(oversampling),
+        oversampling=sampling_scale(grad_weight_img.shape[-2], line_sidelength),
         radius_cutoff_sq=float(radius * radius),
         has_shifts_2d=0,
         has_weights=0,
@@ -302,7 +306,6 @@ class ExtractLines2D(torch.autograd.Function):
         directions: torch.Tensor,
         shifts_2d: torch.Tensor | None,
         output_length: int | None,
-        oversampling: float,
         fftfreq_max: float | None,
         interpolation: str,
     ) -> torch.Tensor:
@@ -310,7 +313,6 @@ class ExtractLines2D(torch.autograd.Function):
             image_rfft,
             directions,
             output_length,
-            oversampling,
             fftfreq_max,
             interpolation,
             shifts_2d,
@@ -320,7 +322,6 @@ class ExtractLines2D(torch.autograd.Function):
         ctx.image_rfft = image_rfft
         ctx.directions = directions
         ctx.shifts_2d = shifts_2d
-        ctx.oversampling = oversampling
         ctx.fftfreq_max = fftfreq_max
         ctx.interpolation = interpolation
         ctx.input_dim = image_rfft.dim()
@@ -336,7 +337,6 @@ class ExtractLines2D(torch.autograd.Function):
                 grad_line,
                 ctx.directions,
                 ctx.image_shape,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 friedel_double=False,
@@ -352,7 +352,6 @@ class ExtractLines2D(torch.autograd.Function):
                 ctx.image_rfft,
                 ctx.directions,
                 grad_line,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
                 insert=False,
@@ -362,7 +361,7 @@ class ExtractLines2D(torch.autograd.Function):
                 grad_dir = reduce_to(gd, ctx.directions)
             if needs[2] and ctx.shifts_2d is not None and gs is not None:
                 grad_shift = reduce_to(gs, ctx.shifts_2d)
-        return (grad_img, grad_dir, grad_shift, None, None, None, None)
+        return (grad_img, grad_dir, grad_shift, None, None, None)
 
 
 class InsertLines2D(torch.autograd.Function):
@@ -371,6 +370,10 @@ class InsertLines2D(torch.autograd.Function):
     Differentiable w.r.t. the input ``lines`` (adjoint 2D line extraction of the
     symmetrised image gradient, scaled by each sample's weight), ``weights``
     (weight-splat adjoint), ``directions`` and ``shifts_2d`` (2D pose-grad kernel).
+
+    ``weights=None`` splats unit weights, so the weight image is the sampling
+    density. An unused output's gradient arrives as ``None`` and its part of the
+    backward is skipped (``zero_unused_grads``).
 
     The weight image depends on the directions too (the weights are splatted at
     the sample positions), so the direction gradient also gets the pose kernel
@@ -385,19 +388,20 @@ class InsertLines2D(torch.autograd.Function):
         weights: torch.Tensor | None,
         directions: torch.Tensor,
         shifts_2d: torch.Tensor | None,
-        oversampling: float,
+        image_shape: tuple[int, int],
         fftfreq_max: float | None,
         interpolation: str,
     ):
         lines3 = lines.unsqueeze(0) if lines.dim() == 2 else lines
         line_sidelength = even_line_sidelength(lines3.shape[2])
-        image_shape = (line_sidelength, line_sidelength // 2 + 1)
+        if weights is None:  # unit weights: the weight image is the density
+            weights = torch.ones(lines.shape, dtype=torch.float32, device=lines.device)
+        h, w = rfft_shape(validate_image_shape(image_shape))
         img, wimg = run_insert_lines_2d(
             lines,
             directions,
-            image_shape,
+            (h, w),
             weights=weights,
-            oversampling=oversampling,
             fftfreq_max=fftfreq_max,
             interpolation=interpolation,
             friedel_double=True,
@@ -408,29 +412,26 @@ class InsertLines2D(torch.autograd.Function):
         ctx.weights = weights
         ctx.directions = directions
         ctx.shifts_2d = shifts_2d
-        ctx.oversampling = oversampling
         ctx.fftfreq_max = fftfreq_max
         ctx.interpolation = interpolation
         ctx.input_dim = lines.dim()
-        if wimg is None:
-            wimg = torch.empty(0, device=img.device)
+        ctx.set_materialize_grads(False)  # unused outputs give None
         return img, wimg
 
     @staticmethod
-    def backward(ctx, grad_img: torch.Tensor, grad_weight: torch.Tensor):
+    def backward(ctx, grad_img: torch.Tensor | None, grad_weight: torch.Tensor | None):
         needs = ctx.needs_input_grad
 
         g = None
-        if needs[0] or needs[2] or needs[3]:
+        if grad_img is not None and (needs[0] or needs[2] or needs[3]):
             g = symmetrise_hermitian_columns(grad_img)
 
         grad_lines = None
-        if needs[0]:
+        if needs[0] and g is not None:
             grad_lines = run_extract_lines_2d(
                 g,
                 ctx.directions,
                 ctx.line_sidelength,
-                ctx.oversampling,
                 ctx.fftfreq_max,
                 ctx.interpolation,
                 ctx.shifts_2d,
@@ -443,12 +444,11 @@ class InsertLines2D(torch.autograd.Function):
                 grad_lines = grad_lines[0]
 
         grad_weights = None
-        if needs[1] and ctx.weights is not None and grad_weight is not None:
+        if needs[1] and grad_weight is not None:
             gw = run_line_2d_weight_grad(
                 grad_weight,
                 ctx.directions,
                 ctx.line_sidelength,
-                oversampling=ctx.oversampling,
                 fftfreq_max=ctx.fftfreq_max,
                 interpolation=ctx.interpolation,
             )
@@ -459,19 +459,18 @@ class InsertLines2D(torch.autograd.Function):
         grad_dir = None
         grad_shift = None
         pose_kwargs = {
-            "oversampling": ctx.oversampling,
             "fftfreq_max": ctx.fftfreq_max,
             "interpolation": ctx.interpolation,
             "insert": True,
         }
         gd = None
-        if needs[2] or needs[3]:
+        if g is not None and (needs[2] or needs[3]):
             gd, gs = run_line_2d_pose_grad(
                 g, ctx.directions, ctx.lines, shifts_2d=ctx.shifts_2d, **pose_kwargs
             )
             if needs[3] and ctx.shifts_2d is not None and gs is not None:
                 grad_shift = reduce_to(gs, ctx.shifts_2d)
-        if needs[2] and ctx.weights is not None and grad_weight is not None:
+        if needs[2] and grad_weight is not None:
             # the weight image's direction dependence: a real field (zero
             # imaginary part) and real line values make the kernel's
             # Re[a conj(b)] pairing the plain product weight * spatial gradient
@@ -484,4 +483,6 @@ class InsertLines2D(torch.autograd.Function):
             gd = gd_weight if gd is None else gd + gd_weight
         if needs[2] and gd is not None:
             grad_dir = reduce_to(gd, ctx.directions)
-        return (grad_lines, grad_weights, grad_dir, grad_shift, None, None, None)
+        grads = (grad_lines, grad_weights, grad_dir, grad_shift)
+        inputs = (ctx.lines, ctx.weights, ctx.directions, ctx.shifts_2d)
+        return (*zero_unused_grads(grads, inputs, needs[:4]), None, None, None)

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import math
-
 import torch
 
 
-def reconstruction_volume_shape(
-    proj_sidelength: int, oversampling: float
-) -> tuple[int, int, int]:
-    """Cubic rfft volume (d, h, w) for inserting ``proj_sidelength`` slices."""
-    raw = math.ceil(proj_sidelength * oversampling)
-    side = raw + (raw % 2)  # ensure even
-    return (side, side, side // 2 + 1)
+def sampling_scale(sidelength: int, proj_sidelength: int) -> float:
+    """Array frequency index per projection frequency index.
+
+    A projection (slice or line) of side ``proj_sidelength`` and the volume or
+    image of side ``sidelength`` it is cut from or inserted into share a pixel
+    size, so the projection's frequency index ``k`` sits at
+    ``k * sidelength / proj_sidelength`` in the array: an array padded to twice
+    the projection's side is sampled at twice its index. The kernels take this
+    as ``KernelParams.oversampling``.
+    """
+    return sidelength / proj_sidelength
 
 
 def reduce_to(grad: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -28,6 +30,24 @@ def reduce_to(grad: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         if target.shape[dim] == 1 and grad.shape[dim] != 1:
             grad = grad.sum(dim, keepdim=True)
     return grad.reshape(target.shape).to(device=target.device, dtype=target.dtype)
+
+
+def zero_unused_grads(
+    grads: tuple[torch.Tensor | None, ...],
+    inputs: tuple[object, ...],
+    needs: tuple[bool, ...],
+) -> tuple[torch.Tensor | None, ...]:
+    """``grads``, with zeros for each input that needs a gradient but got none.
+
+    The insertions turn off ``ctx.set_materialize_grads``, so an unused output
+    (often the weight volume) arrives as ``None`` and its part of the backward
+    is skipped. An input that only reaches the loss through that output still
+    gets a zero gradient, as it would with materialised gradients.
+    """
+    return tuple(
+        torch.zeros_like(x) if need and grad is None and torch.is_tensor(x) else grad
+        for grad, x, need in zip(grads, inputs, needs, strict=True)
+    )
 
 
 def hermitian_planes(n: int) -> tuple[int, ...]:

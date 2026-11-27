@@ -27,10 +27,12 @@ Shared parameters (both forms):
   rotation), xyz unless ``zyx_shifts=True``; ``shifts_2d``: optional
   ``(..., bp, 2)`` shifts in the projection plane (after rotation), xy unless
   ``yx_shifts=True``.
-- ``output_shape``: ``(H_out, W_out)`` square/even, default ``(h, h)``.
-- ``oversampling``: coordinate scale (>1 oversamples); ``fftfreq_max``:
-  cutoff in cycles/pixel, default Nyquist (0.5); ``interpolation``: ``"linear"``
-  / ``"cubic"``.
+- ``output_shape``: ``(H_out, W_out)`` square/even, default ``(h, h)``. The
+  volume and the slices share a pixel size, so slice frequency index ``k``
+  samples the volume at ``k * h / H_out``, so a volume padded to twice the
+  output's side is oversampled twofold.
+- ``fftfreq_max``: cutoff in cycles/pixel, default Nyquist (0.5);
+  ``interpolation``: ``"linear"`` / ``"cubic"``.
 - ``apply_ewald_curvature`` / ``ewald_voltage_kv`` / ``ewald_flip_sign`` /
   ``ewald_px_size``: bend the slice onto an Ewald sphere, as in the canonical
   layer (default: flat slice).
@@ -93,7 +95,6 @@ def _extract_slices_3d(
     shifts_3d,
     shifts_2d,
     output_shape,
-    oversampling,
     fftfreq_max,
     zyx_matrices,
     zyx_shifts,
@@ -111,7 +112,6 @@ def _extract_slices_3d(
         to_zyx_vectors(shifts_2d, yx_shifts),
         to_zyx_vectors(shifts_3d, zyx_shifts),
         output_shape,
-        oversampling,
         fftfreq_max,
         interpolation,
         ewald_coefficient(
@@ -130,7 +130,6 @@ def extract_central_slices_rfft_3d(
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     output_shape: tuple[int, int] | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
@@ -161,7 +160,6 @@ def extract_central_slices_rfft_3d(
         shifts_3d,
         shifts_2d,
         output_shape,
-        oversampling,
         fftfreq_max,
         zyx_matrices,
         zyx_shifts,
@@ -181,7 +179,6 @@ def extract_central_slices_rfft_3d_multichannel(
     shifts_3d: torch.Tensor | None = None,
     shifts_2d: torch.Tensor | None = None,
     output_shape: tuple[int, int] | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     zyx_matrices: bool = False,
     zyx_shifts: bool = False,
@@ -209,7 +206,6 @@ def extract_central_slices_rfft_3d_multichannel(
         shifts_3d,
         shifts_2d,
         output_shape,
-        oversampling,
         fftfreq_max,
         zyx_matrices,
         zyx_shifts,
@@ -228,7 +224,6 @@ def _extract_lines_3d(
     directions,
     shifts_3d,
     output_length,
-    oversampling,
     fftfreq_max,
     zyx_directions,
     zyx_shifts,
@@ -240,7 +235,6 @@ def _extract_lines_3d(
         to_zyx_vectors(directions, zyx_directions),
         to_zyx_vectors(shifts_3d, zyx_shifts),
         output_length,
-        oversampling,
         fftfreq_max,
         interpolation,
     )
@@ -251,7 +245,6 @@ def extract_central_lines_rfft_3d(
     directions: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     output_length: int | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
@@ -273,8 +266,9 @@ def extract_central_lines_rfft_3d(
         per-node ``s * (u . t)`` phase ramp (the design's translation model).
     output_length : int | None
         Even box length ``L`` of the line; the node is the rfft half-line of
-        length ``L//2+1``. Defaults to the volume side ``h``.
-    oversampling, fftfreq_max, interpolation
+        length ``L//2+1``. Defaults to the volume side ``h``. Line frequency
+        index ``k`` samples the volume at ``k * h / L`` along the direction.
+    fftfreq_max, interpolation
         As for the slice extraction (cutoff defaults to Nyquist ``0.5``;
         interpolation ``"linear"`` / ``"cubic"``).
     zyx_directions, zyx_shifts : bool
@@ -294,7 +288,6 @@ def extract_central_lines_rfft_3d(
         directions,
         shifts_3d,
         output_length,
-        oversampling,
         fftfreq_max,
         zyx_directions,
         zyx_shifts,
@@ -308,7 +301,6 @@ def extract_central_lines_rfft_3d_multichannel(
     directions: torch.Tensor,
     shifts_3d: torch.Tensor | None = None,
     output_length: int | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     zyx_directions: bool = False,
     zyx_shifts: bool = False,
@@ -328,7 +320,6 @@ def extract_central_lines_rfft_3d_multichannel(
         directions,
         shifts_3d,
         output_length,
-        oversampling,
         fftfreq_max,
         zyx_directions,
         zyx_shifts,
@@ -342,7 +333,6 @@ def _extract_lines_2d(
     directions,
     shifts_2d,
     output_length,
-    oversampling,
     fftfreq_max,
     yx_directions,
     yx_shifts,
@@ -354,7 +344,6 @@ def _extract_lines_2d(
         to_zyx_vectors(directions, yx_directions),
         to_zyx_vectors(shifts_2d, yx_shifts),
         output_length,
-        oversampling,
         fftfreq_max,
         interpolation,
     )
@@ -365,7 +354,6 @@ def extract_central_lines_rfft_2d(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None = None,
     output_length: int | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     yx_directions: bool = False,
     yx_shifts: bool = False,
@@ -376,8 +364,10 @@ def extract_central_lines_rfft_2d(
     ``image_rfft`` is complex ``(h, w)`` (DC at origin, ``w = h//2+1``, even).
     ``directions`` are ``(2,)`` / ``(bp, 2)`` unit vectors; ``shifts_2d`` are
     optional ``(..., bp, 2)`` image translations (phase ramp). Both are xy unless
-    ``yx_directions`` / ``yx_shifts`` is True. Returns complex ``(bp, w_out)``
-    half-lines on the input device.
+    ``yx_directions`` / ``yx_shifts`` is True. ``output_length`` is the even line
+    length ``L`` (the image side ``h`` by default); line frequency index ``k``
+    samples the image at ``k * h / L`` along the direction. Returns complex
+    ``(bp, L // 2 + 1)`` half-lines on the input device.
     """
     if image_rfft.dim() != 2:
         raise ValueError(
@@ -388,7 +378,6 @@ def extract_central_lines_rfft_2d(
         directions,
         shifts_2d,
         output_length,
-        oversampling,
         fftfreq_max,
         yx_directions,
         yx_shifts,
@@ -402,7 +391,6 @@ def extract_central_lines_rfft_2d_multichannel(
     directions: torch.Tensor,
     shifts_2d: torch.Tensor | None = None,
     output_length: int | None = None,
-    oversampling: float = 1.0,
     fftfreq_max: float | None = None,
     yx_directions: bool = False,
     yx_shifts: bool = False,
@@ -420,7 +408,6 @@ def extract_central_lines_rfft_2d_multichannel(
         directions,
         shifts_2d,
         output_length,
-        oversampling,
         fftfreq_max,
         yx_directions,
         yx_shifts,

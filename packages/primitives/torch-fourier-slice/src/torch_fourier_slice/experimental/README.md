@@ -83,6 +83,22 @@ volume_rfft = torch.fft.rfftn(torch.fft.fftshift(volume, dim=(-3, -2, -1)),
 slices = extract_central_slices_rfft_3d(volume_rfft.contiguous(), rotations.mT)
 ```
 
+The array sizes set the sampling. A slice or line and the volume or image it is
+cut from or inserted into share a pixel size, so frequency index `k` of a side-`m`
+slice sits at `k * n / m` in a side-`n` volume: a volume padded to twice the
+slices' side is sampled twofold oversampled. Extraction takes the size of what it
+cuts as `output_shape` (`output_length` for lines; the array's side by default).
+Insertion takes the real-space shape of what it builds as `volume_shape`
+(`image_shape` for 2D lines), as `torch_fourier_slice.insert_central_slices_rfft_3d`
+does, and always returns `(data, weights)`. Without `weights` every input sample
+weighs one, so the weights are the sampling density:
+
+```python
+from torch_fourier_slice.experimental import insert_central_slices_rfft_3d
+
+volume_rfft, density = insert_central_slices_rfft_3d(slices, (d, d, d), rotations.mT)
+```
+
 Interpolation: `interpolation="linear"` (trilinear, default) or `"cubic"`
 (tricubic Catmull-Rom) — selected at **compile time** per call (§6). The
 real-space layer's gridding correction follows this choice (§7).

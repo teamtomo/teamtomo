@@ -99,13 +99,14 @@ def _experimental_slices(
 ) -> _Insertion:
     """`module` provides the slice functions; `cutoff` is in input pixels.
 
+    A `cutoff` of None leaves `fftfreq_max` at its default (Nyquist).
+
     `shifts` are `shifts_2d` / `shifts_3d`, passed to both operations. Poses and
     shifts are in the kernels' zyx / yx order.
     """
-    volume_sidelength = round(sidelength * oversampling)
+    volume_shape = (round(sidelength * oversampling),) * 3
     options = {
-        "oversampling": oversampling,
-        "fftfreq_max": cutoff / sidelength,
+        "fftfreq_max": None if cutoff is None else cutoff / sidelength,
         "zyx_matrices": True,
         "zyx_shifts": True,
         "yx_shifts": True,
@@ -115,7 +116,7 @@ def _experimental_slices(
 
     def insert(slices, weights=None):
         return module.insert_central_slices_rfft_3d(
-            slices, rotations, weights=weights, **options
+            slices, volume_shape, rotations, weights=weights, **options
         )
 
     def extract(volume):
@@ -126,7 +127,7 @@ def _experimental_slices(
             **options,
         )
 
-    return _Insertion(insert, extract, (sidelength,) * 2, (volume_sidelength,) * 3)
+    return _Insertion(insert, extract, (sidelength,) * 2, volume_shape)
 
 
 # the Mojo rfft-layer functions, by the names `reference` gives them
@@ -158,6 +159,8 @@ def _experimental_lines(
 ) -> _Insertion:
     """`module` provides the line functions; `cutoff` is in input pixels.
 
+    A `cutoff` of None leaves `fftfreq_max` at its default (Nyquist).
+
     `shifts` are `shifts_3d` (3D lines) / `shifts_2d` (2D lines). Directions and
     shifts are in zyx / yx order.
     """
@@ -168,24 +171,23 @@ def _experimental_lines(
         order = {"zyx_directions": True, "zyx_shifts": True}
     else:
         order = {"yx_directions": True, "yx_shifts": True}
+    output_shape = (round(sidelength * oversampling),) * ndim
     options = {
-        "oversampling": oversampling,
-        "fftfreq_max": cutoff / sidelength,
+        "fftfreq_max": None if cutoff is None else cutoff / sidelength,
         "interpolation": interpolation,
         **order,
         **shifts,
     }
 
     def insert(lines, weights=None):
-        return insert_fn(lines, directions, weights=weights, **options)
+        return insert_fn(lines, output_shape, directions, weights=weights, **options)
 
     def extract(array):
         return extract_fn(
             array.contiguous(), directions, output_length=sidelength, **options
         )
 
-    output_sidelength = round(sidelength * oversampling)
-    return _Insertion(insert, extract, (sidelength,), (output_sidelength,) * ndim)
+    return _Insertion(insert, extract, (sidelength,), output_shape)
 
 
 def _mojo_lines(*args, **kwargs) -> _Insertion:
@@ -255,6 +257,18 @@ OPTION_CASES = [
         id="reference-slices-oversampling-2",
     ),
     pytest.param(
+        lambda: _reference_slices(16, _rotations(), oversampling=1.5),
+        id="reference-slices-oversampling-1.5",
+    ),
+    pytest.param(
+        lambda: _reference_slices(16, _rotations(), cutoff=None, oversampling=2.0),
+        id="reference-slices-oversampling-2-nyquist",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(3), cutoff=None, oversampling=2.0),
+        id="reference-lines-3d-oversampling-2-nyquist",
+    ),
+    pytest.param(
         lambda: _mojo_slices(16, _rotations(), shifts_2d=_shifts(2)),
         id="mojo-slices-shifts-2d",
         marks=requires_mojo,
@@ -270,6 +284,21 @@ OPTION_CASES = [
         marks=requires_mojo,
     ),
     pytest.param(
+        lambda: _mojo_slices(16, _rotations(), oversampling=1.5),
+        id="mojo-slices-oversampling-1.5",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), cutoff=None, oversampling=2.0),
+        id="mojo-slices-oversampling-2-nyquist",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(3), cutoff=None, oversampling=2.0),
+        id="mojo-lines-3d-oversampling-2-nyquist",
+        marks=requires_mojo,
+    ),
+    pytest.param(
         lambda: _reference_lines(16, _directions(3), shifts_3d=_shifts(3)),
         id="reference-lines-3d-shifts",
     ),
@@ -280,6 +309,10 @@ OPTION_CASES = [
     pytest.param(
         lambda: _reference_lines(16, _directions(3), oversampling=2.0),
         id="reference-lines-3d-oversampling-2",
+    ),
+    pytest.param(
+        lambda: _reference_lines(16, _directions(2), oversampling=2.0),
+        id="reference-lines-2d-oversampling-2",
     ),
     pytest.param(
         lambda: _mojo_lines(16, _directions(3), shifts_3d=_shifts(3)),
@@ -294,6 +327,11 @@ OPTION_CASES = [
     pytest.param(
         lambda: _mojo_lines(16, _directions(3), oversampling=2.0),
         id="mojo-lines-3d-oversampling-2",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_lines(16, _directions(2), oversampling=2.0),
+        id="mojo-lines-2d-oversampling-2",
         marks=requires_mojo,
     ),
 ]
@@ -343,6 +381,23 @@ def test_weights_follow_the_data(make_case):
     data, weights = case.insert(ones, torch.ones(ones.shape))
     scale = weights.abs().max()
     assert torch.allclose(data, weights.to(data.dtype), atol=1e-6 * scale)
+
+
+@pytest.mark.parametrize(
+    "make_case", [case for case in CASES if not case.id.startswith("torch")]
+)
+def test_omitted_weights_are_unit_weights(make_case):
+    """Without ``weights`` the insertion still returns weights: those of ones.
+
+    (Equal up to the order of the Mojo CPU kernel's parallel accumulation.)
+    """
+    case = make_case()
+    ndim = len(case.input_shape)
+    inputs = _rfft(_random_real((N_POSES, *case.input_shape), seed=0), ndim)
+    data, weights = case.insert(inputs)
+    unit_data, unit_weights = case.insert(inputs, torch.ones(inputs.shape))
+    assert torch.allclose(data, unit_data, atol=1e-6 * data.abs().max())
+    assert torch.allclose(weights, unit_weights, atol=1e-6 * weights.max())
 
 
 @pytest.mark.parametrize("make_case", CASES)
