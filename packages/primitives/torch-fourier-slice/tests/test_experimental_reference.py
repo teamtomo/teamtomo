@@ -33,6 +33,8 @@ requires_mojo = pytest.mark.skipif(
 
 SIDELENGTH = 16
 VOLUME_SHAPE = (SIDELENGTH,) * 3
+# an anisotropic magnification with shear, so it mixes y and x
+MAGNIFICATION = torch.tensor([[1.04, 0.03], [-0.02, 0.97]])
 N_POSES = 5
 N_CHANNELS = 2
 MOJO_MODULES = (extraction, insertion, project, backproject)
@@ -116,6 +118,12 @@ EXTRACTION_CASES = {
     "oversampled": {"output_shape": (10, 10)},
     "fftfreq_max": {"fftfreq_max": 0.3},
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
+    "magnification": {"transform_matrix": MAGNIFICATION},
+    "magnification_ewald": {
+        "transform_matrix": MAGNIFICATION,
+        "apply_ewald_curvature": True,
+        "ewald_px_size": 0.1,
+    },
 }
 
 
@@ -151,6 +159,7 @@ INSERTION_CASES = {
     "oversampling_1.5": {"volume_shape": (24,) * 3},
     "fftfreq_max": {"fftfreq_max": 0.3},
     "ewald": {"apply_ewald_curvature": True, "ewald_px_size": 0.1},
+    "magnification": {"transform_matrix": MAGNIFICATION},
 }
 
 
@@ -273,6 +282,48 @@ def test_insert_slices_gradients_match_mojo_into_larger_volume(
     names = ["weights", "rotation_matrices"] if output_index else list(inputs)[:-1]
     for name in names:
         _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@requires_mojo
+@pytest.mark.parametrize("interpolation", ["linear", "cubic"])
+def test_magnified_slices_gradients_match_mojo(interpolation):
+    """The pose, shift, data and weight gradients with a magnification."""
+    kwargs = {
+        "transform_matrix": MAGNIFICATION,
+        "interpolation": interpolation,
+        "apply_ewald_curvature": True,
+        "ewald_px_size": 0.1,
+    }
+    inputs = _extraction_inputs()
+    expected = _gradients(extraction.extract_central_slices_rfft_3d, inputs, kwargs)
+    actual = _gradients(reference.extract_central_slices_rfft_3d, inputs, kwargs)
+    for name in inputs:
+        _assert_close(actual[name], expected[name], rtol=1e-4)
+
+    inputs = _insertion_inputs()
+    kwargs = {"volume_shape": VOLUME_SHAPE, **kwargs}
+    functions = (
+        reference.insert_central_slices_rfft_3d,
+        insertion.insert_central_slices_rfft_3d,
+    )
+    for output_index, names in (
+        (0, list(inputs)[:-1]),
+        (1, ["weights", "rotation_matrices"]),
+    ):
+        actual = _gradients(functions[0], inputs, kwargs, output_index)
+        expected = _gradients(functions[1], inputs, kwargs, output_index)
+        for name in names:
+            _assert_close(actual[name], expected[name], rtol=1e-4)
+
+
+@pytest.mark.parametrize(
+    "matrix", [torch.eye(3), torch.zeros(2, 2)], ids=["not-2x2", "singular"]
+)
+def test_transform_matrix_must_be_an_invertible_2x2(matrix):
+    with pytest.raises(ValueError, match="transform_matrix"):
+        reference.extract_central_slices_rfft_3d(
+            _volume_rfft(), _rotations(N_POSES, seed=4), transform_matrix=matrix
+        )
 
 
 @requires_mojo

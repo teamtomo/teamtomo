@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .._backend._common import Magnification
 from .._conventions import ewald_coefficient, to_zyx_matrices, to_zyx_vectors
 from ._line import extract_lines_2d, extract_lines_3d
 from ._slice import extract_slices_3d
@@ -27,6 +28,7 @@ def _extract_slices_3d(
     zyx_shifts,
     yx_shifts,
     interpolation,
+    transform_matrix,
     apply_ewald_curvature,
     ewald_voltage_kv,
     ewald_flip_sign,
@@ -48,6 +50,7 @@ def _extract_slices_3d(
             ewald_flip_sign,
             ewald_px_size,
         ),
+        Magnification.from_matrix(transform_matrix),
     )
 
 
@@ -62,6 +65,7 @@ def extract_central_slices_rfft_3d(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -88,6 +92,7 @@ def extract_central_slices_rfft_3d(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
@@ -107,6 +112,7 @@ def extract_central_slices_rfft_3d_multichannel(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -131,6 +137,7 @@ def extract_central_slices_rfft_3d_multichannel(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,

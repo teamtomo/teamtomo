@@ -13,7 +13,12 @@ import math
 
 import torch
 
-from .._backend._common import input_pixel_scale, sampling_scale
+from .._backend._common import (
+    IDENTITY_MAGNIFICATION,
+    Magnification,
+    input_pixel_scale,
+    sampling_scale,
+)
 from .._backend._validation import (
     interp_code,
     prep_rotations,
@@ -41,6 +46,7 @@ def _slice_coordinates(
     scale: float,
     ewald_curvature: float,
     device: torch.device,
+    magnification: Magnification = IDENTITY_MAGNIFICATION,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """A central slice's own frequencies and its unrotated sample coordinate.
 
@@ -56,8 +62,10 @@ def _slice_coordinates(
     inside = coord_y * coord_y + coord_x * coord_x <= torch.tensor(
         radius * radius, dtype=torch.float32
     )
-    sy = coord_y * scale
-    sx = coord_x * scale
+    # the magnification's Fourier-space matrix M, then the oversampling
+    m = magnification
+    sy = (m.mag_yy * coord_y + m.mag_yx * coord_x) * scale
+    sx = (m.mag_xy * coord_y + m.mag_xx * coord_x) * scale
     sz = ewald_curvature * (sx * sx + sy * sy)
     return coord_y, coord_x, torch.stack([sz, sy, sx], dim=-1), inside
 
@@ -105,6 +113,7 @@ def extract_slices_3d(
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
+    magnification: Magnification = IDENTITY_MAGNIFICATION,
 ) -> torch.Tensor:
     """Extract complex ``(bv, bp, h, w)`` central slices from rfft volumes.
 
@@ -136,6 +145,7 @@ def extract_slices_3d(
         sampling_scale(sidelength, proj_sidelength),
         float(ewald_curvature),
         device,
+        magnification,
     )
     k = _rotate(rotations, s, bv)
     slices = gather(reconstruction.to(torch.complex64), k, interpolation)
@@ -150,7 +160,8 @@ def extract_slices_3d(
     )
     if phase is not None:
         slices = slices * torch.complex(torch.cos(phase), torch.sin(phase))
-    return slices * inside
+    # the magnified image's intensity scale, 1 / |det A|
+    return slices * inside * magnification.mag_scale
 
 
 def insert_slices_3d(
@@ -163,6 +174,7 @@ def insert_slices_3d(
     fftfreq_max: float | None,
     interpolation: str,
     ewald_curvature: float = 0.0,
+    magnification: Magnification = IDENTITY_MAGNIFICATION,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Insert complex central slices into Hermitian rfft volumes (+ weights).
 
@@ -202,9 +214,15 @@ def insert_slices_3d(
     radius = h / 2.0 if fftfreq_max is None else float(fftfreq_max) * h
 
     coord_y, coord_x, s, inside = _slice_coordinates(
-        h, radius, sampling_scale(sidelength, h), float(ewald_curvature), device
+        h,
+        radius,
+        sampling_scale(sidelength, h),
+        float(ewald_curvature),
+        device,
+        magnification,
     )
-    keep = inside * input_pixel_scale(h, device)
+    # each input pixel's Hermitian weight and the magnification's 1 / |det A|
+    keep = inside * input_pixel_scale(h, device) * magnification.mag_scale
     k = _rotate(rotations, s, bv)
 
     values = projections.to(torch.complex64) * keep

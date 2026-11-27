@@ -103,6 +103,14 @@ struct FourierSliceParams(Copyable, Movable):
     var ewald_curvature: Float32  # signed Ewald z-offset coeff; 0 = flat slice
     var has_shifts_3d: Int  # 3D (zyx, pre-rotation, volume-frame) shift present
     var bv_shift_3d: Int  # broadcast batch of the 3D shift
+    # anisotropic magnification of the slices (identity and 1 for none): a slice
+    # pixel at frequency k samples M k, M = (A^-1)^T the Fourier-space matrix of
+    # the real-space magnification A (yx), its value scaled by 1 / |det A|
+    var mag_yy: Float32
+    var mag_yx: Float32
+    var mag_xy: Float32
+    var mag_xx: Float32
+    var mag_scale: Float32
 
     @always_inline
     def sidelength_half(self) -> Int:
@@ -150,6 +158,11 @@ struct FourierSliceParams(Copyable, Movable):
             self.ewald_curvature,
             Int32(self.has_shifts_3d),
             Int64(self.bv_shift_3d),
+            self.mag_yy,
+            self.mag_yx,
+            self.mag_xy,
+            self.mag_xx,
+            self.mag_scale,
         )
 
 
@@ -187,6 +200,11 @@ struct DeviceParams(Copyable, DevicePassable, Movable):
     var ewald_curvature: Float32
     var has_shifts_3d: Int32
     var bv_shift_3d: Int64
+    var mag_yy: Float32
+    var mag_yx: Float32
+    var mag_xy: Float32
+    var mag_xx: Float32
+    var mag_scale: Float32
 
     def _to_device_type(
         self, mut encoder: Some[DeviceTypeEncoder], target: MutOpaquePointer[_]
@@ -216,6 +234,11 @@ struct DeviceParams(Copyable, DevicePassable, Movable):
             self.ewald_curvature,
             Int(self.has_shifts_3d),
             Int(self.bv_shift_3d),
+            self.mag_yy,
+            self.mag_yx,
+            self.mag_xy,
+            self.mag_xx,
+            self.mag_scale,
         )
 
 
@@ -768,6 +791,21 @@ def _input_line_scale(x: Int, n: Int) -> Float32:
     "Hermitian bookkeeping" in `experimental/README.md`.
     """
     return 0.5 if _is_hermitian_plane(x, n) else 1.0
+
+
+@always_inline
+def _magnified_coord(
+    p: FourierSliceParams, coord_y: Float32, coord_x: Float32
+) -> SIMD[DType.float32, 2]:
+    """In-plane sample coordinate (lanes y, x) of the slice pixel at (coord_y, coord_x).
+
+    The anisotropic magnification's Fourier-space matrix `M` (identity if none)
+    applied to the pixel's frequency, times the oversampling. The Ewald offset
+    and the rotation follow from it.
+    """
+    var sy = (p.mag_yy * coord_y + p.mag_yx * coord_x) * p.oversampling
+    var sx = (p.mag_xy * coord_y + p.mag_xx * coord_x) * p.oversampling
+    return SIMD[DType.float32, 2](sy, sx)
 
 
 @always_inline

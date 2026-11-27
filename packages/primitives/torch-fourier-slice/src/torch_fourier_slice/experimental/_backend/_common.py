@@ -2,7 +2,58 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import torch
+
+
+class Magnification(NamedTuple):
+    """An anisotropic magnification of the slices, as the kernels take it.
+
+    For a real-space magnification ``A`` (2 x 2, yx) the image at ``r`` is the
+    projection at ``A r``, so a slice pixel at frequency ``k`` samples the
+    unmagnified slice at ``M k``, ``M = (A^-1)^T``, its value scaled by
+    ``1 / |det A|``. ``mag_*`` are ``M`` (row-major, yx) and ``mag_scale`` that
+    scale, the ``KernelParams`` fields of the same names. The default is none.
+    """
+
+    mag_yy: float = 1.0
+    mag_yx: float = 0.0
+    mag_xy: float = 0.0
+    mag_xx: float = 1.0
+    mag_scale: float = 1.0
+
+    @classmethod
+    def from_matrix(cls, transform_matrix: torch.Tensor | None) -> Magnification:
+        """The magnification for a real-space ``(2, 2)`` matrix (None for none)."""
+        if transform_matrix is None:
+            return cls()
+        a = torch.as_tensor(transform_matrix).detach().to("cpu", torch.float64)
+        if a.shape != (2, 2):
+            raise ValueError(f"transform_matrix must be (2, 2), got {tuple(a.shape)}")
+        det = float(torch.linalg.det(a))
+        if det == 0.0:
+            raise ValueError("transform_matrix must be invertible")
+        m = torch.linalg.inv(a).T
+        return cls(
+            float(m[0, 0]),
+            float(m[0, 1]),
+            float(m[1, 0]),
+            float(m[1, 1]),
+            1.0 / abs(det),
+        )
+
+    @property
+    def is_identity(self) -> bool:
+        return self == Magnification()
+
+    def fourier_matrix(self, device: torch.device | str | None = None) -> torch.Tensor:
+        """``M`` as a float32 ``(2, 2)`` tensor (yx)."""
+        rows = ((self.mag_yy, self.mag_yx), (self.mag_xy, self.mag_xx))
+        return torch.tensor(rows, dtype=torch.float32, device=device)
+
+
+IDENTITY_MAGNIFICATION = Magnification()
 
 
 def sampling_scale(sidelength: int, proj_sidelength: int) -> float:

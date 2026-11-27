@@ -33,6 +33,11 @@ Shared parameters (both forms):
   output's side is oversampled twofold.
 - ``fftfreq_max``: cutoff in cycles/pixel, default Nyquist (0.5);
   ``interpolation``: ``"linear"`` / ``"cubic"``.
+- ``transform_matrix``: optional ``(2, 2)`` anisotropic magnification ``A`` in
+  real space (yx), as in the canonical layer: the slice is that of the image
+  whose value at ``r`` is the unmagnified projection's at ``A r``, scaled by
+  ``1 / |det A|``. Each pixel at frequency ``k`` samples ``(A^-1)^T k`` before
+  the Ewald offset and the rotation, inside the kernel. Not differentiable.
 - ``apply_ewald_curvature`` / ``ewald_voltage_kv`` / ``ewald_flip_sign`` /
   ``ewald_px_size``: bend the slice onto an Ewald sphere, as in the canonical
   layer (default: flat slice).
@@ -80,6 +85,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ._backend._common import Magnification
 from ._backend._line_2d import ExtractLines2D
 from ._backend._line_3d import ExtractLines3D
 from ._backend._slice_3d import ExtractSlices3D
@@ -100,6 +106,7 @@ def _extract_slices_3d(
     zyx_shifts,
     yx_shifts,
     interpolation,
+    transform_matrix,
     apply_ewald_curvature,
     ewald_voltage_kv,
     ewald_flip_sign,
@@ -121,6 +128,7 @@ def _extract_slices_3d(
             ewald_flip_sign,
             ewald_px_size,
         ),
+        Magnification.from_matrix(transform_matrix),
     )
 
 
@@ -135,6 +143,7 @@ def extract_central_slices_rfft_3d(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -165,6 +174,7 @@ def extract_central_slices_rfft_3d(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,
@@ -184,6 +194,7 @@ def extract_central_slices_rfft_3d_multichannel(
     zyx_shifts: bool = False,
     yx_shifts: bool = False,
     interpolation: str = "linear",
+    transform_matrix: torch.Tensor | None = None,
     apply_ewald_curvature: bool = False,
     ewald_voltage_kv: float = 300.0,
     ewald_flip_sign: bool = False,
@@ -211,6 +222,7 @@ def extract_central_slices_rfft_3d_multichannel(
         zyx_shifts,
         yx_shifts,
         interpolation,
+        transform_matrix,
         apply_ewald_curvature,
         ewald_voltage_kv,
         ewald_flip_sign,

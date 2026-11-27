@@ -102,8 +102,9 @@ def _experimental_slices(
 
     A `cutoff` of None leaves `fftfreq_max` at its default (Nyquist).
 
-    `shifts` are `shifts_2d` / `shifts_3d`, passed to both operations. Poses and
-    shifts are in the kernels' zyx / yx order.
+    `shifts` holds the further options both operations take (`shifts_2d`,
+    `shifts_3d`, `transform_matrix`). Poses and shifts are in the kernels' zyx /
+    yx order.
     """
     volume_shape = (round(sidelength * oversampling),) * 3
     options = {
@@ -243,6 +244,10 @@ for _interpolation, _n in itertools.product(("linear", "cubic"), (16, 15)):
     ]
 
 
+# an anisotropic magnification with shear, so it mixes y and x
+MAGNIFICATION = torch.tensor([[1.04, 0.03], [-0.02, 0.97]])
+
+
 def _shifts(ndim: int, seed: int = 5) -> torch.Tensor:
     """Random non-integer shifts in pixels, so the Nyquist phases are not trivial."""
     return 1.3 * torch.randn(
@@ -276,6 +281,10 @@ OPTION_CASES = [
     pytest.param(
         lambda: _reference_slices(15, _rotations(), oversampling=16 / 15),
         id="reference-slices-odd-into-even",
+    ),
+    pytest.param(
+        lambda: _reference_slices(16, _rotations(), transform_matrix=MAGNIFICATION),
+        id="reference-slices-magnification",
     ),
     pytest.param(
         lambda: _reference_lines(15, _directions(3), oversampling=16 / 15),
@@ -317,6 +326,11 @@ OPTION_CASES = [
     pytest.param(
         lambda: _mojo_slices(15, _rotations(), oversampling=16 / 15),
         id="mojo-slices-odd-into-even",
+        marks=requires_mojo,
+    ),
+    pytest.param(
+        lambda: _mojo_slices(16, _rotations(), transform_matrix=MAGNIFICATION),
+        id="mojo-slices-magnification",
         marks=requires_mojo,
     ),
     pytest.param(

@@ -47,6 +47,12 @@ class KernelParams(NamedTuple):
     ewald_curvature: float
     has_shifts_3d: int
     line_length: int = 0  # real-space length of the lines (line kernels only)
+    # anisotropic magnification of the slices (see `Magnification`)
+    mag_yy: float = 1.0
+    mag_yx: float = 0.0
+    mag_xy: float = 0.0
+    mag_xx: float = 1.0
+    mag_scale: float = 1.0
 
 
 def resolve_line_length(line_rfft_width: int, line_length: int | None = None) -> int:
