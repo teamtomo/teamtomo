@@ -51,17 +51,15 @@ dependencies = [
     "torch_image_interpolation",
     "torch-grid-utils>=0.7.0",
     "torch-ctf",
+    # Mojo kernels for the experimental backend, wherever wheels exist; elsewhere
+    # (Python 3.11, Windows, Intel macOS) it falls back to the torch reference
+    "max>=26.5.0; python_version >= '3.12' and (sys_platform == 'linux' or (sys_platform == 'darwin' and platform_machine == 'arm64'))",
+    "mojo==1.0.0; python_version >= '3.12' and (sys_platform == 'linux' or (sys_platform == 'darwin' and platform_machine == 'arm64'))",
 ]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
-
-[project.optional-dependencies]
-mojo = [
-    "max>=26.5.0",
-    "mojo==1.0.0",
-]
 
 # https://peps.python.org/pep-0735/
 [dependency-groups]

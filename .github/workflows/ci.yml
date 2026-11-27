@@ -2,7 +2,8 @@
 #
 # This CI workflow runs on pushes to the main branch, pull requests, and on a schedule (weekly).
 # It tests the entire package leveraging the uv workspace to recursively run tests across all
-# known packages and across multiple Python versions (3.11, 3.12, 3.13).
+# known packages and across multiple Python versions (3.12, 3.13). 3.12 is the minimum
+# because the Mojo kernels (max/mojo wheels) start there.
 # NOTE: Deployment is handled by the separate deploy.yaml workflow triggered on package
 # tags; this CI workflow only runs tests and does not publish packages.
 
@@ -58,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v7
@@ -79,6 +80,12 @@ jobs:
         run: |
           uv run python -V
           uv run pytest --version
+
+      # The Mojo tests skip when the kernels can't load, which would pass silently;
+      # fail here instead.
+      - name: Check the Mojo kernels build
+        run: |
+          uv run python -c "from torch_fourier_slice.experimental import mojo_kernels_available as m; assert m(), 'torch-fourier-slice Mojo kernels failed to load'"
 
       # NOTE: base pyproject.toml configuration already discovers all packages
       # in the workspace, so no need to specify paths here.

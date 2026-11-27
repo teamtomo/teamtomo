@@ -54,8 +54,8 @@ def kernels():
     """Return the loaded Mojo ``fourier_slice_kernels`` module."""
     if _LOAD_ERROR is not None:
         raise ImportError(
-            "experimental Mojo kernels failed to load. Install the optional "
-            "'mojo' extra: pip install 'torch-fourier-slice[mojo]'"
+            "experimental Mojo kernels failed to load. torch-fourier-slice installs "
+            "mojo and max on Python >= 3.12 for Linux and Apple Silicon macOS"
         ) from _LOAD_ERROR
     return _MODULE
 

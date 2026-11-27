@@ -46,19 +46,20 @@ classifiers = [
     "Typing :: Typed",
 ]
 # add your package dependencies here
-dependencies = ["torch", "numpy", "einops"]
+dependencies = [
+    "torch",
+    "numpy",
+    "einops",
+    # fused CPU/GPU kernels (see README "Backends") wherever wheels exist; elsewhere
+    # (Python 3.11, Windows, Intel macOS) the torch backend runs. GPU support lives
+    # in the separate `max` package as of Mojo 1.0.
+    "max>=26.5.0; python_version >= '3.12' and (sys_platform == 'linux' or (sys_platform == 'darwin' and platform_machine == 'arm64'))",
+    "mojo==1.0.0; python_version >= '3.12' and (sys_platform == 'linux' or (sys_platform == 'darwin' and platform_machine == 'arm64'))",
+]
 
 [project.urls]
 homepage = "https://github.com/teamtomo/teamtomo"
 repository = "https://github.com/teamtomo/teamtomo"
-
-# Optional fused CPU/GPU kernels (see README "Backends"). GPU support lives in
-# the separate `max` package as of Mojo 1.0.
-[project.optional-dependencies]
-mojo = [
-    "max>=26.5.0",
-    "mojo==1.0.0",
-]
 
 # https://peps.python.org/pep-0735/
 [dependency-groups]

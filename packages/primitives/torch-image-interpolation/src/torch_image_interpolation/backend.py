@@ -5,9 +5,8 @@ Two backends exist:
 * ``"torch"`` -- the pure-PyTorch reference implementation (``grid_sample`` /
   ``index_put_``); always available.
 * ``"mojo"`` -- fused Mojo kernels (CPU: multithreaded; GPU: one thread per
-  sample). Requires the optional ``mojo`` extra
-  (``pip install 'torch-image-interpolation[mojo]'``) and supports float32 /
-  complex64 data.
+  sample). Installed with the package on Python >= 3.12 for Linux and Apple
+  Silicon macOS, and supports float32 / complex64 data.
 
 The default, ``"auto"``, uses the Mojo kernels whenever they are installed and
 the inputs are supported, and silently falls back to torch otherwise. The

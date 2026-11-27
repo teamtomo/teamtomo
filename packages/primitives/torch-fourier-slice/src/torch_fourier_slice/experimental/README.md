@@ -299,8 +299,10 @@ under `_mojo/__mojocache__/` (keyed by a source hash; gitignored). Concretely:
   keep in sync; host orchestration and device kernels are both Mojo.
 
 **Costs, honestly:** the first import pays a one-time compile (seconds; cached
-after); the `mojo` + `max` toolchain (`pip install torch-fourier-slice[mojo]`,
-or `pip install mojo max` directly) must be present -- GPU support (Mojo's
+after); the `mojo` + `max` toolchain must be present -- a regular dependency
+of torch-fourier-slice on Python >= 3.12 for Linux and Apple Silicon macOS, the
+platforms with wheels (elsewhere the torch reference backend runs instead) --
+GPU support (Mojo's
 `DeviceContext`, `parallelize`, etc.) moved out of `mojo` into the separate
 `max` package as of Mojo 1.0.0; Mojo is early/beta; and on some setups the
 NVIDIA PTX assembler path must be pointed at `ptxas`
@@ -309,7 +311,7 @@ succeeds. For a research backend that wants to run on a laptop *and* a cloud
 A100 without a release-engineering department, the trade is very favorable.
 
 ```bash
-pip install "torch-fourier-slice[mojo]"    # or: uv add --optional mojo max mojo
+pip install torch-fourier-slice    # brings mojo + max where wheels exist
 python -c "from torch_fourier_slice.experimental import mojo_kernels_available as a; print(a())"
 ```
 
@@ -432,8 +434,8 @@ It has two jobs:
 - **Reference.** `tests/test_experimental_reference.py` checks that each reference
   function has the Mojo function's signature and gives the same values and
   gradients. It also checks the reference's pose and shift gradients against
-  finite differences, which runs on CI too, where Mojo isn't installed. The
-  Nyquist-edge and Hermitian-insertion tests (`test_nyquist_edge.py`,
+  finite differences, which needs no Mojo. CI runs all of these with the Mojo
+  CPU kernels (GPU kernels are not tested on CI). The Nyquist-edge and Hermitian-insertion tests (`test_nyquist_edge.py`,
   `test_hermitian_insertion.py`) run on the reference as well as on Mojo.
 
 ---

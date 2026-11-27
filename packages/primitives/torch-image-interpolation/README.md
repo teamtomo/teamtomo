@@ -20,14 +20,17 @@ Operations are differentiable, multichannel data and complex valued images are s
 Two interchangeable backends implement the operations (see [Backends](#backends)):
 the pure-PyTorch reference built on
 [`torch.nn.functional.grid_sample`](https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html)
-/ `index_put_`, and optional fused [Mojo](https://www.modular.com/mojo) kernels.
+/ `index_put_`, and fused [Mojo](https://www.modular.com/mojo) kernels.
 
 # Installation
 
 ```shell
-pip install torch-image-interpolation          # pure PyTorch
-pip install "torch-image-interpolation[mojo]"  # + fused Mojo kernels (CPU / GPU)
+pip install torch-image-interpolation
 ```
+
+This brings the fused Mojo kernels (CPU / GPU) on Python >= 3.12 for Linux and
+Apple Silicon macOS, the platforms with `mojo`/`max` wheels; elsewhere the
+pure-PyTorch backend is used.
 
 # Usage
 
